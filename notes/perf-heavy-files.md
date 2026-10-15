@@ -11,7 +11,7 @@ Method: the heavy file alone in a program (a tsconfig under a scratch directory 
 `"files": [<the file>]`, `"include"` cleared and `typeRoots` pointed back at the checkout), and the heavy file on a
 checker of its own inside the full program (`--checkers 2 --checkerAssignment file:<list>` with only that file on
 checker 1, the list in `--listFilesOnly` order), profiled with samply per thread (4-10 kHz), plus the work census
-(`--features work-census`) and per-file CPU (`TSRS_FILE_TIMES`). Mac (18 cores, shared, load 12-30) unless stated;
+(`-p tsrs_checker --features tsrs_checker/work-census`) and per-file CPU (`TSRS_FILE_TIMES`). Mac (18 cores, shared, load 12-30) unless stated;
 the Linux numbers are from the 64-vCPU runner via `.depot/workflows/perf-probe.yml`.
 
 ## Which kind of heavy each file is

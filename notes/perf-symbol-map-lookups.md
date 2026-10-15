@@ -16,7 +16,7 @@ nothing is interned.
 
 ## Census
 
-Site counts (`--features site-counts` with a local patch on `SymbolTable::lookup` / `get` / `has` / `lookup_entry`,
+Site counts (`-p tsrs_checker --features tsrs_checker/site-counts` with a local patch on `SymbolTable::lookup` / `get` / `has` / `lookup_entry`,
 not committed), Mac, single-threaded, whole run:
 
 | | vscode | t3code-server | supabase-studio |

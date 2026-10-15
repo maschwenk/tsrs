@@ -1,7 +1,7 @@
 # spike-shared-graph: one type graph shared by the checker threads (2026-10-08, updated 2026-10-10)
 
 Status (2026-10-10): sections 1-9 are the first round, without a memory target and with the pool waiting for the
-seed. Section 10 is the version that landed in main (#281): built with `--features shared-graph`, on with
+seed. Section 10 is the version that landed in main (#281): built with `--features tsrs_core/shared-graph`, on with
 `TSRS_SHARED_GRAPH=1`, and used with `--maxMemory`, where a retired checker is replaced by a fork of the seed. That
 version keeps two knobs, `TSRS_SHARED_GRAPH_SEED_PERCENT` (section 10.2; the first round's
 `TSRS_SHARED_GRAPH_SEED` was in permille, so its 10 is 1%) and `TSRS_SHARED_GRAPH_PROTECT=0`, plus
@@ -12,7 +12,7 @@ which sections 1-9 still name: `TSRS_SHARED_GRAPH=emulate`, the `spread:`/`files
 
 The owner asked: "let's start with the graph shared between threads, at least implement it and see what the gains
 are. don't worry about exactness." This note covers the prototype on branch `spike/shared-graph` (not for landing),
-built with `--features shared-graph` and switched on with `TSRS_SHARED_GRAPH=1`. **Every number is from the Mac**
+built with `--features tsrs_core/shared-graph` and switched on with `TSRS_SHARED_GRAPH=1`. **Every number is from the Mac**
 (Apple M5 Max, 18 cores, 16 KiB pages, no THP), which other agents were also using (1-minute load 15-40). Depot was
 not used (the owner's spend). Section 9 gives the Linux probe to run later, with its cost. Bun's numbers are from
 Linux.
@@ -79,7 +79,7 @@ seed had a measured number on day 1 through M1's emulation, and that number held
 
 Binaries: main = origin/main ae64b5c. The matrix (4.1) used the prototype at 69c26fd, where it was always compiled
 in; the feature build at 6c6f3b0 is the same code with the gate constant true. 4.2 and 4.3 used builds of 6c6f3b0
-(default and `--features shared-graph`). Mac runs use `--noEmit --incremental
+(default and `--features tsrs_core/shared-graph`). Mac runs use `--noEmit --incremental
 false --pretty false --extendedDiagnostics` under `/usr/bin/time -l`, interleaved. The scripts are in section 9.
 
 ### 4.1 Eight projects x 4/16/32 checkers (3 interleaved reps, medians)
@@ -300,7 +300,7 @@ not a measurement. Linux has 4 KiB pages and THP, and the slack and residency be
 
 ```sh
 git checkout spike/shared-graph
-cargo build --release --locked -p tsrs_cli --features shared-graph   # the prototype
+cargo build --release --locked -p tsrs_cli --features tsrs_core/shared-graph   # the prototype
 cargo build --release --locked -p tsrs_cli                           # default build: prototype compiled out
 TSRS_SHARED_GRAPH=1 [TSRS_SHARED_GRAPH_SEED=spread:20] [TSRS_SHARED_GRAPH_STATS=1] [TSRS_HEAP_CENSUS=1] \
   target/release/tsrs -p <project> --noEmit --checkers 32 --extendedDiagnostics
@@ -374,7 +374,7 @@ What the merge needed:
   unfrozen seed data and crashed every run. The pool waited for the seed, as in the first round (section 10.1 found
   both causes of the crashes and starts the pool at once).
 
-Measured (Mac, 14 cores, 8 checkers, release build with `--features shared-graph`; diagnostics byte-identical in every
+Measured (Mac, 14 cores, 8 checkers, release build with `--features tsrs_core/shared-graph`; diagnostics byte-identical in every
 run; 20 stress runs at 10 and 50 permille with `--maxMemory 8G`, 12 more over seeds 10-100 and targets 8-10G, and every
 testdata/regressions case with a 30% seed and a retirement after nearly every file: no failure):
 

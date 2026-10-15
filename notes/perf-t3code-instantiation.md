@@ -28,7 +28,7 @@ mapper (1.7%), the cache's hashbrown probe (~5%), `find_active_mapper`'s scan (~
 the instructions after a multiply chain, so 74% overstates the hash's share of instructions, but it was the one site
 in the function worth taking out.
 
-Site counts (`--features site-counts`) of the same check: 11.0 M calls reach the worker; 3.24 M (29.5%) come with a
+Site counts (`-p tsrs_checker --features tsrs_checker/site-counts`) of the same check: 11.0 M calls reach the worker; 3.24 M (29.5%) come with a
 mapper that is not active, 6.52 M miss an active mapper's cache, 1.25 M hit it. In the first group the worker pushes
 the mapper with a cleared cache, hashes the key, looks it up in that empty table, and never stores into it (Go stores
 the result only when the mapper was already active).

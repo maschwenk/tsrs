@@ -22,7 +22,7 @@ S is estimated per extra checker as (checker instructions at k - at 1) / (k - 1)
 with --listFilesOnly, /usr/bin/time -l) subtracted. That is the work a checker repeats because another checker
 has already done it.
 
-To split that work by what it resolves, the work census (--features work-census, TSRS_WORK_CENSUS) gained spans
+To split that work by what it resolves, the work census (-p tsrs_checker --features tsrs_checker/work-census, TSRS_WORK_CENSUS) gained spans
 around the checker's lazy resolution entry points: get_type_of_symbol past its cached fast path,
 get_declared_type_of_symbol, and the miss paths of resolve_structured_type_members,
 get_signature_from_declaration and get_exports_of_module. Each span is keyed by:
@@ -181,7 +181,7 @@ deterministic type identity, and cross-thread cycle detection.
 
 ```sh
 git checkout 7fedb08   # the instrumentation
-cargo build --release -p tsrs_cli --features work-census
+cargo build --release -p tsrs_cli -p tsrs_checker --features tsrs_checker/work-census
 TSRS_WORK_CENSUS=census.md tsrs -p <project> --noEmit --incremental false --extendedDiagnostics --pretty false --checkers 8
 # "exclusive attribution to the innermost lazy resolution" and "lazy resolution by origin / instantiation / kind"
 # in census.md; instructions: /usr/bin/time -l with a plain build; front end: --listFilesOnly

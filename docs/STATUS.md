@@ -80,7 +80,7 @@ block-comment tails by substring, reuses module path buffers and probes lightwei
 (#285, #294, #315, #316, #321, #328). Internal integer and enum cleanup and suitable iterator conversions are
 included (#306, #317, #322); measured relation traversal loops are preserved (#325). Rust source builds now
 require 1.99 (#318). PGO instrumentation uses ThinLTO (#298); GNU release builds retain PGO/BOLT, while musl
-builds are static without PGO/BOLT. The shared checker seed remains opt-in with `shared-graph` and
+builds are static without PGO/BOLT. The shared checker seed remains opt-in with `tsrs_core/shared-graph` and
 `TSRS_SHARED_GRAPH=1`.
 
 ## 2026-10-10: 0.13.0 release
@@ -101,7 +101,7 @@ Release tooling now uses pinned pnpm 12.10.1 for installation, packing and direc
 All five packages (`tsrs`, `@ts-rs/darwin-arm64`, `@ts-rs/linux-x64`, `@ts-rs/linux-arm64` and `@ts-rs/wasm`)
 use `0.13.0-ts7.1.0-dev.20260929`. The TypeScript source pin remains
 `b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929). The shared checker seed still requires
-the `shared-graph` Cargo feature and `TSRS_SHARED_GRAPH=1`; npm binaries use the default Cargo features.
+the `tsrs_core/shared-graph` Cargo feature and `TSRS_SHARED_GRAPH=1`; npm binaries use the default Cargo features.
 
 ## 2026-10-10: 0.12.0 release
 
@@ -118,7 +118,7 @@ Scanner byte dispatch (#287) and SIMD UTF-8 validation (#280) improve the front 
 pins Unicode 15.1 to match the reference (#279), and Unicode uppercasing now follows Go's simple mapping (#275).
 
 The shared checker seed under `--maxMemory` (#281) remains an opt-in source-build experiment: it requires the
-`shared-graph` Cargo feature and `TSRS_SHARED_GRAPH=1` (notes/spike-shared-graph.md). The npm release uses the
+`tsrs_core/shared-graph` Cargo feature and `TSRS_SHARED_GRAPH=1` (notes/spike-shared-graph.md). The npm release uses the
 default Cargo features. Dependency cleanup and documentation corrections are also included.
 
 ## 2026-10-09: 0.11.0 release
@@ -707,7 +707,7 @@ The private monorepo (go -> locality, same commit 52ef5a9, medians of 3): 4 chec
 -4% to -13% peak, faster at every count; 3 checkers with locality beat Go's 4 on both axes) in the notes.
 Single-threaded unchanged (no assignment with one checker). Of the remaining multi-checker excess, most is library instantiations (zod,
 MikroORM, lib) that every checker needs. Measurements, duplication breakdown, instrumentation
-(`TSRS_ASSIGNMENT_STATS`, feature `assignment-stats`): `notes/mem-assignment.md`.
+(`TSRS_ASSIGNMENT_STATS`, feature `tsrs_compiler/assignment-stats`): `notes/mem-assignment.md`.
 
 ## 2026-10-01: data-layout pass (peak memory)
 

@@ -14,7 +14,7 @@ pub mod nodeflags;
 pub mod parseoptions;
 pub mod positionmap;
 #[cfg(feature = "ast-sizing")]
-pub mod sizing; // TOOL, opt-in `--features ast-sizing` (notes/mem-compact-ast-sizing.md); not in default builds
+pub mod sizing; // TOOL, opt-in `--features tsrs_compiler/ast-sizing` (notes/mem-compact-ast-sizing.md); not in default builds
 pub mod precedence;
 pub mod subtreefacts;
 pub mod symbol;

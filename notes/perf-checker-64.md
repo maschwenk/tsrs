@@ -188,7 +188,7 @@ medians of 3. Both compilers print the same diagnostics (none in that file).
 
 **tsgo is 1.6x slower on it, so this is not a tsrs checker bug: it is TypeScript's inference algorithm on this file's
 pattern.** Per-file CPU (`TSRS_FILE_TIMES`) attributes 0.33 s of the 0.42 s to the test file itself; samply (10 kHz)
-and the work census (`--features work-census`) agree on where it goes:
+and the work census (`-p tsrs_checker --features tsrs_checker/work-census`) agree on where it goes:
 
 - 62% of the check is `inferTypeArguments` for `fusionTestEvent` (146 calls, 2.1 ms each, all of it inference proper:
   `inferTypeArguments` self time 297 ms of a 477 ms check), another 10% the relation checks it issues.
@@ -247,6 +247,6 @@ Reproduce: write the tsconfig above into vscode's `src/`, then
 ```sh
 tsrs -p src/tsconfig.hot.json --noEmit --incremental false --singleThreaded --extendedDiagnostics --pretty false
 samply record --save-only -o hot.json.gz -r 10000 -- tsrs -p src/tsconfig.hot.json --noEmit --incremental false --singleThreaded --pretty false
-CARGO_TARGET_DIR=target/census cargo build --release -p tsrs_cli --features work-census
+CARGO_TARGET_DIR=target/census cargo build --release -p tsrs_cli -p tsrs_checker --features tsrs_checker/work-census
 TSRS_WORK_CENSUS=census.md target/census/release/tsrs -p src/tsconfig.hot.json --noEmit --incremental false --checkers 1 --extendedDiagnostics
 ```

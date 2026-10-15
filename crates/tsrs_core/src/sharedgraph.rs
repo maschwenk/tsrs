@@ -1,4 +1,4 @@
-//! tsrs-only: a frozen seed graph shared by every checker thread (`--features shared-graph`, on with
+//! tsrs-only: a frozen seed graph shared by every checker thread (`--features tsrs_core/shared-graph`, on with
 //! `TSRS_SHARED_GRAPH=1`; `tsrs_compiler` `sharedgraph` drives it, notes/spike-shared-graph.md).
 //!
 //! One seed checker runs in a region of its own; when it is done the region's chunks are *frozen*: marked in a page
@@ -23,7 +23,7 @@ fn page_size() -> usize {
     unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize }
 }
 
-/// Whether the shared graph is compiled in (`--features shared-graph`). Without it every frozen-object test below is a
+/// Whether the shared graph is compiled in (`--features tsrs_core/shared-graph`). Without it every frozen-object test below is a
 /// constant false, so the switch-off build runs main's code paths.
 pub const COMPILED_IN: bool = cfg!(feature = "shared-graph");
 

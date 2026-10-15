@@ -27,7 +27,7 @@ pub fn slow_threshold_ns() -> u64 {
     *NS.get_or_init(|| std::env::var("TSRS_WORK_CENSUS_SLOW").ok().and_then(|v| v.parse::<f64>().ok()).map_or(u64::MAX, |ms| (ms * 1e6) as u64))
 }
 
-/// The output file; None unless the binary was built with `--features work-census` and `TSRS_WORK_CENSUS` is set.
+/// The output file; None unless the binary was built with `-p tsrs_checker --features tsrs_checker/work-census` and `TSRS_WORK_CENSUS` is set.
 pub fn census_path() -> Option<&'static str> {
     if !cfg!(feature = "work-census") {
         return None;
@@ -505,7 +505,7 @@ impl Checker {
         census_report();
     }
 
-    /// Whether the census is recording. A constant false unless built with `--features work-census` (the runtime
+    /// Whether the census is recording. A constant false unless built with `-p tsrs_checker --features tsrs_checker/work-census` (the runtime
     /// test alone cost 0.3-0.5% instructions: notes/perf-checker-algorithms.md), so the hooks compile away.
     #[inline]
     pub(crate) fn census_on(&self) -> bool {

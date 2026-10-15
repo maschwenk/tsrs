@@ -7,7 +7,7 @@
 //! and the pool does not wait for the seed: its checkers start as plain checkers and are retired for forks at their
 //! first file boundary after the freeze.
 //!
-//! Built with `--features shared-graph`, on with `TSRS_SHARED_GRAPH=1`. `TSRS_SHARED_GRAPH_SEED_PERCENT` sets the
+//! Built with `--features tsrs_core/shared-graph`, on with `TSRS_SHARED_GRAPH=1`. `TSRS_SHARED_GRAPH_SEED_PERCENT` sets the
 //! seed's share of the estimated checking work, in percent (default 5 with `--maxMemory`, 1 without;
 //! notes/spike-shared-graph.md 10.2).
 
@@ -24,7 +24,7 @@ pub(crate) fn enabled() -> bool {
     *ON.get_or_init(|| match std::env::var("TSRS_SHARED_GRAPH").as_deref() {
         Ok("1" | "on") if tsrs_core::sharedgraph::COMPILED_IN => true,
         Ok("1" | "on") => {
-            eprintln!("tsrs: TSRS_SHARED_GRAPH=1 needs a build with --features shared-graph; running without it");
+            eprintln!("tsrs: TSRS_SHARED_GRAPH=1 needs a build with --features tsrs_core/shared-graph; running without it");
             false
         }
         _ => false,

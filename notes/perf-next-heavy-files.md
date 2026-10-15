@@ -38,7 +38,7 @@ references whose type arguments are type literals spelled out in full, each obje
 A cold-checker profile (samply, 4 kHz, the file alone on checker 1 with `--checkerAssignment file:`; inclusive):
 `checkTypeReferenceNode` 92%, `checkTypeArgumentConstraints` 74%, `structuredTypeRelatedTo` 72%,
 `propertiesRelatedTo` 70%, `signaturesRelatedTo` 52%, `instantiateType` 42%, `getObjectTypeInstantiation` 27%. The work
-census (`--features work-census`, the file alone in a program whose other files are its dependencies) names the
+census (`-p tsrs_checker --features tsrs_checker/work-census`, the file alone in a program whose other files are its dependencies) names the
 relation: 59% of the check is `assignable -> ZodType` (3,026 relations, 191 ms) and 24% `assignable -> ZodRawShape`
 (6,854). Every `ZodObject<{...}>` reference checks its shape literal against `T extends ZodRawShape`
 (`{ [k: string]: ZodTypeAny }`), which relates each property type (`ZodOptional<...>`, `ZodObject<...>`, `ZodUnion<...>`)

@@ -183,5 +183,5 @@ cargo build --release -p tsrs_cli
 cd <38k-file codebase> && /usr/bin/time -l tsrs -p . --noEmit --incremental false --extendedDiagnostics --pretty false --checkers 1
 RAYON_NUM_THREADS=1 /usr/bin/time -l tsrs -p . --noEmit --incremental false --pretty false --singleThreaded
 samply record -r 4000 --unstable-presymbolicate -s -o prof.json.gz tsrs -p . --noEmit --incremental false --checkers 1
-CARGO_TARGET_DIR=target/sc cargo build --release -p tsrs_cli --features site-counts   # symbol table counters: a local patch, not committed
+CARGO_TARGET_DIR=target/sc cargo build --release -p tsrs_cli -p tsrs_checker --features tsrs_checker/site-counts   # symbol table counters: a local patch, not committed
 ```

@@ -10,7 +10,7 @@ Corpora: the 38k-file codebase ("big"), vscode (`src`, 371 errors), webpack (840
 
 ## Step 0: the work census
 
-The census (`crates/tsrs_checker/src/workcensus.rs`, compiled in with `--features work-census`, output with
+The census (`crates/tsrs_checker/src/workcensus.rs`, compiled in with `-p tsrs_checker --features tsrs_checker/work-census`, output with
 `TSRS_WORK_CENSUS=<out.md>`; docs/DEBUGGING.md) wraps the checker's pattern entry points in spans and keys them by
 source identity: conditional types by root alias (with the distribution fan-out and how many
 constituents came out `never`), mapped types by declaration and key count, generic calls by callee (and repeats of the
@@ -215,7 +215,7 @@ multi-checker benefit is moot. Not pursued this round.
 ## Reproduce
 
 ```sh
-CARGO_TARGET_DIR=target/census cargo build --release -p tsrs_cli --features work-census
+CARGO_TARGET_DIR=target/census cargo build --release -p tsrs_cli -p tsrs_checker --features tsrs_checker/work-census
 cd <project> && TSRS_WORK_CENSUS=/tmp/census.md target/census/release/tsrs -p . --noEmit --incremental false --extendedDiagnostics --checkers 1
 TSRS_WORK_CENSUS_SLOW=5 ...   # also print mapped-type resolutions slower than 5 ms, with the type
 # the A1 prototype and its cross-check: branch perf/algo-cond-prefilter, TSRS_VERIFY_COND_PREFILTER=<file>

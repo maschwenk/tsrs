@@ -3,7 +3,7 @@
 //! Heap census of one checker (`TSRS_HEAP_CENSUS=1` with `--extendedDiagnostics`; notes/mem-checker-heap.md): every hash table and vector the checker owns directly, with its entry count, capacity, bytes per slot, load factor and allocated bytes, printed per checker on stderr after the statistics.
 //!
 //! The lazy member and lazy mapped tables' contents are always reported (`lazy_member_tables_heap`). In
-//! `--features assignment-stats` builds, the containers owned by the checker's created types (resolved
+//! `--features tsrs_compiler/assignment-stats` builds, the containers owned by the checker's created types (resolved
 //! member tables, union and intersection property caches, reference instantiation tables,
 //! conditional-root instantiation maps) are reported too (`heap_census_objects`). Other arena-owned
 //! containers (e.g. symbols' tables) are not reported; the alloc profile's heap sampler attributes them
@@ -149,7 +149,7 @@ fn symbol_table_stat(t: P<SymbolTable>) -> HeapStat {
 }
 
 impl Checker {
-    /// `--features assignment-stats` only (it records every type the checker creates): the containers owned by this
+    /// `--features tsrs_compiler/assignment-stats` only (it records every type the checker creates): the containers owned by this
     /// checker's types: resolved member tables (with a histogram of their sizes and the unused capacity), union and
     /// intersection property caches, reference instantiation tables, conditional-root instantiation maps.
     #[cfg(feature = "assignment-stats")]

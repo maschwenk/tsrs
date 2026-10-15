@@ -12,8 +12,8 @@ content hash. Parse + bind then turns into page faults, and only the pages the c
 Neither tsc nor tsgo does this.
 
 The idea depends on 32-bit position-independent arena handles (`P<T>` as an offset from one process-wide base:
-the default `compressed-ptrs` build, `tsrs_core/src/reserve.rs`, notes/mem-pointer-compression.md). Without handles,
-every pointer in a mapped image would need relocating, which means writing every page and losing the laziness.
+the default Unix build, `tsrs_core/src/reserve.rs`, notes/mem-pointer-compression.md). Without handles, every pointer
+in a mapped image would need relocating, which means writing every page and losing the laziness.
 
 ## What the measurements say (summary)
 
@@ -70,7 +70,7 @@ every pointer in a mapped image would need relocating, which means writing every
 
 ### Address order
 
-`P<T>` orders and hashes by address (by handle in the default `compressed-ptrs` build). The port has no `BTreeMap<P<_>>` and no
+`P<T>` orders and hashes by address (by handle in the default Unix build). The port has no `BTreeMap<P<_>>` and no
 address-keyed sort (survey in this note and in mem-pointer-compression). The one `FxHashMap<P<Symbol>>` iteration
 that reaches output is sorted by `sort_symbols` afterwards. Addresses already differ from run to run (which rayon
 worker parses which file), so a dependency on address order would already show up as flakiness.
@@ -105,7 +105,7 @@ handle-based inside the segment, or be rebuilt live on load.
 
 | item | today | in the image |
 | --- | --- | --- |
-| `P<T>` fields and the packed words (node parent, identifier slot, `Symbol.parent_or_tables`, `FlowNode.link`) | 32-bit handles in the default `compressed-ptrs` build (absolute with `plain-ptrs`) | handles; no fixup when the image is mapped at its window offset |
+| `P<T>` fields and the packed words (node parent, identifier slot, `Symbol.parent_or_tables`, `FlowNode.link`) | 32-bit handles in the default Unix build (absolute with `plain-ptrs`) | handles; no fixup when the image is mapped at its window offset |
 | slices and strings: `ThinSlice` (`NodeList.nodes`), `PackedStr` / `StrCell`, `OwnedPSliceCell` (symbol declarations; a one-word `ThinSliceCell` with compressed pointers), `&'static [P<Node>]` in `SourceFile`, `OwnedTaggedStrCell` symbol names | absolute (pointer compression leaves them; its notes name `PSlice` / `PStr` as the follow-up) | `PSlice` / `PStr` (32-bit handle + length) are a **prerequisite** |
 | `SymbolTable` entries | `EntryVec`: a `malloc` buffer of words holding symbol address / 8, plus a heap `HashTable` index above a size | arena-resident entry buffer of handles; the hash bits are name-based, so the index can be rebuilt or stored |
 | `SourceFile` heap and sync fields: `parse_options` (`String`, `Path(Arc<str>)`), `OnceLock`s (line map, position map, identifier set, name table, declaration map), `jsdoc_cache` (map keyed by node address) + `jsdoc_mu`, `token_cache`, `bind_once`, `is_bound` | in the struct | split: a persisted `SourceFileRecord` of handles and scalars in the segment, and a live side struct built on load (below) |

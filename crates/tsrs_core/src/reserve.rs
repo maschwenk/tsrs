@@ -1,5 +1,5 @@
-//! The process-wide address range behind compressed `P<T>` handles (`cfg(compressed_ptrs)`: the default feature
-//! `compressed-ptrs` on unix, see build.rs; notes/mem-pointer-compression.md).
+//! The process-wide address range behind compressed `P<T>` handles (`cfg(compressed_ptrs)`: on unix unless
+//! `plain-ptrs` is enabled, see build.rs; notes/mem-pointer-compression.md).
 //!
 //! The first chunk request reserves `RESERVE` bytes of address space with no access, and every arena chunk of every
 //! thread arena and region is carved from it and committed on hand-out, so one `base()` turns any handle into an

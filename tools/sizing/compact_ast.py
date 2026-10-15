@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """TOOL: turns the TSRS_AST_SIZING rows into the tables of notes/mem-compact-ast-sizing.md.
 
-    cargo build --release -p tsrs_cli --features ast-sizing
+    cargo build --release -p tsrs_cli --features tsrs_compiler/ast-sizing
     (per project, from its root)  TSRS_AST_SIZING=<dir>/<project>.tsv tsrs -p <project> --noEmit --incremental false \
         --extendedDiagnostics --pretty false --checkers 8
     (optional, for the arena / heap columns)  TSRS_MEM_SPLIT=1 tsrs ... 2> <dir>/<project>.split.err

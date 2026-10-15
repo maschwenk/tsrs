@@ -1,4 +1,4 @@
-// TOOL, compiled only with `--features ast-sizing` (tsrs_cli forwards it): counts the syntax tree of the parsed
+// TOOL, compiled only with `--features tsrs_compiler/ast-sizing` (tsrs_compiler forwards it): counts the syntax tree of the parsed
 // program for notes/mem-compact-ast-sizing.md.
 //
 // `TSRS_AST_SIZING=<file>` makes the type-check pass (`Program::get_semantic_diagnostics(None)`) append TSV rows to

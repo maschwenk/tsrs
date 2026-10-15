@@ -1,5 +1,9 @@
 # mem-pointer-compression: 32-bit arena handles for `P<T>`
 
+Build update (2026-10-15): the `compressed-ptrs` feature described in the original plan below has been removed.
+Compression is automatic on Unix unless `tsrs_core/plain-ptrs` is enabled, including with `--no-default-features`.
+The measurements below are unchanged.
+
 Branch `mem/pointer-compression`, base origin/main ff92b7f. Goal: `P<T>` becomes a 32-bit handle (an offset in
 8-byte units into one process-wide reserved region), so every arena struct that stores `P<T>` shrinks, `Option<P<T>>`
 stays 4 bytes (handle 0 is never handed out), and handles are position independent (the foundation for an mmap-able
@@ -127,7 +131,7 @@ allocation profile itself (per-type bytes) works in both modes.
 | `P<T>` as `NonZeroU32` + `PhantomData`; `P::new` allocates 8-aligned and padded to 8 (`p_layout`, also used by `alloc` and `free!`); `from_static` checked (inside the range, 8-aligned), `from_arena` unchecked for hot views; `to_bits` / `from_bits` (offset; address in plain mode), `key` / `from_key` (`PKey`: handle or address), `cast`; eq / hash / order by handle | `crates/tsrs_core/src/ptr.rs` |
 | every thread-arena chunk and region slab from the reservation; thread chunks stop doubling at 64 MiB | `crates/tsrs_core/src/arena.rs` |
 | `SP<T>` (static pointer, identity semantics) for the emit helpers; `empty_compiler_options()` instead of `P::from_static(&EMPTY_COMPILER_OPTIONS)`; `PSlot<V>` (8-aligned link-store elements) | `tsrs_core`, `tsrs_printer`, `tsrs_transformers`, `tsrs_ls`, `tsrs_checker::links` |
-| cfg: `compressed_ptrs` from `build.rs` = default feature `compressed-ptrs` on a unix target and not `plain-ptrs`; downstream crates read `tsrs_core::COMPRESSED_PTRS` | `crates/tsrs_core/build.rs`, `Cargo.toml` |
+| cfg: `compressed_ptrs` from `build.rs` = a unix target and not `plain-ptrs`; downstream crates read `tsrs_core::COMPRESSED_PTRS` | `crates/tsrs_core/build.rs`, `Cargo.toml` |
 
 Packed words, rewritten to `to_bits` / `key` (both modes) so none stores an address of a `P` target any more:
 `NodeHeaderWord` (parent bits / 8 in 45 bits), the identifier word (flow node), `FlowNode.link`, symbol table

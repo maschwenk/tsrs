@@ -38,9 +38,9 @@ retained memory, see below).
 3. The private monorepo 0 errors. Extra check: the quick tier of the private monorepo `.types` comparison (docs/DEBUGGING.md, 2,000
    sampled files against the cached reference dump) is 2000/2000 identical with all landed candidates on.
 
-## Measuring where objects come from: `--features site-counts`
+## Measuring where objects come from: `-p tsrs_checker --features tsrs_checker/site-counts`
 
-`CARGO_TARGET_DIR=$PWD/target/sc cargo build --release -p tsrs_cli --features site-counts` builds a `tsrs` that
+`CARGO_TARGET_DIR=$PWD/target/sc cargo build --release -p tsrs_cli -p tsrs_checker --features tsrs_checker/site-counts` builds a `tsrs` that
 prints creation-site tables at exit (`tsrs_core::sitecount`; `TSRS_SITE_COUNTS_TOP=N` rows per kind). Compiled out
 otherwise. The constructors are `#[track_caller]` under the feature, so each row is the code that asked for the
 object: `symbol`, `type` (labelled by kind), `signature`, `mapper` (labelled by mapper kind), `links` (new link

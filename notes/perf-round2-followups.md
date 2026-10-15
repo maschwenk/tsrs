@@ -132,7 +132,7 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
 A seed checker checks a sample of files and its region is frozen; checkers become forks that read it and keep their
 own writes in overlays. Under `--maxMemory` a retired checker is replaced by a fork, so it starts with the seed's graph
 instead of rebuilding it, and the pool starts at once instead of waiting for the seed. In main behind the
-`shared-graph` Cargo feature and `TSRS_SHARED_GRAPH=1` (npm binaries do not include it); the seed is 5% of the checking
+`tsrs_core/shared-graph` Cargo feature and `TSRS_SHARED_GRAPH=1` (npm binaries do not include it); the seed is 5% of the checking
 work under `--maxMemory` (`TSRS_SHARED_GRAPH_SEED_PERCENT`). On a large private monorepo at 8 checkers and
 `--maxMemory 8G`: 28.6 s and 2.76 T instructions against 32.9 s and 3.17 T without the seed, at the same peak (8.7-8.8 GB);
 diagnostics identical (notes/spike-shared-graph.md sections 10-10.2). The feature compiled in costs +3.6% instructions

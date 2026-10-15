@@ -29,18 +29,8 @@ libc = "0.2"
 # The system allocator instead of mimalloc, for sanitizer builds (AddressSanitizer and ThreadSanitizer track only its
 # blocks; mimalloc's memory looks like one long-lived region to them).
 system-alloc = []
-# Creation-site counters of checker objects, printed at exit (tsrs_core::sitecount).
-site-counts = ["tsrs_compiler/site-counts"]
-# TSRS_WORK_CENSUS=<file>: the work census (docs/DEBUGGING.md).
-work-census = ["tsrs_compiler/work-census"]
-# TOOL: TSRS_AST_SIZING=<file> counts the parsed syntax tree (notes/mem-compact-ast-sizing.md).
-ast-sizing = ["tsrs_compiler/ast-sizing"]
 # Allocation profile (tsrs_core/alloc-profile); replaces the mimalloc global allocator with the counting one.
 alloc-profile = ["tsrs_execute/alloc-profile"]
-# TSRS_ASSIGNMENT_STATS also attributes checker-created types/symbols to files (tsrs_compiler checkerpool_stats.rs).
-assignment-stats = ["tsrs_compiler/assignment-stats"]
-# The shared type graph (TSRS_SHARED_GRAPH=1; tsrs_core/shared-graph).
-shared-graph = ["tsrs_core/shared-graph"]
 
 [[bin]]
 name = "tsrs"

@@ -10,17 +10,13 @@ publish.workspace = true
 workspace = true
 
 [features]
-default = ["compressed-ptrs"]
 # Atomic borrow checking for FrozenCell in release builds (always on with debug_assertions).
 checked-cells = []
 # Per-call-site arena profile and a counting allocator for executables to install (src/alloc_profile.rs).
 alloc-profile = ["dep:mimalloc-safe"]
 # Creation-site counters for checker objects (src/sitecount.rs).
 site-counts = []
-# `P<T>` as a 32-bit handle into one reserved address range (src/reserve.rs, notes/mem-pointer-compression.md), on
-# unix targets (build.rs).
-compressed-ptrs = []
-# Keeps `P<T>` a plain pointer even when `compressed-ptrs` is on (for comparisons: `--features tsrs_core/plain-ptrs`).
+# Opt out of Unix pointer compression (build.rs; for comparisons: `--features tsrs_core/plain-ptrs`).
 plain-ptrs = []
 # The shared type graph (src/sharedgraph.rs, on with TSRS_SHARED_GRAPH=1). Without it every frozen-object test is a
 # constant false and its read and write paths fold away.

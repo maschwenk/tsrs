@@ -261,6 +261,27 @@ The `alloc-profile` feature on `tsrs_cli` or `tsrs_testrunner` enables arena ins
 instruments the library without replacing the executable's allocator. This also lets profiling builds coexist
 with the parser oracle, which owns its own allocator.
 
+## Optional build features
+
+For tooling builds, append these arguments to `cargo build --profile dev -p tsrs_cli` (use `--release` for
+performance measurements). Features live on the crate that controls the instrumentation:
+
+| Tool | Additional build arguments |
+| --- | --- |
+| Creation-site counters | `-p tsrs_checker --features tsrs_checker/site-counts` |
+| Checker work census | `-p tsrs_checker --features tsrs_checker/work-census` |
+| AST sizing | `--features tsrs_compiler/ast-sizing` |
+| Checker assignment statistics | `--features tsrs_compiler/assignment-stats` |
+| Shared checker graph | `--features tsrs_core/shared-graph` |
+
+The CLI aliases for these features and the compiler's `site-counts` / `work-census` aliases have been removed.
+Selecting `tsrs_checker` alongside `tsrs_cli` lets Cargo enable its features without a direct CLI dependency.
+The `alloc-profile` and `system-alloc` CLI features still control the executable's allocator.
+
+Pointer compression is automatic on Unix. Use `--features tsrs_core/plain-ptrs` to disable it;
+`--no-default-features` no longer disables compression, and the `compressed-ptrs` feature has been removed.
+Non-Unix targets continue to use plain pointers.
+
 ## Where checker time goes by source pattern: the work census
 
 A function profile cannot tell which type alias or call site the time belongs to. The work census
@@ -271,10 +292,11 @@ by target symbol and relation kind (cache hit rates, pairs compared under severa
 for union targets exits), flow walks by function (steps per walk, sampled re-walks), union construction /
 `removeSubtypes` / indexed access / `keyof` by size, export-assignment and initializer types.
 
-It is compiled in only with `--features work-census` (the runtime test alone costs 0.3-0.5% instructions):
+It is compiled in only with `-p tsrs_checker --features tsrs_checker/work-census` (the runtime test alone costs
+0.3-0.5% instructions):
 
 ```sh
-CARGO_TARGET_DIR=target/census cargo build --release -p tsrs_cli --features work-census
+CARGO_TARGET_DIR=target/census cargo build --release -p tsrs_cli -p tsrs_checker --features tsrs_checker/work-census
 cd <project> && TSRS_WORK_CENSUS=/tmp/census.md target/census/release/tsrs -p . --noEmit --incremental false --extendedDiagnostics --checkers 1
 ```
 

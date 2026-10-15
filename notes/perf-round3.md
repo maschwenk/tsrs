@@ -20,7 +20,7 @@ tsgo-baseline harnesses run that way.
   only until `S` dominates, and `S` can only get shorter if it is made smaller (algorithms, source) or is itself
   computed in parallel (a checker shared between threads).
 - Inside one checker nothing is left above 0.3% at the function level; what remains is memory latency and the
-  algorithm. A census by source pattern (`--features work-census`, `TSRS_WORK_CENSUS`, notes/perf-checker-algorithms.md)
+  algorithm. A census by source pattern (`-p tsrs_checker --features tsrs_checker/work-census`, `TSRS_WORK_CENSUS`, notes/perf-checker-algorithms.md)
   shows where the algorithm spends it: relation to union targets 13%, structural comparison of derived generic class
   instances with their generic base (schema and repository libraries) 10-17%, the same generic call inferred again at
   another call site ~8% (on four of five corpora), conditional types distributed over large discriminated unions ~7%,

@@ -4,7 +4,7 @@ Question from the owner: the scoreboard moved to the 16-vCPU runner with tsrs at
 parsed program, shared by every checker, is a larger share of the peak than at 32. Would a more compact syntax tree
 (identifier text as atoms, name-less property nodes, lists as inline ranges, anything else the counts show) put tsrs
 below `bun check` on the six projects where it still uses more memory? Answered with counts and bytes of the real
-trees, from a counting pass over the parsed and bound program (`--features ast-sizing`, section 3), on the code the
+trees, from a counting pass over the parsed and bound program (`--features tsrs_compiler/ast-sizing`, section 3), on the code the
 benchmark measured. No design was built; every saving below is counts times layout sizes.
 
 Answer: no. The whole tree alive at the peak is 6-21% of it. No single design reaches 5% of the peak on any of the
@@ -65,7 +65,7 @@ MiB = 2^20 bytes throughout; the bar (AGENTS.md) is 5% of the peak at the defaul
 
 ## 3. Method
 
-`crates/tsrs_ast/src/sizing.rs`, compiled only with `cargo build --release -p tsrs_cli --features ast-sizing` (default
+`crates/tsrs_ast/src/sizing.rs`, compiled only with `cargo build --release -p tsrs_cli --features tsrs_compiler/ast-sizing` (default
 builds are unchanged), walks the tree when `TSRS_AST_SIZING=<file>` is set, at two points of the type-check pass
 (`Program::get_semantic_diagnostics`): `pre` (after load, bind and the leaf classification, every file) and `post`
 (after the pass: every file but the freed check leaves, with the lazy member lists and the JSDoc the checkers forced).
@@ -342,7 +342,7 @@ node itself (A) saves nothing since identifiers are 32 B.
 
 ```sh
 # build the opt-in tool (default builds do not contain it)
-cargo build --release -p tsrs_cli --features ast-sizing
+cargo build --release -p tsrs_cli --features tsrs_compiler/ast-sizing
 python3 bench/run.py --setup-only            # checkouts in bench/.work/solutions/<name> (bench/projects.json)
 # per project, from its checkout root; -p: t3code-server apps/server, supabase-studio apps/studio, cal-diy apps/web,
 # formbricks-web apps/web/tsconfig.typecheck.json, vscode src, mikro-orm / webpack / drizzle-orm .

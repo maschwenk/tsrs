@@ -134,7 +134,7 @@ treats the identity caches as weak (section 5); a retirement drops all of it at 
 - **Mapping source files instead of reading them** (`mmap` for files of at least 16 KiB: 10.5k files, 465 MB): -0.61
   GB footprint (-3.4%), RSS unchanged (mapped pages are counted there), +1% instructions and +4% wall (page faults:
   +6-10 s system time). Below the 5% bar, and RSS-based limits (Linux) see nothing. The patch is not kept.
-- **Sharing a seed between lifetimes** (frozen seed + forks): done since, in #281 (opt-in, `--features shared-graph`
+- **Sharing a seed between lifetimes** (frozen seed + forks): done since, in #281 (opt-in, `--features tsrs_core/shared-graph`
   and `TSRS_SHARED_GRAPH=1`). A retired checker becomes a fork of the seed; at 8G it removes most of the rebuild
   cost (3.17 T -> 2.76 T instructions, 32.9 -> 28.6 s; notes/spike-shared-graph.md section 10).
 

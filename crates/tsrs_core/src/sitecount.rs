@@ -1,4 +1,4 @@
-//! Opt-in creation-site counters (`--features tsrs_checker/site-counts`, compiled to no-ops otherwise).
+//! Opt-in creation-site counters (`-p tsrs_checker --features tsrs_checker/site-counts`, compiled to no-ops otherwise).
 //!
 //! `hit(kind, label)` counts one event per (kind, label, caller location); the checker's constructors
 //! (`new_symbol`, `new_type`, type mappers, link slots, signatures) are `#[track_caller]` under the feature, so
