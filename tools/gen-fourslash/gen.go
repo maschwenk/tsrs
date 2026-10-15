@@ -500,7 +500,9 @@ func (g *gen) genFunc(d *ast.FuncDecl, isTest bool) (code string, skip string, s
 	resetAnonStructs()
 	header := b.String()
 	b.Reset()
-	g.stmtsWithTailReturn(stmts, true)
+	if !isTest || !g.canonicalFourslashTest(stmts) {
+		g.stmtsWithTailReturn(stmts, true)
+	}
 	body := b.String()
 	b.Reset()
 	b.WriteString(header)

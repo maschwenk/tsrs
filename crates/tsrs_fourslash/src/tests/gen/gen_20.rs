@@ -6,8 +6,7 @@ use crate::tests::prelude::*;
 // jsDocPropertyDescription6_test.go:10
 pub fn test_js_doc_property_description6(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface Literal1Example {
+    let content: &str = r"interface Literal1Example {
     [key: `prefix${string}`]: number | string;
     /** Something else */
     [key: `prefix${number}`]: number;
@@ -17,17 +16,11 @@ function literal1Example(e: Literal1Example) {
     console.log(e./*literal2*/anything);
     console.log(e./*literal3*/prefix0);
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "literal1", "(index) Literal1Example[`prefix${string}`]: string | number", "");
-            f.verify_quick_info_at(t, "literal2", "any", "");
-            f.verify_quick_info_at(t, "literal3", "(index) Literal1Example[`prefix${string}` | `prefix${number}`]: number", "Something else");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "literal1", "(index) Literal1Example[`prefix${string}`]: string | number", "");
+        f.verify_quick_info_at(t, "literal2", "any", "");
+        f.verify_quick_info_at(t, "literal3", "(index) Literal1Example[`prefix${string}` | `prefix${number}`]: number", "Something else");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -38,23 +31,16 @@ use crate::tests::prelude::*;
 // jsDocPropertyDescription7_test.go:10
 pub fn test_js_doc_property_description7(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class StringClass {
+    let content: &str = r"class StringClass {
     /** Something generic */
     static [p: string]: any;
 }
 function stringClass(e: typeof StringClass) {
     console.log(e./*stringClass*/anything);
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "stringClass", "(index) StringClass[string]: any", "Something generic");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "stringClass", "(index) StringClass[string]: any", "Something generic");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -65,23 +51,16 @@ use crate::tests::prelude::*;
 // jsDocPropertyDescription8_test.go:10
 pub fn test_js_doc_property_description8(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class SymbolClass {
+    let content: &str = r"class SymbolClass {
     /** Something generic */
     static [p: symbol]: any;
 }
 function symbolClass(e: typeof SymbolClass) {
     console.log(e./*symbolClass*/anything);
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "symbolClass", "any", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "symbolClass", "any", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -92,8 +71,7 @@ use crate::tests::prelude::*;
 // jsDocPropertyDescription9_test.go:10
 pub fn test_js_doc_property_description9(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class LiteralClass {
+    let content: &str = r"class LiteralClass {
     /** Something generic */
     static [key: `prefix${string}`]: any;
     /** Something else */
@@ -104,18 +82,12 @@ function literalClass(e: typeof LiteralClass) {
     console.log(e./*literal2Class*/anything);
     console.log(e./*literal3Class*/prefix0);
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "literal1Class", "(index) LiteralClass[`prefix${string}`]: any", "Something generic");
-            f.verify_quick_info_at(t, "literal2Class", "any", "");
-            f.verify_quick_info_at(t, "literal3Class", "(index) LiteralClass[`prefix${string}` | `prefix${number}`]: any", r"Something generic
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "literal1Class", "(index) LiteralClass[`prefix${string}`]: any", "Something generic");
+        f.verify_quick_info_at(t, "literal2Class", "any", "");
+        f.verify_quick_info_at(t, "literal3Class", "(index) LiteralClass[`prefix${string}` | `prefix${number}`]: any", r"Something generic
 Something else");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -126,8 +98,7 @@ use crate::tests::prelude::*;
 // jsDocSee1_test.go:10
 pub fn test_js_doc_see1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"interface [|/*def1*/Foo|] {
+    let content: &str = r#"interface [|/*def1*/Foo|] {
     foo: string
 }
 namespace NS {
@@ -145,15 +116,9 @@ const c = ""
 const [|/*def3*/d|] = ""
 /** @see /*use5*/[|d|] dd*/
 const e = """#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_go_to_definition(t, false, &["use1", "use2", "use3", "use4", "use5"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_go_to_definition(t, false, &["use1", "use2", "use3", "use4", "use5"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -164,8 +129,7 @@ use crate::tests::prelude::*;
 // jsDocSee2_test.go:10
 pub fn test_js_doc_see2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"/** @see {/*use1*/[|foooo|]} unknown reference*/
+    let content: &str = r#"/** @see {/*use1*/[|foooo|]} unknown reference*/
 const a = ""
 /** @see {/*use2*/[|@bar|]} invalid tag*/
 const b = ""
@@ -179,15 +143,9 @@ const e = ""
 const f = ""
 /** @see d@{/*use7*/[|fff|]} partial reference */
 const g = """#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_go_to_definition(t, true, &["use1", "use2", "use3", "use4", "use5", "use6", "use7"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_go_to_definition(t, true, &["use1", "use2", "use3", "use4", "use5", "use6", "use7"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -198,23 +156,16 @@ use crate::tests::prelude::*;
 // jsDocSee3_test.go:10
 pub fn test_js_doc_see3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"function foo ([|/*def1*/a|]: string) {
+    let content: &str = r"function foo ([|/*def1*/a|]: string) {
     /**
      * @see {/*use1*/[|a|]}
      */
     function bar ([|/*def2*/a|]: string) {
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_go_to_definition(t, false, &["use1"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_go_to_definition(t, false, &["use1"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -225,8 +176,7 @@ use crate::tests::prelude::*;
 // jsDocSee4_test.go:10
 pub fn test_js_doc_see4(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class [|/*def1*/A|] {
+    let content: &str = r"class [|/*def1*/A|] {
     foo () { }
 }
 declare const [|/*def2*/a|]: A;
@@ -242,15 +192,9 @@ const t2 = 1
  * @see {@link /*use3*/[|a|].foo()}
  */
 const t3 = 1";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_go_to_definition(t, false, &["use1", "use2", "use3"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_go_to_definition(t, false, &["use1", "use2", "use3"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -261,21 +205,14 @@ use crate::tests::prelude::*;
 // jsDocSee_rename1_test.go:11
 pub fn test_js_doc_see_rename1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"[|interface [|{| "contextRangeIndex": 0 |}A|] {}|]
+    let content: &str = r#"[|interface [|{| "contextRangeIndex": 0 |}A|] {}|]
 /**
  * @see {[|A|]}
  */
 declare const a: [|A|]"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename(t, None, &util::to_any(&f.ranges()[1..].to_vec()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_rename(t, None, &util::to_any(&f.ranges()[1..].to_vec()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -286,8 +223,7 @@ use crate::tests::prelude::*;
 // jsDocServices_test.go:10
 pub fn test_js_doc_services(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"interface /*I*/I {}
+    let content: &str = r#"interface /*I*/I {}
 
 /**
  * @param /*use*/[|foo|] I pity the foo
@@ -295,21 +231,15 @@ pub fn test_js_doc_services(t: &T) {
 function f([|[|/*def*/{| "contextRangeIndex": 1 |}foo|]: I|]) {
     return /*use2*/[|foo|];
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "use");
-            f.verify_quick_info_is(t, "(parameter) foo: I", "I pity the foo");
-            f.verify_baseline_find_all_references(t, &["use", "def", "use2"]);
-            f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[0])), Any::RangeMarker(Arc::clone(&f.ranges()[2])), Any::RangeMarker(Arc::clone(&f.ranges()[3]))]);
-            f.verify_baseline_document_highlights(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[0])), Any::RangeMarker(Arc::clone(&f.ranges()[2])), Any::RangeMarker(Arc::clone(&f.ranges()[3]))]);
-            f.verify_baseline_go_to_type_definition(t, &["use"]);
-            f.verify_baseline_go_to_definition(t, false, &["use"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "use");
+        f.verify_quick_info_is(t, "(parameter) foo: I", "I pity the foo");
+        f.verify_baseline_find_all_references(t, &["use", "def", "use2"]);
+        f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[0])), Any::RangeMarker(Arc::clone(&f.ranges()[2])), Any::RangeMarker(Arc::clone(&f.ranges()[3]))]);
+        f.verify_baseline_document_highlights(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[0])), Any::RangeMarker(Arc::clone(&f.ranges()[2])), Any::RangeMarker(Arc::clone(&f.ranges()[3]))]);
+        f.verify_baseline_go_to_type_definition(t, &["use"]);
+        f.verify_baseline_go_to_definition(t, false, &["use"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -320,21 +250,14 @@ use crate::tests::prelude::*;
 // jsDocSignature-43394_test.go:10
 pub fn test_js_doc_signature_43394(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/**
+    let content: &str = r"/**
  * @typedef {Object} Foo
  * @property {number} ...
  * /**/@typedef {number} Bar
  */";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_signature_help(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_signature_help(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -345,8 +268,7 @@ use crate::tests::prelude::*;
 // jsDocTagsWithHyphen_test.go:11
 pub fn test_js_doc_tags_with_hyphen(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: dummy.js
 /**
  * @typedef Product
@@ -360,20 +282,14 @@ pub fn test_js_doc_tags_with_hyphen(t: &T) {
 const product = {
     /*3*/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "(property) high-top: boolean", "some-comments");
-            f.verify_quick_info_at(t, "2", r#"type Product = {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "(property) high-top: boolean", "some-comments");
+        f.verify_quick_info_at(t, "2", r#"type Product = {
     title: string;
     "high-top": boolean;
 }"#, "");
-            f.verify_completions(t, Any::StringSlice(vec!["3".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String(r#""high-top""#.to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+        f.verify_completions(t, Any::StringSlice(vec!["3".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String(r#""high-top""#.to_string())], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -384,8 +300,7 @@ use crate::tests::prelude::*;
 // jsDocTypeTagQuickInfo1_test.go:10
 pub fn test_js_doc_type_tag_quick_info1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 // @strict: true
 // @allowJs: true
 // @Filename: jsDocTypeTag1.js
@@ -415,15 +330,9 @@ var /*11*/AnyType;
 var /*12*/QType;
 /** @type {String|Number} */
 var /*13*/SOrN;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_hover(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_hover(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -434,8 +343,7 @@ use crate::tests::prelude::*;
 // jsDocTypeTagQuickInfo2_test.go:10
 pub fn test_js_doc_type_tag_quick_info2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 // @strict: true
 // @allowJs: true
 // @Filename: jsDocTypeTag2.js
@@ -463,15 +371,9 @@ var /*10*/func;
 var /*11*/func1;
 /** @type {string | number} */
 var /*12*/sOrn;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_hover(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_hover(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -482,8 +384,7 @@ use crate::tests::prelude::*;
 // jsDocTypedefQuickInfo1_test.go:10
 pub fn test_js_doc_typedef_quick_info1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @allowJs: true
+    let content: &str = r#"// @allowJs: true
 // @Filename: jsDocTypedef1.js
 /**
  * @typedef {Object} Opts
@@ -511,15 +412,9 @@ function foo1(/*2*/opts1) {
     opts1.x;
 }
 foo1({x: 'abc'});"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_hover(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_hover(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -530,8 +425,7 @@ use crate::tests::prelude::*;
 // jsFileImportNoTypes2_test.go:12
 pub fn test_js_file_import_no_types2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: /default.ts
 export default class TestDefaultClass {}
 // @Filename: /defaultType.ts
@@ -550,15 +444,9 @@ export class TestClassBaseline {}
 export interface TestInterfaceBaseline {}
 // @Filename: /a.js
 import /**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "TestClassBaseline".to_string(), insert_text: Some(r#"import { TestClassBaseline } from "./baseline";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./baseline".to_string(), ..Default::default() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "TestClassExportList".to_string(), insert_text: Some(r#"import { TestClassExportList } from "./exportList";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./exportList".to_string(), ..Default::default() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "TestClassReExport".to_string(), insert_text: Some(r#"import { TestClassReExport } from "./reExport";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./reExport".to_string(), ..Default::default() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "TestDefaultClass".to_string(), insert_text: Some(r#"import TestDefaultClass from "./default";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./default".to_string(), ..Default::default() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "TestClassBaseline".to_string(), insert_text: Some(r#"import { TestClassBaseline } from "./baseline";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./baseline".to_string(), ..Default::default() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "TestClassExportList".to_string(), insert_text: Some(r#"import { TestClassExportList } from "./exportList";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./exportList".to_string(), ..Default::default() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "TestClassReExport".to_string(), insert_text: Some(r#"import { TestClassReExport } from "./reExport";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./reExport".to_string(), ..Default::default() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "TestDefaultClass".to_string(), insert_text: Some(r#"import TestDefaultClass from "./default";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./default".to_string(), ..Default::default() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -569,8 +457,7 @@ use crate::tests::prelude::*;
 // jsObjectDefinePropertyRenameLocations_test.go:10
 pub fn test_js_object_define_property_rename_locations(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @allowJs: true
+    let content: &str = r#"// @allowJs: true
 // @checkJs: true
 // @noEmit: true
 // @Filename: index.js
@@ -583,15 +470,9 @@ var CircularList = (function () {
     }
     return CircularList;
 })()"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename_at_ranges_with_text(t, None, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_rename_at_ranges_with_text(t, None, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -602,8 +483,7 @@ use crate::tests::prelude::*;
 // jsQuickInfoGenerallyAcceptableSize_test.go:10
 pub fn test_js_quick_info_generally_acceptable_size(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @checkJs: true
 // @Filename: index.js
 // Data table
@@ -810,16 +690,10 @@ var doSome/*1*/thing = function (dataTable) {
   * @type {SomeCallback}
   */
 var anotherThing/*2*/ = function(a, b) {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "var doSomething: (dataTable: DataTableThing) => void", "Do something");
-            f.verify_quick_info_at(t, "2", "var anotherThing: SomeCallback", "Another thing");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "var doSomething: (dataTable: DataTableThing) => void", "Do something");
+        f.verify_quick_info_at(t, "2", "var anotherThing: SomeCallback", "Another thing");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -830,21 +704,14 @@ use crate::tests::prelude::*;
 // jsRequireQuickInfo_test.go:10
 pub fn test_js_require_quick_info(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @allowJs: true
+    let content: &str = r#"// @allowJs: true
 // @Filename: a.js
 const /**/x = require("./b");
 // @Filename: b.js
 exports.x = 0;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "", "import x", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "", "import x", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -855,21 +722,14 @@ use crate::tests::prelude::*;
 // jsSignature-41059_test.go:10
 pub fn test_js_signature_41059(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: esnext
+    let content: &str = r"// @lib: esnext
 // @allowNonTsExtensions: true
 // @Filename: Foo.js
 a.next(/**/);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "Generator.next(): IteratorResult<T, TReturn>".to_string(), overloads_count: 2, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "Generator.next(): IteratorResult<T, TReturn>".to_string(), overloads_count: 2, ..Default::default() });
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -880,8 +740,7 @@ use crate::tests::prelude::*;
 // jsconfig_test.go:10
 pub fn test_jsconfig(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /a.js
+    let content: &str = r#"// @Filename: /a.js
 function f(/**/x) {
 }
 // @Filename: /jsconfig.json
@@ -891,16 +750,10 @@ function f(/**/x) {
         "noImplicitAny": true
     }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "/a.js");
-            f.verify_error_exists_after_marker(t, "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "/a.js");
+        f.verify_error_exists_after_marker(t, "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -911,8 +764,7 @@ use crate::tests::prelude::*;
 // jsdocCallbackTag_test.go:10
 pub fn test_jsdoc_callback_tag(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @lib: es5
+    let content: &str = r#"// @lib: es5
 // @strict: false
 // @allowNonTsExtensions: true
 // @Filename: jsdocCallbackTag.js
@@ -938,23 +790,17 @@ var t/*1*/;
  */
 var t2/*2*/;
 t(/*4*/"!", /*5*/12, /*6*/false);"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.go_to_marker(t, "1");
-            f.verify_quick_info_is(t, "var t: FooHandler", "");
-            f.go_to_marker(t, "2");
-            f.verify_quick_info_is(t, "var t2: FooHandler2", "");
-            f.go_to_marker(t, "3");
-            f.verify_quick_info_is(t, "type FooHandler2 = (eventName?: string | undefined, eventName2?: string) => any", "- What, another one?");
-            f.go_to_marker(t, "8");
-            f.verify_quick_info_is(t, "type FooHandler = (eventName: string, eventName2: number | string, eventName3: any) => number", "- A kind of magic");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.go_to_marker(t, "1");
+        f.verify_quick_info_is(t, "var t: FooHandler", "");
+        f.go_to_marker(t, "2");
+        f.verify_quick_info_is(t, "var t2: FooHandler2", "");
+        f.go_to_marker(t, "3");
+        f.verify_quick_info_is(t, "type FooHandler2 = (eventName?: string | undefined, eventName2?: string) => any", "- What, another one?");
+        f.go_to_marker(t, "8");
+        f.verify_quick_info_is(t, "type FooHandler = (eventName: string, eventName2: number | string, eventName3: any) => number", "- A kind of magic");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -965,8 +811,7 @@ use crate::tests::prelude::*;
 // jsdocCallbackTagRename01_test.go:10
 pub fn test_jsdoc_callback_tag_rename01(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @lib: es5
+    let content: &str = r#"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsDocCallback.js
 
@@ -977,16 +822,10 @@ pub fn test_jsdoc_callback_tag_rename01(t: &T) {
 
 /** @type {/*1*/[|FooCallback|]} */
 var t;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1]))]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1]))]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -997,8 +836,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion1_test.go:11
 pub fn test_jsdoc_deprecated_suggestion1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @experimentalDecorators: true
+    let content: &str = r#"// @experimentalDecorators: true
 // @Filename: a.ts
 export namespace foo {
     /** @deprecated */
@@ -1073,20 +911,14 @@ type A = f.[|Foo|];
 type B = f.[|QW|];
 type C = f.WQ;
 type [|O|] = Z | A | B | C;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "a.ts");
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6133), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is declared but its value is never read.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Unnecessary]), range: f.ranges()[1].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'foo.faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[2].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[3].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[4].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[5].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'foo.faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[6].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'foo.faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[7].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[8].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'Foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[9].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'zzz' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[10].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'QW' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[11].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature 'new (): C' of 'C' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[12].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'c.m' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[13].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'m' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[14].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'D' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[15].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'D' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[16].ls_range, ..Default::default() }]);
-            f.go_to_file(t, "j.tsx");
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'Compi' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[17].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(_props: Props): any' of 'Compi' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[18].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(_props: Props): any' of 'Compi' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[19].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'Compi' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[20].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(_x: unknown): void' of 'ttf' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[21].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'ttf' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[22].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'dec' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[23].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(_c: unknown): void' of 'dec' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[24].ls_range, ..Default::default() }]);
-            f.go_to_file(t, "b.ts");
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[25].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'QW' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[26].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'f.bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[27].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'f.foo.faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[28].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[29].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'QW' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[30].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'Foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[31].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'QW' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[32].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6196), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'O' is declared but never used.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Unnecessary]), range: f.ranges()[33].ls_range, ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "a.ts");
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6133), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is declared but its value is never read.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Unnecessary]), range: f.ranges()[1].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'foo.faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[2].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[3].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[4].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[5].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'foo.faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[6].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'foo.faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[7].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[8].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'Foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[9].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'zzz' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[10].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'QW' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[11].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature 'new (): C' of 'C' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[12].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'c.m' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[13].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'m' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[14].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'D' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[15].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'D' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[16].ls_range, ..Default::default() }]);
+        f.go_to_file(t, "j.tsx");
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'Compi' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[17].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(_props: Props): any' of 'Compi' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[18].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(_props: Props): any' of 'Compi' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[19].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'Compi' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[20].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(_x: unknown): void' of 'ttf' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[21].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'ttf' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[22].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'dec' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[23].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(_c: unknown): void' of 'dec' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[24].ls_range, ..Default::default() }]);
+        f.go_to_file(t, "b.ts");
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[25].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'QW' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[26].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'f.bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[27].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'f.foo.faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[28].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[29].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'QW' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[30].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'Foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[31].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'QW' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[32].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6196), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'O' is declared but never used.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Unnecessary]), range: f.ranges()[33].ls_range, ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1097,8 +929,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion10_test.go:11
 pub fn test_jsdoc_deprecated_suggestion10(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: foo.ts
+    let content: &str = r#"// @filename: foo.ts
 export namespace foo {
     /** @deprecated */
     export const bar = 1;
@@ -1106,16 +937,10 @@ export namespace foo {
 }
 foo.[|bar|];
 foo[[|"bar"|]];"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "foo.ts");
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[2].ls_range, ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "foo.ts");
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[2].ls_range, ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1126,23 +951,16 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion11_test.go:11
 pub fn test_jsdoc_deprecated_suggestion11(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: /foo.ts
+    let content: &str = r#"// @filename: /foo.ts
 /** @deprecated */
 export function foo() {}
 // @filename: /test.ts
 import { [|foo|] } from "./foo";
 [|foo|];"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "/test.ts");
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "/test.ts");
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1153,8 +971,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion12_test.go:11
 pub fn test_jsdoc_deprecated_suggestion12(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @filename: foo.ts
+    let content: &str = r"// @filename: foo.ts
 /**
  * @deprecated
  */
@@ -1163,16 +980,10 @@ function bar(fn: () => void) {
     fn();
 }
 bar([|foo|]);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "foo.ts");
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "foo.ts");
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1183,8 +994,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion13_test.go:11
 pub fn test_jsdoc_deprecated_suggestion13(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @filename: foo.ts
+    let content: &str = r"// @filename: foo.ts
 /**
  * @deprecated
  */
@@ -1196,16 +1006,10 @@ class Foo {
     }
 }
 new Foo([|foo|]);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "foo.ts");
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "foo.ts");
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1216,8 +1020,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion14_test.go:11
 pub fn test_jsdoc_deprecated_suggestion14(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @module: esnext
+    let content: &str = r#"// @module: esnext
 // @filename: /a.ts
 export const a = 1;
 export const b = 1;
@@ -1229,16 +1032,10 @@ export {
 // @filename: /c.ts
 import { [|a|] } from "./b";
 [|a|]"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "/c.ts");
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "/c.ts");
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1249,8 +1046,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion15_test.go:11
 pub fn test_jsdoc_deprecated_suggestion15(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @module: esnext
+    let content: &str = r#"// @module: esnext
 // @filename: /a.ts
 export const a = 1;
 export const b = 1;
@@ -1266,16 +1062,10 @@ export {
 // @filename: /d.ts
 import { [|a|] } from "./c";
 [|a|]"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "/d.ts");
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "/d.ts");
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1286,8 +1076,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion16_test.go:11
 pub fn test_jsdoc_deprecated_suggestion16(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @module: esnext
+    let content: &str = r#"// @module: esnext
 // @filename: /a.ts
 const a = 1;
 const b = 1;
@@ -1295,16 +1084,10 @@ export { a, /** @deprecated b is deprecated */ b }
 // @filename: /b.ts
 import { [|b|] } from "./a";
 [|b|]"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "/b.ts");
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'b' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'b' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "/b.ts");
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'b' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'b' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1315,8 +1098,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion17_test.go:11
 pub fn test_jsdoc_deprecated_suggestion17(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @filename: foo.ts
+    let content: &str = r"// @filename: foo.ts
 interface Foo {
     /** @deprecated */
     [k: string]: any;
@@ -1329,15 +1111,9 @@ function f(foo: Foo) {
     foo.[|y|];
     foo.[|z|];
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'x' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'z' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[2].ls_range, ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'x' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'z' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[2].ls_range, ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1348,8 +1124,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion18_test.go:11
 pub fn test_jsdoc_deprecated_suggestion18(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @jsx: preserve
+    let content: &str = r"// @jsx: preserve
 // @filename: foo.tsx
 interface Props {
     /** @deprecated  */
@@ -1362,15 +1137,9 @@ function A(props: Props) {
 function B() {
     return <A [|x|]={1} [|y|]={1} />
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'x' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'x' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1381,8 +1150,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion19_test.go:11
 pub fn test_jsdoc_deprecated_suggestion19(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface I {
+    let content: &str = r"interface I {
     x: number;
     y: number;
 }
@@ -1392,15 +1160,9 @@ interface I {
 }
 const foo: I = { [|x|]: 1, y: 1 };
 foo.[|x|];";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'x' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'x' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'x' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'x' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1411,8 +1173,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion2_test.go:11
 pub fn test_jsdoc_deprecated_suggestion2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// overloads
+    let content: &str = r"// overloads
 declare function foo(a: string): number;
 /** @deprecated */
 declare function foo(): undefined;
@@ -1471,15 +1232,9 @@ cb;
 cb();
 new ca();
 new [|cb|]();";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature '(): undefined' of 'foo' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[0].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature '(): number' of 'bar' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[1].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'bar' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[2].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature '(): number' of 'baz' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[3].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'baz' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[4].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'f' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[5].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some(r#"The signature '(tag: "xmp"): void' of 't.createElement' is deprecated."#.to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[6].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature 'new (): C' of 'C' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[7].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'ca' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[8].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature 'new (): string' of 'cb' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[9].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature '(): undefined' of 'foo' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[0].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature '(): number' of 'bar' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[1].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'bar' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[2].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature '(): number' of 'baz' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[3].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'baz' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[4].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'f' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[5].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some(r#"The signature '(tag: "xmp"): void' of 't.createElement' is deprecated."#.to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[6].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature 'new (): C' of 'C' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[7].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'ca' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[8].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature 'new (): string' of 'cb' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[9].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1490,8 +1245,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion20_test.go:11
 pub fn test_jsdoc_deprecated_suggestion20(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @module: esnext
+    let content: &str = r#"// @module: esnext
 // @filename: /a.ts
 export default function a() {}
 // @filename: /b.ts
@@ -1507,16 +1261,10 @@ import * as _ from "./b";
 
 _.[|a|]()
 _.[|b|]()"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "/c.ts");
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'b' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "/c.ts");
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'b' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1527,8 +1275,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion21_test.go:11
 pub fn test_jsdoc_deprecated_suggestion21(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @module: esnext
+    let content: &str = r#"// @module: esnext
 // @filename: /a.ts
 export const a = 1;
 export const b = 1;
@@ -1544,16 +1291,10 @@ export {
 // @filename: /d.ts
 import * as _ from "./c";
 _.[|a|]"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "/d.ts");
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "/d.ts");
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1564,8 +1305,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion22_test.go:10
 pub fn test_jsdoc_deprecated_suggestion22(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @filename: /a.ts
+    let content: &str = r"// @filename: /a.ts
 const foo: {
     /**
 	 * @deprecated
@@ -1575,15 +1315,9 @@ const foo: {
 } = (a: string, b: string | number) => a + b;
 
 [|foo|](1, 1);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_suggestion_diagnostics(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1594,8 +1328,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion3_test.go:11
 pub fn test_jsdoc_deprecated_suggestion3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"interface RequestOptions {
+    let content: &str = r#"interface RequestOptions {
     /** @deprecated use signal instead */
     timeout?: number;
 }
@@ -1604,15 +1337,9 @@ declare function request(url: string, opts: RequestOptions): void;
 request("/api", { [|timeout|]: 5000 });
 declare const opts: RequestOptions;
 opts.[|timeout|];"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'timeout' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'timeout' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'timeout' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'timeout' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1623,8 +1350,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion4_test.go:11
 pub fn test_jsdoc_deprecated_suggestion4(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @jsx: preserve
+    let content: &str = r"// @jsx: preserve
 // @filename: a.tsx
 interface Props {
     /** @deprecated */
@@ -1637,16 +1363,10 @@ function A(props: Props) {
 function B() {
     return <A [|x|]={1} y={1} />
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "a.tsx");
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'x' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[0].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "a.tsx");
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'x' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[0].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1657,8 +1377,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion5_test.go:10
 pub fn test_jsdoc_deprecated_suggestion5(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @checkJs: true
+    let content: &str = r#"// @checkJs: true
 // @allowJs: true
 // @Filename: jsdocDeprecated_suggestion5.js
 /** @typedef {{ email: string, nickName?: string }} U2 */
@@ -1675,15 +1394,9 @@ const cc = _k => {}
 const DOOM = { e: 1, m: 1 }
 /** @type {DOOM} */
 const kneeDeep = DOOM.e"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_suggestion_diagnostics(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1694,8 +1407,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion6_test.go:11
 pub fn test_jsdoc_deprecated_suggestion6(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: a.tsx
+    let content: &str = r#"// @Filename: a.tsx
 /** @deprecated */
 type Props = {}
 /** @deprecated */
@@ -1706,16 +1418,10 @@ type Options = {}
 /** @deprecated */
 const deprecatedFunction = (options: [|Options|]) => { options }
 [|deprecatedFunction|]({});"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "a.tsx");
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'Props' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[0].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'Component' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[1].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'Options' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[2].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'deprecatedFunction' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[3].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "a.tsx");
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'Props' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[0].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'Component' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[1].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'Options' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[2].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'deprecatedFunction' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[3].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1726,8 +1432,7 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion7_test.go:10
 pub fn test_jsdoc_deprecated_suggestion7(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"enum Direction {
+    let content: &str = r"enum Direction {
     Left = -1,
     Right = 1,
 }
@@ -1736,15 +1441,9 @@ type T = Direction.Left
 const x = 1
 type x = string
 var y: x = 'hi'";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_suggestion_diagnostics(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1755,25 +1454,18 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion8_test.go:10
 pub fn test_jsdoc_deprecated_suggestion8(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: first.ts
+    let content: &str = r"// @Filename: first.ts
 /** @deprecated */
 export declare function tap<T>(next: null): void;
 export declare function tap<T>(next: T): T;
 // @Filename: second.ts
 import { tap } from './first';
 tap";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "second.ts");
-            f.verify_no_errors(t);
-            f.verify_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "second.ts");
+        f.verify_no_errors(t);
+        f.verify_suggestion_diagnostics(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1784,23 +1476,16 @@ use crate::tests::prelude::*;
 // jsdocDeprecated_suggestion9_test.go:10
 pub fn test_jsdoc_deprecated_suggestion9(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: first.ts
+    let content: &str = r"// @Filename: first.ts
 export class logger { }
 // @Filename: second.ts
 import { logger } from './first';
 new logger()";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "second.ts");
-            f.verify_no_errors(t);
-            f.verify_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "second.ts");
+        f.verify_no_errors(t);
+        f.verify_suggestion_diagnostics(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1811,19 +1496,12 @@ use crate::tests::prelude::*;
 // jsdocExtendsTagCompletion_test.go:11
 pub fn test_jsdoc_extends_tag_completion(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 /** @extends {/**/} */
 class A {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_global_types_plus(&[Any::String("A".to_string())])), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_global_types_plus(&[Any::String("A".to_string())])), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1834,19 +1512,12 @@ use crate::tests::prelude::*;
 // jsdocImplementsTagCompletion_test.go:11
 pub fn test_jsdoc_implements_tag_completion(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 /** @implements {/**/} */
 class A {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_global_types_plus(&[Any::String("A".to_string())])), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_global_types_plus(&[Any::String("A".to_string())])), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1857,22 +1528,15 @@ use crate::tests::prelude::*;
 // jsdocImportTagCompletion1_test.go:11
 pub fn test_jsdoc_import_tag_completion1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJS: true
+    let content: &str = r"// @allowJS: true
 // @checkJs: true
 // @filename: /a.js
 /**
  * @/**/
  */";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("import".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("import".to_string())], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1883,8 +1547,7 @@ use crate::tests::prelude::*;
 // jsdocLink1_test.go:10
 pub fn test_jsdoc_link1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class C {
+    let content: &str = r"class C {
 }
 /**
  * {@link C}
@@ -1896,15 +1559,9 @@ pub fn test_jsdoc_link1(t: &T) {
  */
 function /**/CC() {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_hover(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_hover(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1915,8 +1572,7 @@ use crate::tests::prelude::*;
 // jsdocLink2_test.go:10
 pub fn test_jsdoc_link2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: jsdocLink2.ts
+    let content: &str = r"// @Filename: jsdocLink2.ts
 class C {
 }
 // @Filename: script.ts
@@ -1930,15 +1586,9 @@ class C {
  */
 function /**/CC() {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_hover(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_hover(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1949,8 +1599,7 @@ use crate::tests::prelude::*;
 // jsdocLink3_test.go:10
 pub fn test_jsdoc_link3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /jsdocLink3.ts
+    let content: &str = r"// @Filename: /jsdocLink3.ts
 export class C {
 }
 // @Filename: /module1.ts
@@ -1965,15 +1614,9 @@ import { C } from './jsdocLink3'
  */
 function /**/CC() {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_hover(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_hover(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1984,8 +1627,7 @@ use crate::tests::prelude::*;
 // jsdocLink4_test.go:10
 pub fn test_jsdoc_link4(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"declare class I {
+    let content: &str = r"declare class I {
   /** {@link I} */
   bar/*1*/(): void
 }
@@ -1999,15 +1641,9 @@ function f(x) {
 }
 f/*3*/()
 type Pos = [number, number]";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_hover(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_hover(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2018,8 +1654,7 @@ use crate::tests::prelude::*;
 // jsdocLink5_test.go:10
 pub fn test_jsdoc_link5(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"function g() { }
+    let content: &str = r"function g() { }
 /**
  * {@link g()} {@link g() } {@link g ()} {@link g () 0} {@link g()1} {@link g() 2}
  * {@link u()} {@link u() } {@link u ()} {@link u () 0} {@link u()1} {@link u() 2}
@@ -2027,15 +1662,9 @@ pub fn test_jsdoc_link5(t: &T) {
 function f(x) {
 }
 f/*3*/()";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_hover(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_hover(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2046,8 +1675,7 @@ use crate::tests::prelude::*;
 // jsdocLink6_test.go:10
 pub fn test_jsdoc_link6(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: /a.ts
+    let content: &str = r#"// @filename: /a.ts
 export default function A() { }
 export function B() { };
 // @Filename: /b.ts
@@ -2057,15 +1685,9 @@ import A, { B } from "./a";
  * {@link B}
  */
 export default function /**/f() { }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_hover(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_hover(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2076,21 +1698,14 @@ use crate::tests::prelude::*;
 // jsdocLink_findAllReferences1_test.go:10
 pub fn test_jsdoc_link_find_all_references1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface A/**/ {}
+    let content: &str = r"interface A/**/ {}
 /**
  * {@link A()} is ok
  */
 declare const a: A";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_find_all_references(t, &[""]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_find_all_references(t, &[""]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2101,21 +1716,14 @@ use crate::tests::prelude::*;
 // jsdocLink_rename1_test.go:10
 pub fn test_jsdoc_link_rename1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface A/**/ {}
+    let content: &str = r"interface A/**/ {}
 /**
  * {@link A()} is ok
  */
 declare const a: A";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2126,8 +1734,7 @@ use crate::tests::prelude::*;
 // jsdocNullableUnion_test.go:11
 pub fn test_jsdoc_nullable_union(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @checkJs: true
 // @Filename: Foo.js
 /**
@@ -2141,17 +1748,11 @@ function f(p1, p2, p3) {
     p2./*2*/;
     p3./*3*/;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("x".to_string())]), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("y".to_string())]), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("z".to_string())]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("x".to_string())]), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("y".to_string())]), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("z".to_string())]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2162,8 +1763,7 @@ use crate::tests::prelude::*;
 // jsdocOnInheritedMembers1_test.go:10
 pub fn test_jsdoc_on_inherited_members1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @checkJs: true
 // @filename: /a.js
 /** @template T */
@@ -2179,15 +1779,9 @@ class B extends A {
 
 const b = new B();
 b.method/**/;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_hover(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_hover(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2198,8 +1792,7 @@ use crate::tests::prelude::*;
 // jsdocOnInheritedMembers2_test.go:10
 pub fn test_jsdoc_on_inherited_members2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @checkJs: true
 // @filename: /a.js
 /** @template T */
@@ -2215,15 +1808,9 @@ const B = class extends A {
 
 const b = new B();
 b.method/**/;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_hover(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_hover(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2234,22 +1821,15 @@ use crate::tests::prelude::*;
 // jsdocOverloadTagCompletion_test.go:11
 pub fn test_jsdoc_overload_tag_completion(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJS: true
+    let content: &str = r"// @allowJS: true
 // @checkJs: true
 // @filename: /a.js
 /**
  * @/**/
  */";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("overload".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("overload".to_string())], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2260,8 +1840,7 @@ use crate::tests::prelude::*;
 // jsdocParam_suggestion1_test.go:10
 pub fn test_jsdoc_param_suggestion1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: a.ts
+    let content: &str = r"// @Filename: a.ts
 /**
  * @param options - whatever
  * @param options.zone - equally bad
@@ -2274,16 +1853,10 @@ declare function bad(options: any): void
 function worse(): void {
     arguments
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "a.ts");
-            f.verify_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "a.ts");
+        f.verify_suggestion_diagnostics(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2294,8 +1867,7 @@ use crate::tests::prelude::*;
 // jsdocParamTagSpecialKeywords_test.go:11
 pub fn test_jsdoc_param_tag_special_keywords(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: test.js
 /**
@@ -2304,16 +1876,10 @@ pub fn test_jsdoc_param_tag_special_keywords(t: &T) {
 function test(type) {
     type./**/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2324,8 +1890,7 @@ use crate::tests::prelude::*;
 // jsdocParameterNameCompletion_test.go:11
 pub fn test_jsdoc_parameter_name_completion(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/**
+    let content: &str = r"/**
  * @param /*0*/
  */
 function f(foo, bar) {}
@@ -2343,17 +1908,11 @@ function h(cat, canary, canoodle, cantaloupe, zebra) {}
  * @param /*3*/ {string} /*4*/
  */
 function i(foo, bar) {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::StringSlice(vec!["0".to_string(), "3".to_string(), "4".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("bar".to_string()), Any::String("foo".to_string())]), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("bar".to_string())]), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("canary".to_string()), Any::String("canoodle".to_string())]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::StringSlice(vec!["0".to_string(), "3".to_string(), "4".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("bar".to_string()), Any::String("foo".to_string())]), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("bar".to_string())]), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("canary".to_string()), Any::String("canoodle".to_string())]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2364,20 +1923,13 @@ use crate::tests::prelude::*;
 // jsdocPropTagCompletion_test.go:11
 pub fn test_jsdoc_prop_tag_completion(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/**
+    let content: &str = r"/**
  * @typedef Foo
  * @pr/**/
  */";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("prop".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("prop".to_string())], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2388,21 +1940,14 @@ use crate::tests::prelude::*;
 // jsdocPropertyTagCompletion_test.go:11
 pub fn test_jsdoc_property_tag_completion(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 /**
  * @typedef {Object} Foo
  * @property {/**/}
  */";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBAL_TYPES.clone()), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBAL_TYPES.clone()), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2413,8 +1958,7 @@ use crate::tests::prelude::*;
 // jsdocReturnsTag_test.go:10
 pub fn test_jsdoc_returns_tag(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: dummy.js
 /**
  * Find an item
@@ -2426,15 +1970,9 @@ pub fn test_jsdoc_returns_tag(t: &T) {
 function find(l, x) {
 }
 find(''/**/);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_signature_help(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_signature_help(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2477,8 +2015,7 @@ use crate::tests::prelude::*;
 // jsdocSatisfiesTagCompletion1_test.go:11
 pub fn test_jsdoc_satisfies_tag_completion1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 // @noEmit: true
 // @allowJS: true
 // @checkJs: true
@@ -2487,15 +2024,9 @@ pub fn test_jsdoc_satisfies_tag_completion1(t: &T) {
  * @satisfies {/**/}
  */
 const t = { a: 1 };";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBAL_TYPES.clone()), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBAL_TYPES.clone()), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2506,8 +2037,7 @@ use crate::tests::prelude::*;
 // jsdocSatisfiesTagCompletion2_test.go:11
 pub fn test_jsdoc_satisfies_tag_completion2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @noEmit: true
+    let content: &str = r"// @noEmit: true
 // @allowJS: true
 // @checkJs: true
 // @filename: /a.js
@@ -2515,15 +2045,9 @@ pub fn test_jsdoc_satisfies_tag_completion2(t: &T) {
  * @/**/
  */
 const t = { a: 1 };";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("satisfies".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("satisfies".to_string())], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2534,8 +2058,7 @@ use crate::tests::prelude::*;
 // jsdocSatisfiesTagFindAllReferences_test.go:10
 pub fn test_jsdoc_satisfies_tag_find_all_references(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @noEmit: true
+    let content: &str = r"// @noEmit: true
 // @allowJS: true
 // @checkJs: true
 // @filename: /a.js
@@ -2546,15 +2069,9 @@ pub fn test_jsdoc_satisfies_tag_find_all_references(t: &T) {
 
 /** @satisfies {/**/T} comment */
 const foo = { a: 1 };";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_find_all_references(t, &[""]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_find_all_references(t, &[""]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2565,8 +2082,7 @@ use crate::tests::prelude::*;
 // jsdocSatisfiesTagRename_test.go:10
 pub fn test_jsdoc_satisfies_tag_rename(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @noEmit: true
+    let content: &str = r"// @noEmit: true
 // @allowJS: true
 // @checkJs: true
 // @filename: /a.js
@@ -2577,15 +2093,9 @@ pub fn test_jsdoc_satisfies_tag_rename(t: &T) {
 
 /** @satisfies {/**/T} comment */
 const foo = { a: 1 };";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2721,28 +2231,21 @@ function abcdef(x) { return x; }
 // jsdocSnippetCompletion_test.go:111
 pub fn test_jsdoc_snippet_completion_respects_enabled_preference(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*completion*/ */
+    let content: &str = r"/*completion*/ */
 function abcdef(x) { }
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "completion");
-            f.insert(t, "/**");
-            let mut user_preferences = lsutil::new_default_user_preferences();
-            user_preferences.enable_jsdoc_completions = Tristate::False;
-            let list = f.get_completions(t, Some(user_preferences));
-            if let Some(__present3) = list.as_ref() {
-                for item in __present3.items.clone() {
-                    go::assert::assert(t, item.label.as_str() != "/** */", "");
-                }
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "completion");
+        f.insert(t, "/**");
+        let mut user_preferences = lsutil::new_default_user_preferences();
+        user_preferences.enable_jsdoc_completions = Tristate::False;
+        let list = f.get_completions(t, Some(user_preferences));
+        if let Some(__present1) = list.as_ref() {
+            for item in __present1.items.clone() {
+                go::assert::assert(t, item.label.as_str() != "/** */", "");
             }
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+        }
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 // jsdocSnippetCompletion_test.go:132
@@ -2776,19 +2279,12 @@ class C {
 // jsdocSnippetCompletion_test.go:152
 pub fn test_jsdoc_snippet_completion_not_in_non_empty_comment(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/** text /*completion*/ */
+    let content: &str = r"/** text /*completion*/ */
 function abcdef(x) { }
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("completion".to_string()), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("completion".to_string()), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2799,8 +2295,7 @@ use crate::tests::prelude::*;
 // jsdocTemplatePrototypeCompletions_test.go:11
 pub fn test_jsdoc_template_prototype_completions(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @checkJs: true
+    let content: &str = r"// @checkJs: true
 // @filename: index.js
 https://github.com/microsoft/TypeScript/issues/11492
 /** @constructor */
@@ -2812,15 +2307,9 @@ function Foo() {}
  */
 Foo.prototype.foo = function (bar) {};
 new Foo().foo({ id: 1234 })./**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("id".to_string())]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("id".to_string())]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2831,22 +2320,15 @@ use crate::tests::prelude::*;
 // jsdocTemplateTagCompletion_test.go:11
 pub fn test_jsdoc_template_tag_completion(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 /**
  * @template {/**/} T
  * @typedef {Object} Foo
  * @property {T} foo
  */";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBAL_TYPES.clone()), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBAL_TYPES.clone()), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2857,21 +2339,14 @@ use crate::tests::prelude::*;
 // jsdocThrowsTagCompletion_test.go:11
 pub fn test_jsdoc_throws_tag_completion(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 /**
  * @throws {/**/} description
  */
 function fn() {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBAL_TYPES.clone()), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBAL_TYPES.clone()), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2882,21 +2357,14 @@ use crate::tests::prelude::*;
 // jsdocThrowsTag_findAllReferences_test.go:10
 pub fn test_jsdoc_throws_tag_find_all_references(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class /**/E extends Error {}
+    let content: &str = r"class /**/E extends Error {}
 /**
  * @throws {E}
  */
 function f() {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_find_all_references(t, &[""]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_find_all_references(t, &[""]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2907,21 +2375,14 @@ use crate::tests::prelude::*;
 // jsdocThrowsTag_rename_test.go:10
 pub fn test_jsdoc_throws_tag_rename(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class /**/E extends Error {}
+    let content: &str = r"class /**/E extends Error {}
 /**
  * @throws {E}
  */
 function f() {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2932,8 +2393,7 @@ use crate::tests::prelude::*;
 // jsdocTypedefTag_test.go:11
 pub fn test_jsdoc_typedef_tag(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsdocCompletion_typedef.js
 /** @typedef {(string | number)} NumberLike */
@@ -2983,32 +2443,26 @@ c.catAge./*catAge*/;
 var d;d./*dog*/;
 d.dogName./*dogName*/;
 d.dogAge./*dogAge*/;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.verify_completions(t, Any::String("numberLike".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string()), Any::String("toExponential".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("person".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("personName".to_string()), Any::String("personAge".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("personName".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("personAge".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("toExponential".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("animal".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("animalName".to_string()), Any::String("animalAge".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("animalName".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("animalAge".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("toExponential".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("dog".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("dogName".to_string()), Any::String("dogAge".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("dogName".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("dogAge".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("toExponential".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("cat".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("catName".to_string()), Any::String("catAge".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("catName".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("catAge".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("toExponential".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_quick_info_at(t, "AnimalType", r"type Animal = {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.verify_completions(t, Any::String("numberLike".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string()), Any::String("toExponential".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("person".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("personName".to_string()), Any::String("personAge".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("personName".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("personAge".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("toExponential".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("animal".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("animalName".to_string()), Any::String("animalAge".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("animalName".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("animalAge".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("toExponential".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("dog".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("dogName".to_string()), Any::String("dogAge".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("dogName".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("dogAge".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("toExponential".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("cat".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("catName".to_string()), Any::String("catAge".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("catName".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("catAge".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("toExponential".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_quick_info_at(t, "AnimalType", r"type Animal = {
     animalName: string;
     animalAge: number;
 }", "- think Giraffes");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3019,8 +2473,7 @@ use crate::tests::prelude::*;
 // jsdocTypedefTag1_test.go:11
 pub fn test_jsdoc_typedef_tag1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es2015
+    let content: &str = r"// @lib: es2015
 // @allowNonTsExtensions: true
 // @Filename: jsdocCompletion_typedef.js
 /**
@@ -3034,16 +2487,10 @@ function foo() { }
 function a(my) {
     my.yes./*1*/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3054,8 +2501,7 @@ use crate::tests::prelude::*;
 // jsdocTypedefTag2_test.go:11
 pub fn test_jsdoc_typedef_tag2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsdocCompletion_typedef.js
 /**
@@ -3075,17 +2521,11 @@ function a(my2) {
 function b(my2) {
     my2.yes./*2*/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { excludes: vec!["charAt".to_string()], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { excludes: vec!["charAt".to_string()], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3096,8 +2536,7 @@ use crate::tests::prelude::*;
 // jsdocTypedefTagGoToDefinition_test.go:10
 pub fn test_jsdoc_typedef_tag_go_to_definition(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsdocCompletion_typedef.js
 /**
@@ -3115,16 +2554,10 @@ var person; person.[|personName/*3*/|]
 
 /** @type {Animal} */
 var animal; animal.[|animalName/*4*/|]";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.verify_baseline_go_to_definition(t, true, &["3", "4"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.verify_baseline_go_to_definition(t, true, &["3", "4"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3135,8 +2568,7 @@ use crate::tests::prelude::*;
 // jsdocTypedefTagNamespace_test.go:13
 pub fn test_jsdoc_typedef_tag_namespace(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsdocCompletion_typedef.js
 /**
@@ -3150,17 +2582,11 @@ var x; x./*1*/;
 var x1; x1./*2*/;
 /** @type {T.People} */
 var x1; x1./*3*/;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "3".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string()), Any::String("toExponential".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "age".to_string(), sort_text: Some("18".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "3".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string()), Any::String("toExponential".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "age".to_string(), sort_text: Some("18".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3171,8 +2597,7 @@ use crate::tests::prelude::*;
 // jsdocTypedefTagNavigateTo_test.go:10
 pub fn test_jsdoc_typedef_tag_navigate_to(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsDocTypedef_form2.js
 
@@ -3182,16 +2607,10 @@ var NumberLike2;
 
 /** @type {/*1*/NumberLike} */
 var numberLike;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.verify_baseline_document_symbol(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.verify_baseline_document_symbol(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3202,8 +2621,7 @@ use crate::tests::prelude::*;
 // jsdocTypedefTagRename01_test.go:11
 pub fn test_jsdoc_typedef_tag_rename01(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @lib: es5
+    let content: &str = r#"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsDocTypedef_form1.js
 
@@ -3214,16 +2632,10 @@ pub fn test_jsdoc_typedef_tag_rename01(t: &T) {
 
 /** @type {[|NumberLike|]} */
 var numberLike;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.verify_baseline_rename(t, None, &util::to_any(&f.ranges()[1..].to_vec()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.verify_baseline_rename(t, None, &util::to_any(&f.ranges()[1..].to_vec()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3234,8 +2646,7 @@ use crate::tests::prelude::*;
 // jsdocTypedefTagRename02_test.go:11
 pub fn test_jsdoc_typedef_tag_rename02(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @lib: es5
+    let content: &str = r#"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsDocTypedef_form2.js
 
@@ -3243,16 +2654,10 @@ pub fn test_jsdoc_typedef_tag_rename02(t: &T) {
 
 /** @type {[|NumberLike|]} */
 var numberLike;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.verify_baseline_rename(t, None, &util::to_any(&f.ranges()[1..].to_vec()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.verify_baseline_rename(t, None, &util::to_any(&f.ranges()[1..].to_vec()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3263,8 +2668,7 @@ use crate::tests::prelude::*;
 // jsdocTypedefTagRename03_test.go:11
 pub fn test_jsdoc_typedef_tag_rename03(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @lib: es5
+    let content: &str = r#"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsDocTypedef_form3.js
 
@@ -3277,17 +2681,11 @@ pub fn test_jsdoc_typedef_tag_rename03(t: &T) {
 
 /** @type {/*2*/[|Person|]} */
 var person;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.go_to_file(t, "jsDocTypedef_form3.js");
-            f.verify_baseline_rename(t, None, &util::to_any(f.get_ranges_by_text().get(&"Person".to_string())));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.go_to_file(t, "jsDocTypedef_form3.js");
+        f.verify_baseline_rename(t, None, &util::to_any(f.get_ranges_by_text().get(&"Person".to_string())));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3298,8 +2696,7 @@ use crate::tests::prelude::*;
 // jsdocTypedefTagRename04_test.go:10
 pub fn test_jsdoc_typedef_tag_rename04(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsDocTypedef_form2.js
 
@@ -3315,21 +2712,15 @@ function test2() {
    /** @type {NumberLike2} */
    var n/*2*/umberLike2;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.go_to_marker(t, "2");
-            f.verify_quick_info_exists(t);
-            f.go_to_marker(t, "1");
-            f.insert(t, "111");
-            f.go_to_marker(t, "2");
-            f.verify_quick_info_exists(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.go_to_marker(t, "2");
+        f.verify_quick_info_exists(t);
+        f.go_to_marker(t, "1");
+        f.insert(t, "111");
+        f.go_to_marker(t, "2");
+        f.verify_quick_info_exists(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3340,22 +2731,15 @@ use crate::tests::prelude::*;
 // jsdocTypedefTagSemanticMeaning0_test.go:10
 pub fn test_jsdoc_typedef_tag_semantic_meaning0(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 /** /*1*/@typedef {number} /*2*/T */
 /*3*/const /*4*/T = 1;
 /** @type {/*5*/T} */
 const n = /*6*/T;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3366,22 +2750,15 @@ use crate::tests::prelude::*;
 // jsdocTypedefTagSemanticMeaning1_test.go:10
 pub fn test_jsdoc_typedef_tag_semantic_meaning1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 /** @typedef {number} */
 /*1*/const /*2*/T = 1;
 /** @type {/*3*/T} */
 const n = /*4*/T;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3392,8 +2769,7 @@ use crate::tests::prelude::*;
 // jsdocTypedefTagServices_test.go:11
 pub fn test_jsdoc_typedef_tag_services(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @allowJs: true
+    let content: &str = r#"// @allowJs: true
 // @Filename: a.js
 /**
  * Doc comment
@@ -3404,21 +2780,15 @@ pub fn test_jsdoc_typedef_tag_services(t: &T) {
  * @type {[|/*use*/Product|]}
  */
 const product = null;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "use", r"type Product = {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "use", r"type Product = {
     title: string;
 }", "Doc comment");
-            f.verify_baseline_find_all_references(t, &["use", "def"]);
-            f.verify_baseline_rename(t, None, &util::to_any(&f.ranges()[1..].to_vec()[..]));
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[1..].to_vec()[..]));
-            f.verify_baseline_go_to_definition(t, true, &["use"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+        f.verify_baseline_find_all_references(t, &["use", "def"]);
+        f.verify_baseline_rename(t, None, &util::to_any(&f.ranges()[1..].to_vec()[..]));
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[1..].to_vec()[..]));
+        f.verify_baseline_go_to_definition(t, true, &["use"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3429,8 +2799,7 @@ use crate::tests::prelude::*;
 // jsdocTypedefTagTypeExpressionCompletion_test.go:13
 pub fn test_jsdoc_typedef_tag_type_expression_completion(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @lib: es5
+    let content: &str = r#"// @lib: es5
 interface I {
     age: number;
 }
@@ -3460,22 +2829,16 @@ Foo./*valueMemberOfFoo*/;
   * @type { {/*propertyName*/ageX: number} }
   */
 var y;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("type1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "Foo".to_string(), kind: Some(lsproto::CompletionItemKind::Class), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "I".to_string(), kind: Some(lsproto::CompletionItemKind::Interface), ..Default::default() })], excludes: vec!["Namespace".to_string(), "SomeType".to_string(), "x".to_string(), "x1".to_string(), "y".to_string(), "method1".to_string(), "property1".to_string(), "method3".to_string(), "method4".to_string(), "foo".to_string()], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("typeFooMember".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "Namespace".to_string(), kind: Some(lsproto::CompletionItemKind::Module), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("NamespaceMember".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "SomeType".to_string(), kind: Some(lsproto::CompletionItemKind::Interface), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("globalValue".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "Foo".to_string(), kind: Some(lsproto::CompletionItemKind::Class), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), kind: Some(lsproto::CompletionItemKind::Variable), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "x1".to_string(), kind: Some(lsproto::CompletionItemKind::Variable), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "y".to_string(), kind: Some(lsproto::CompletionItemKind::Variable), ..Default::default() })], excludes: vec!["I".to_string(), "Namespace".to_string(), "SomeType".to_string(), "method1".to_string(), "property1".to_string(), "method3".to_string(), "method4".to_string(), "foo".to_string()], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("valueMemberOfSomeType".to_string()), None);
-            f.verify_completions(t, Any::String("valueMemberOfFooInstance".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "method3".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "method4".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "property1".to_string(), kind: Some(lsproto::CompletionItemKind::Field), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("valueMemberOfFoo".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_function_members_plus(&[Any::CompletionItem(lsproto::CompletionItem { label: "method1".to_string(), kind: Some(lsproto::CompletionItemKind::Method), sort_text: Some("10".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prototype".to_string(), sort_text: Some("11".to_string()), ..Default::default() })])), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("propertyName".to_string()), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("type1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "Foo".to_string(), kind: Some(lsproto::CompletionItemKind::Class), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "I".to_string(), kind: Some(lsproto::CompletionItemKind::Interface), ..Default::default() })], excludes: vec!["Namespace".to_string(), "SomeType".to_string(), "x".to_string(), "x1".to_string(), "y".to_string(), "method1".to_string(), "property1".to_string(), "method3".to_string(), "method4".to_string(), "foo".to_string()], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("typeFooMember".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "Namespace".to_string(), kind: Some(lsproto::CompletionItemKind::Module), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("NamespaceMember".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "SomeType".to_string(), kind: Some(lsproto::CompletionItemKind::Interface), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("globalValue".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "Foo".to_string(), kind: Some(lsproto::CompletionItemKind::Class), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), kind: Some(lsproto::CompletionItemKind::Variable), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "x1".to_string(), kind: Some(lsproto::CompletionItemKind::Variable), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "y".to_string(), kind: Some(lsproto::CompletionItemKind::Variable), ..Default::default() })], excludes: vec!["I".to_string(), "Namespace".to_string(), "SomeType".to_string(), "method1".to_string(), "property1".to_string(), "method3".to_string(), "method4".to_string(), "foo".to_string()], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("valueMemberOfSomeType".to_string()), None);
+        f.verify_completions(t, Any::String("valueMemberOfFooInstance".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "method3".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "method4".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "property1".to_string(), kind: Some(lsproto::CompletionItemKind::Field), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("valueMemberOfFoo".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_function_members_plus(&[Any::CompletionItem(lsproto::CompletionItem { label: "method1".to_string(), kind: Some(lsproto::CompletionItemKind::Method), sort_text: Some("10".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prototype".to_string(), sort_text: Some("11".to_string()), ..Default::default() })])), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("propertyName".to_string()), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3486,8 +2849,7 @@ use crate::tests::prelude::*;
 // jsxAriaLikeCompletions_test.go:13
 pub fn test_jsx_aria_like_completions(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"//@Filename: file.tsx
+    let content: &str = r#"//@Filename: file.tsx
 declare var React: any;
 declare namespace JSX {
     interface Element { }
@@ -3497,15 +2859,9 @@ declare namespace JSX {
     interface ElementAttributesProperty { props: any }
 }
 const a = <div {...{}} /*1*/></div>;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "aria-whatever?".to_string(), insert_text: Some("aria-whatever".to_string()), filter_text: Some("aria-whatever".to_string()), sort_text: Some("12".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "aria-whatever?".to_string(), insert_text: Some("aria-whatever".to_string()), filter_text: Some("aria-whatever".to_string()), sort_text: Some("12".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3637,8 +2993,7 @@ use crate::tests::prelude::*;
 // jsxAttributeCompletionStyleNoSnippet_test.go:14
 pub fn test_jsx_attribute_completion_style_no_snippet(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: foo.tsx
+    let content: &str = r"// @Filename: foo.tsx
 declare namespace JSX {
     interface Element { }
     interface IntrinsicElements {
@@ -3658,15 +3013,9 @@ declare namespace JSX {
 }
 
 <foo [|prop_/**/|] />";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "prop_a".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_b".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_c".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_d".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_e".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_f".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_g".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_h?".to_string(), text_edit: util::insert_replace_text_edit("prop_h", f.ranges()[0].ls_range), filter_text: Some("prop_h".to_string()), sort_text: Some("12".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_i?".to_string(), text_edit: util::insert_replace_text_edit("prop_i", f.ranges()[0].ls_range), filter_text: Some("prop_i".to_string()), sort_text: Some("12".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_j?".to_string(), text_edit: util::insert_replace_text_edit("prop_j", f.ranges()[0].ls_range), filter_text: Some("prop_j".to_string()), sort_text: Some("12".to_string()), ..Default::default() })]), ..Default::default() }), user_preferences: Some(lsutil::UserPreferences { jsx_attribute_completion_style: lsutil::JsxAttributeCompletionStyle::Auto, ..Default::default() }) }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "prop_a".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_b".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_c".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_d".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_e".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_f".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_g".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_h?".to_string(), text_edit: util::insert_replace_text_edit("prop_h", f.ranges()[0].ls_range), filter_text: Some("prop_h".to_string()), sort_text: Some("12".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_i?".to_string(), text_edit: util::insert_replace_text_edit("prop_i", f.ranges()[0].ls_range), filter_text: Some("prop_i".to_string()), sort_text: Some("12".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_j?".to_string(), text_edit: util::insert_replace_text_edit("prop_j", f.ranges()[0].ls_range), filter_text: Some("prop_j".to_string()), sort_text: Some("12".to_string()), ..Default::default() })]), ..Default::default() }), user_preferences: Some(lsutil::UserPreferences { jsx_attribute_completion_style: lsutil::JsxAttributeCompletionStyle::Auto, ..Default::default() }) }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3961,18 +3310,11 @@ use crate::tests::prelude::*;
 // jsxElementExtendsNoCrash1_test.go:10
 pub fn test_jsx_element_extends_no_crash1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @filename: index.tsx
+    let content: &str = r"// @filename: index.tsx
 <const T extends/>";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_suggestion_diagnostics(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3983,18 +3325,11 @@ use crate::tests::prelude::*;
 // jsxElementExtendsNoCrash2_test.go:10
 pub fn test_jsx_element_extends_no_crash2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @filename: index.tsx
+    let content: &str = r"// @filename: index.tsx
 <T extends/>";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_suggestion_diagnostics(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4005,18 +3340,11 @@ use crate::tests::prelude::*;
 // jsxElementExtendsNoCrash3_test.go:10
 pub fn test_jsx_element_extends_no_crash3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @filename: index.tsx
+    let content: &str = r"// @filename: index.tsx
 <T extends /=>";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_suggestion_diagnostics(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4027,19 +3355,12 @@ use crate::tests::prelude::*;
 // jsxElementMissingOpeningTagNoCrash_test.go:10
 pub fn test_jsx_element_missing_opening_tag_no_crash(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"//@Filename: file.tsx
+    let content: &str = r"//@Filename: file.tsx
 declare function Foo(): any;
 let x = <></Fo/*$*/o>;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "$", "let Foo: any", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "$", "let Foo: any", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4050,8 +3371,7 @@ use crate::tests::prelude::*;
 // jsxFindAllReferencesOnRuntimeImportWithPaths1_test.go:10
 pub fn test_jsx_find_all_references_on_runtime_import_with_paths1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: project/src/foo.ts
+    let content: &str = r#"// @Filename: project/src/foo.ts
 import * as x from /**/"@foo/dir/jsx-runtime";
 // @Filename: project/src/bar.tsx
 export default <div></div>;
@@ -4078,15 +3398,9 @@ export {}
         }
     }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_find_all_references(t, &[""]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_find_all_references(t, &[""]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4097,8 +3411,7 @@ use crate::tests::prelude::*;
 // jsxGenericQuickInfo_test.go:10
 pub fn test_jsx_generic_quick_info(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"//@Filename: file.tsx
+    let content: &str = r#"//@Filename: file.tsx
 declare namespace JSX {
     interface Element { }
     interface IntrinsicElements {
@@ -4123,20 +3436,14 @@ class Component<T> {
 }   
 var b = new Component({items: [0, 1, 2], render/*0*/Item: it/*1*/em => item.toFixed(), name/*2*/: 'A',});
 var c = <Component items={[0, 1, 2]} render/*3*/Item={it/*4*/em => item.toFixed()} name/*5*/="A" />"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "0", "(property) PropsA<number>.renderItem: (item: number) => string", "");
-            f.verify_quick_info_at(t, "1", "(parameter) item: number", "");
-            f.verify_quick_info_at(t, "2", r#"(property) PropsA<T>.name: "A""#, "comments for A");
-            f.verify_quick_info_at(t, "3", "(property) PropsA<number>.renderItem: (item: number) => string", "");
-            f.verify_quick_info_at(t, "4", "(parameter) item: number", "");
-            f.verify_quick_info_at(t, "5", r#"(property) PropsA<T>.name: "A""#, "comments for A");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "0", "(property) PropsA<number>.renderItem: (item: number) => string", "");
+        f.verify_quick_info_at(t, "1", "(parameter) item: number", "");
+        f.verify_quick_info_at(t, "2", r#"(property) PropsA<T>.name: "A""#, "comments for A");
+        f.verify_quick_info_at(t, "3", "(property) PropsA<number>.renderItem: (item: number) => string", "");
+        f.verify_quick_info_at(t, "4", "(parameter) item: number", "");
+        f.verify_quick_info_at(t, "5", r#"(property) PropsA<T>.name: "A""#, "comments for A");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4147,25 +3454,18 @@ use crate::tests::prelude::*;
 // jsxQualifiedTagCompletion_test.go:11
 pub fn test_jsx_qualified_tag_completion(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"//@Filename: file.tsx
+    let content: &str = r"//@Filename: file.tsx
 declare var React: any;
 namespace NS {
     export var Foo: any = null;
 }
 const j = <NS.Foo>Hello!/**/
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.insert(t, "</");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("NS.Foo>".to_string())]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.insert(t, "</");
+        f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("NS.Foo>".to_string())]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4176,8 +3476,7 @@ use crate::tests::prelude::*;
 // jsxSpreadReference_test.go:10
 pub fn test_jsx_spread_reference(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"//@Filename: file.tsx
+    let content: &str = r#"//@Filename: file.tsx
 declare namespace JSX {
     interface Element { }
     interface IntrinsicElements {
@@ -4193,16 +3492,10 @@ class MyClass {
 
 [|var [|/*dst*/{| "contextRangeIndex": 0 |}nn|]: {name?: string; size?: number};|]
 var x = <MyClass {...[|n/*src*/n|]}></MyClass>;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_rename_at_ranges_with_text(t, None, &["nn"]);
-            f.verify_baseline_go_to_definition(t, true, &["src"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_rename_at_ranges_with_text(t, None, &["nn"]);
+        f.verify_baseline_go_to_definition(t, true, &["src"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4457,8 +3750,7 @@ use crate::tests::prelude::*;
 // jsxWithTypeParametershasInstantiatedSignatureHelp_test.go:10
 pub fn test_jsx_with_type_parametershas_instantiated_signature_help(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"declare namespace JSX {
+    let content: &str = r"declare namespace JSX {
     interface Element {
         render(): Element | string | false;
     }
@@ -4470,18 +3762,12 @@ function SFC<T>(_props: Record<string, T>) {
 
 (</*1*/SFC/>);
 (</*2*/SFC<string>/>);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "SFC(_props: Record<string, unknown>): string".to_string(), ..Default::default() });
-            f.go_to_marker(t, "2");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "SFC(_props: Record<string, string>): string".to_string(), ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "SFC(_props: Record<string, unknown>): string".to_string(), ..Default::default() });
+        f.go_to_marker(t, "2");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "SFC(_props: Record<string, string>): string".to_string(), ..Default::default() });
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4492,8 +3778,7 @@ use crate::tests::prelude::*;
 // keywordShadowsAutoImport_test.go:18
 pub fn test_keyword_shadows_auto_import(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"
+    let content: &str = r"
 // @Filename: /mod.ts
 const value = 1;
 export { value as function }
@@ -4501,15 +3786,9 @@ export { value as function }
 // @Filename: /index.ts
 function/**/
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { user_preferences: Some(lsutil::UserPreferences { include_completions_for_module_exports: Tristate::True, include_completions_for_import_statements: Tristate::True, ..Default::default() }), is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "function".to_string(), kind: Some(lsproto::CompletionItemKind::Keyword), sort_text: Some("15".to_string()), ..Default::default() })], excludes: vec!["function".to_string()], ..Default::default() }) }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { user_preferences: Some(lsutil::UserPreferences { include_completions_for_module_exports: Tristate::True, include_completions_for_import_statements: Tristate::True, ..Default::default() }), is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "function".to_string(), kind: Some(lsproto::CompletionItemKind::Keyword), sort_text: Some("15".to_string()), ..Default::default() })], excludes: vec!["function".to_string()], ..Default::default() }) }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4520,8 +3799,7 @@ use crate::tests::prelude::*;
 // lambdaThisMembers_test.go:11
 pub fn test_lambda_this_members(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class Foo {
+    let content: &str = r"class Foo {
     a: number;
     b() {
         var x = () => {
@@ -4529,15 +3807,9 @@ pub fn test_lambda_this_members(t: &T) {
         }
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("a".to_string()), Any::String("b".to_string())]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("a".to_string()), Any::String("b".to_string())]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4548,29 +3820,22 @@ use crate::tests::prelude::*;
 // letQuickInfoAndCompletionList_test.go:12
 pub fn test_let_quick_info_and_completion_list(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"let /*1*/a = 10;
+    let content: &str = r"let /*1*/a = 10;
 /*2*/a = 30;
 function foo() {
     let /*3*/b = 20;
     /*4*/b = /*5*/a;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "a".to_string(), detail: Some("let a: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("4".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "a".to_string(), detail: Some("let a: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("let b: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("5".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "a".to_string(), detail: Some("let a: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("let b: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_quick_info_at(t, "1", "let a: number", "");
-            f.verify_quick_info_at(t, "2", "let a: number", "");
-            f.verify_quick_info_at(t, "3", "let b: number", "");
-            f.verify_quick_info_at(t, "4", "let b: number", "");
-            f.verify_quick_info_at(t, "5", "let a: number", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "a".to_string(), detail: Some("let a: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("4".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "a".to_string(), detail: Some("let a: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("let b: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("5".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "a".to_string(), detail: Some("let a: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("let b: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_quick_info_at(t, "1", "let a: number", "");
+        f.verify_quick_info_at(t, "2", "let a: number", "");
+        f.verify_quick_info_at(t, "3", "let b: number", "");
+        f.verify_quick_info_at(t, "4", "let b: number", "");
+        f.verify_quick_info_at(t, "5", "let a: number", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4581,8 +3846,7 @@ use crate::tests::prelude::*;
 // linkedEditingJsxTag1_test.go:11
 pub fn test_linked_editing_jsx_tag1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /basic.tsx
+    let content: &str = r"// @Filename: /basic.tsx
 /*a*/const j/*b*/sx = (
     /*c*/</*0*/d/*1*/iv/*2*/>/*3*/
     </*4*///*5*/di/*6*/v/*7*/>/*8*/
@@ -4595,19 +3859,13 @@ const jsx2 = (
         <//*13start*/d/*13*/iv/*13end*/>
     <//*14start*/d/*14*/iv/*14end*/>
 );/*d*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let linked_cursors1 = vec![lsproto::Range { start: f.marker_by_name(t, "0").ls_position, end: f.marker_by_name(t, "2").ls_position }, lsproto::Range { start: f.marker_by_name(t, "5").ls_position, end: f.marker_by_name(t, "7").ls_position }];
-            let linked_cursors2 = vec![lsproto::Range { start: f.marker_by_name(t, "9start").ls_position, end: f.marker_by_name(t, "9end").ls_position }, lsproto::Range { start: f.marker_by_name(t, "14start").ls_position, end: f.marker_by_name(t, "14end").ls_position }];
-            let linked_cursors3 = vec![lsproto::Range { start: f.marker_by_name(t, "10start").ls_position, end: f.marker_by_name(t, "10end").ls_position }, lsproto::Range { start: f.marker_by_name(t, "13start").ls_position, end: f.marker_by_name(t, "13end").ls_position }];
-            let linked_cursors4 = vec![lsproto::Range { start: f.marker_by_name(t, "11start").ls_position, end: f.marker_by_name(t, "11").ls_position }, lsproto::Range { start: f.marker_by_name(t, "12").ls_position, end: f.marker_by_name(t, "12end").ls_position }];
-            f.verify_linked_editing(t, go::map_of([("0".to_string(), linked_cursors1.clone()), ("1".to_string(), linked_cursors1.clone()), ("2".to_string(), linked_cursors1.clone()), ("3".to_string(), Vec::new()), ("4".to_string(), Vec::new()), ("5".to_string(), linked_cursors1.clone()), ("6".to_string(), linked_cursors1.clone()), ("7".to_string(), linked_cursors1), ("8".to_string(), Vec::new()), ("9".to_string(), linked_cursors2.clone()), ("10".to_string(), linked_cursors3.clone()), ("11".to_string(), linked_cursors4.clone()), ("12".to_string(), linked_cursors4), ("13".to_string(), linked_cursors3), ("14".to_string(), linked_cursors2), ("a".to_string(), Vec::new()), ("b".to_string(), Vec::new()), ("c".to_string(), Vec::new()), ("d".to_string(), Vec::new())]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        let linked_cursors1 = vec![lsproto::Range { start: f.marker_by_name(t, "0").ls_position, end: f.marker_by_name(t, "2").ls_position }, lsproto::Range { start: f.marker_by_name(t, "5").ls_position, end: f.marker_by_name(t, "7").ls_position }];
+        let linked_cursors2 = vec![lsproto::Range { start: f.marker_by_name(t, "9start").ls_position, end: f.marker_by_name(t, "9end").ls_position }, lsproto::Range { start: f.marker_by_name(t, "14start").ls_position, end: f.marker_by_name(t, "14end").ls_position }];
+        let linked_cursors3 = vec![lsproto::Range { start: f.marker_by_name(t, "10start").ls_position, end: f.marker_by_name(t, "10end").ls_position }, lsproto::Range { start: f.marker_by_name(t, "13start").ls_position, end: f.marker_by_name(t, "13end").ls_position }];
+        let linked_cursors4 = vec![lsproto::Range { start: f.marker_by_name(t, "11start").ls_position, end: f.marker_by_name(t, "11").ls_position }, lsproto::Range { start: f.marker_by_name(t, "12").ls_position, end: f.marker_by_name(t, "12end").ls_position }];
+        f.verify_linked_editing(t, go::map_of([("0".to_string(), linked_cursors1.clone()), ("1".to_string(), linked_cursors1.clone()), ("2".to_string(), linked_cursors1.clone()), ("3".to_string(), Vec::new()), ("4".to_string(), Vec::new()), ("5".to_string(), linked_cursors1.clone()), ("6".to_string(), linked_cursors1.clone()), ("7".to_string(), linked_cursors1), ("8".to_string(), Vec::new()), ("9".to_string(), linked_cursors2.clone()), ("10".to_string(), linked_cursors3.clone()), ("11".to_string(), linked_cursors4.clone()), ("12".to_string(), linked_cursors4), ("13".to_string(), linked_cursors3), ("14".to_string(), linked_cursors2), ("a".to_string(), Vec::new()), ("b".to_string(), Vec::new()), ("c".to_string(), Vec::new()), ("d".to_string(), Vec::new())]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4618,8 +3876,7 @@ use crate::tests::prelude::*;
 // linkedEditingJsxTag10_test.go:10
 pub fn test_linked_editing_jsx_tag10(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /jsx0.tsx
+    let content: &str = r"// @Filename: /jsx0.tsx
 const jsx = </*0*/>
 // @Filename: /jsx1.tsx
 const jsx = <//*1*/>
@@ -4651,15 +3908,9 @@ const jsx = </*13*/> //*13a*/>;
 const jsx = </*14*/> </*14a*/div> <//*14b*/> <//*14c*/div>;
 // @Filename: /jsx15.tsx
 const jsx = </*15*/div> </*15a*/> <//*15b*/div> <//*15c*/>;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_linked_editing(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_linked_editing(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4670,8 +3921,7 @@ use crate::tests::prelude::*;
 // linkedEditingJsxTag11_test.go:10
 pub fn test_linked_editing_jsx_tag11(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /customElements.tsx
+    let content: &str = r#"// @Filename: /customElements.tsx
 const jsx = <fbt:enum knownProp="accepted"
     unknownProp="rejected">
 </fbt:enum>;
@@ -4684,15 +3934,9 @@ const standardElement =
            Next
        </Button>
    </Link>;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_linked_editing(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_linked_editing(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4703,8 +3947,7 @@ use crate::tests::prelude::*;
 // linkedEditingJsxTag12_test.go:11
 pub fn test_linked_editing_jsx_tag12(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /incomplete.tsx
+    let content: &str = r"// @Filename: /incomplete.tsx
 function Test() {
     return <div>
         </*0*/
@@ -4752,16 +3995,10 @@ function Test() {
         </div>
     </div>
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_linked_editing(t, go::map_of([("0".to_string(), Vec::new())]));
-            f.verify_baseline_linked_editing(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_linked_editing(t, go::map_of([("0".to_string(), Vec::new())]));
+        f.verify_baseline_linked_editing(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4772,8 +4009,7 @@ use crate::tests::prelude::*;
 // linkedEditingJsxTag2_test.go:11
 pub fn test_linked_editing_jsx_tag2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /attrs.tsx
+    let content: &str = r"// @Filename: /attrs.tsx
 const jsx = (
    </*0*/div/*1*/ /*2*/styl/*3*/e={{ color: 'red' }}/*4*/>/*5*/
       <p>
@@ -4787,16 +4023,10 @@ const jsx = (
          </*16*/p />
    <//*17*/div>
 );";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let linked_cursors = vec![lsproto::Range { start: f.marker_by_name(t, "0").ls_position, end: f.marker_by_name(t, "1").ls_position }, lsproto::Range { start: f.marker_by_name(t, "6start").ls_position, end: f.marker_by_name(t, "6end").ls_position }];
-            f.verify_linked_editing(t, go::map_of([("0".to_string(), linked_cursors.clone()), ("1".to_string(), linked_cursors.clone()), ("2".to_string(), Vec::new()), ("3".to_string(), Vec::new()), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), linked_cursors), ("10".to_string(), Vec::new()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new()), ("14".to_string(), Vec::new()), ("15".to_string(), Vec::new()), ("16".to_string(), Vec::new())]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        let linked_cursors = vec![lsproto::Range { start: f.marker_by_name(t, "0").ls_position, end: f.marker_by_name(t, "1").ls_position }, lsproto::Range { start: f.marker_by_name(t, "6start").ls_position, end: f.marker_by_name(t, "6end").ls_position }];
+        f.verify_linked_editing(t, go::map_of([("0".to_string(), linked_cursors.clone()), ("1".to_string(), linked_cursors.clone()), ("2".to_string(), Vec::new()), ("3".to_string(), Vec::new()), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), linked_cursors), ("10".to_string(), Vec::new()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new()), ("14".to_string(), Vec::new()), ("15".to_string(), Vec::new()), ("16".to_string(), Vec::new())]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4807,8 +4037,7 @@ use crate::tests::prelude::*;
 // linkedEditingJsxTag3_test.go:11
 pub fn test_linked_editing_jsx_tag3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /selfClosing.tsx
+    let content: &str = r"// @Filename: /selfClosing.tsx
 /*0*/const jsx = /*1*/(
    <div> /*2*/
       <p>/*3*/
@@ -4817,15 +4046,9 @@ pub fn test_linked_editing_jsx_tag3(t: &T) {
      /*10*/ </p>/*11*/
    /*12*/</div>
 /*13*/)/*14*/;/*15*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_linked_editing(t, go::map_of([("0".to_string(), Vec::new()), ("1".to_string(), Vec::new()), ("2".to_string(), Vec::new()), ("3".to_string(), Vec::new()), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), Vec::new()), ("7".to_string(), Vec::new()), ("8".to_string(), Vec::new()), ("9".to_string(), Vec::new()), ("10".to_string(), Vec::new()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new()), ("14".to_string(), Vec::new()), ("15".to_string(), Vec::new())]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_linked_editing(t, go::map_of([("0".to_string(), Vec::new()), ("1".to_string(), Vec::new()), ("2".to_string(), Vec::new()), ("3".to_string(), Vec::new()), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), Vec::new()), ("7".to_string(), Vec::new()), ("8".to_string(), Vec::new()), ("9".to_string(), Vec::new()), ("10".to_string(), Vec::new()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new()), ("14".to_string(), Vec::new()), ("15".to_string(), Vec::new())]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4836,8 +4059,7 @@ use crate::tests::prelude::*;
 // linkedEditingJsxTag4_test.go:11
 pub fn test_linked_editing_jsx_tag4(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /typeTag.tsx
+    let content: &str = r"// @Filename: /typeTag.tsx
 const jsx = (
    </*0*/div/*1*/</*2*/T/*3*/>/*4*/>/*5*/
       <p>
@@ -4851,16 +4073,10 @@ const jsx = (
       </*15*/p />
    <//*16*/div>
 );";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let linked_cursors = vec![lsproto::Range { start: f.marker_by_name(t, "0").ls_position, end: f.marker_by_name(t, "1").ls_position }, lsproto::Range { start: f.marker_by_name(t, "6").ls_position, end: f.marker_by_name(t, "7").ls_position }];
-            f.verify_linked_editing(t, go::map_of([("0".to_string(), linked_cursors.clone()), ("1".to_string(), linked_cursors.clone()), ("2".to_string(), Vec::new()), ("3".to_string(), Vec::new()), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), linked_cursors), ("10".to_string(), Vec::new()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new()), ("14".to_string(), Vec::new()), ("15".to_string(), Vec::new()), ("16".to_string(), Vec::new())]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        let linked_cursors = vec![lsproto::Range { start: f.marker_by_name(t, "0").ls_position, end: f.marker_by_name(t, "1").ls_position }, lsproto::Range { start: f.marker_by_name(t, "6").ls_position, end: f.marker_by_name(t, "7").ls_position }];
+        f.verify_linked_editing(t, go::map_of([("0".to_string(), linked_cursors.clone()), ("1".to_string(), linked_cursors.clone()), ("2".to_string(), Vec::new()), ("3".to_string(), Vec::new()), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), linked_cursors), ("10".to_string(), Vec::new()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new()), ("14".to_string(), Vec::new()), ("15".to_string(), Vec::new()), ("16".to_string(), Vec::new())]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4871,8 +4087,7 @@ use crate::tests::prelude::*;
 // linkedEditingJsxTag5_test.go:11
 pub fn test_linked_editing_jsx_tag5(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @FileName: /unclosedElement.tsx
+    let content: &str = r"// @FileName: /unclosedElement.tsx
 const jsx = (
     <div/*0*/>
         </*1start*/div/*1*/>
@@ -4889,17 +4104,11 @@ const jsx = (
    <di/*11*/v>
    </*12*/ //*13*/div>
 );";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let linked_cursors1 = vec![lsproto::Range { start: f.marker_by_name(t, "1start").ls_position, end: f.marker_by_name(t, "1").ls_position }, lsproto::Range { start: f.marker_by_name(t, "2start").ls_position, end: f.marker_by_name(t, "2").ls_position }];
-            let linked_cursors2 = vec![lsproto::Range { start: f.marker_by_name(t, "6start").ls_position, end: f.marker_by_name(t, "6").ls_position }, lsproto::Range { start: f.marker_by_name(t, "7start").ls_position, end: f.marker_by_name(t, "7").ls_position }];
-            f.verify_linked_editing(t, go::map_of([("0".to_string(), Vec::new()), ("1".to_string(), linked_cursors1.clone()), ("2".to_string(), linked_cursors1), ("3".to_string(), Vec::new()), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), linked_cursors2.clone()), ("7".to_string(), linked_cursors2), ("8".to_string(), Vec::new()), ("9".to_string(), Vec::new()), ("10".to_string(), Vec::new()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new())]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        let linked_cursors1 = vec![lsproto::Range { start: f.marker_by_name(t, "1start").ls_position, end: f.marker_by_name(t, "1").ls_position }, lsproto::Range { start: f.marker_by_name(t, "2start").ls_position, end: f.marker_by_name(t, "2").ls_position }];
+        let linked_cursors2 = vec![lsproto::Range { start: f.marker_by_name(t, "6start").ls_position, end: f.marker_by_name(t, "6").ls_position }, lsproto::Range { start: f.marker_by_name(t, "7start").ls_position, end: f.marker_by_name(t, "7").ls_position }];
+        f.verify_linked_editing(t, go::map_of([("0".to_string(), Vec::new()), ("1".to_string(), linked_cursors1.clone()), ("2".to_string(), linked_cursors1), ("3".to_string(), Vec::new()), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), linked_cursors2.clone()), ("7".to_string(), linked_cursors2), ("8".to_string(), Vec::new()), ("9".to_string(), Vec::new()), ("10".to_string(), Vec::new()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new())]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4910,8 +4119,7 @@ use crate::tests::prelude::*;
 // linkedEditingJsxTag6_test.go:11
 pub fn test_linked_editing_jsx_tag6(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /namespace.tsx
+    let content: &str = r"// @Filename: /namespace.tsx
 const jsx = (
     </*start*/someNamespa/*3*/ce./*2*/Thing/*startend*/>
     <//*end*/someNamespace/*1*/.Thing/*endend*/>
@@ -4926,17 +4134,11 @@ const jsx = (
      /*29*/bar/*26end*/>
      <//*30*/foo  /*31*/ .// hi/*32*/
      /*33*/bar/*30end*/>";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let linked_cursors1 = vec![lsproto::Range { start: f.marker_by_name(t, "start").ls_position, end: f.marker_by_name(t, "startend").ls_position }, lsproto::Range { start: f.marker_by_name(t, "end").ls_position, end: f.marker_by_name(t, "endend").ls_position }];
-            let linked_cursors2 = vec![lsproto::Range { start: f.marker_by_name(t, "26").ls_position, end: f.marker_by_name(t, "26end").ls_position }, lsproto::Range { start: f.marker_by_name(t, "30").ls_position, end: f.marker_by_name(t, "30end").ls_position }];
-            f.verify_linked_editing(t, go::map_of([("1".to_string(), linked_cursors1.clone()), ("2".to_string(), linked_cursors1.clone()), ("3".to_string(), linked_cursors1), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), Vec::new()), ("7".to_string(), Vec::new()), ("8".to_string(), Vec::new()), ("9".to_string(), Vec::new()), ("10".to_string(), Vec::new()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new()), ("14".to_string(), Vec::new()), ("15".to_string(), Vec::new()), ("16".to_string(), Vec::new()), ("17".to_string(), Vec::new()), ("18".to_string(), Vec::new()), ("19".to_string(), Vec::new()), ("20".to_string(), Vec::new()), ("21".to_string(), Vec::new()), ("22".to_string(), Vec::new()), ("23".to_string(), Vec::new()), ("24".to_string(), Vec::new()), ("25".to_string(), Vec::new()), ("26".to_string(), linked_cursors2.clone()), ("27".to_string(), linked_cursors2.clone()), ("28".to_string(), linked_cursors2.clone()), ("29".to_string(), linked_cursors2.clone()), ("30".to_string(), linked_cursors2.clone()), ("31".to_string(), linked_cursors2.clone()), ("32".to_string(), linked_cursors2.clone()), ("33".to_string(), linked_cursors2)]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        let linked_cursors1 = vec![lsproto::Range { start: f.marker_by_name(t, "start").ls_position, end: f.marker_by_name(t, "startend").ls_position }, lsproto::Range { start: f.marker_by_name(t, "end").ls_position, end: f.marker_by_name(t, "endend").ls_position }];
+        let linked_cursors2 = vec![lsproto::Range { start: f.marker_by_name(t, "26").ls_position, end: f.marker_by_name(t, "26end").ls_position }, lsproto::Range { start: f.marker_by_name(t, "30").ls_position, end: f.marker_by_name(t, "30end").ls_position }];
+        f.verify_linked_editing(t, go::map_of([("1".to_string(), linked_cursors1.clone()), ("2".to_string(), linked_cursors1.clone()), ("3".to_string(), linked_cursors1), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), Vec::new()), ("7".to_string(), Vec::new()), ("8".to_string(), Vec::new()), ("9".to_string(), Vec::new()), ("10".to_string(), Vec::new()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new()), ("14".to_string(), Vec::new()), ("15".to_string(), Vec::new()), ("16".to_string(), Vec::new()), ("17".to_string(), Vec::new()), ("18".to_string(), Vec::new()), ("19".to_string(), Vec::new()), ("20".to_string(), Vec::new()), ("21".to_string(), Vec::new()), ("22".to_string(), Vec::new()), ("23".to_string(), Vec::new()), ("24".to_string(), Vec::new()), ("25".to_string(), Vec::new()), ("26".to_string(), linked_cursors2.clone()), ("27".to_string(), linked_cursors2.clone()), ("28".to_string(), linked_cursors2.clone()), ("29".to_string(), linked_cursors2.clone()), ("30".to_string(), linked_cursors2.clone()), ("31".to_string(), linked_cursors2.clone()), ("32".to_string(), linked_cursors2.clone()), ("33".to_string(), linked_cursors2)]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4947,8 +4149,7 @@ use crate::tests::prelude::*;
 // linkedEditingJsxTag7_test.go:11
 pub fn test_linked_editing_jsx_tag7(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @FileName: /fragment.tsx
+    let content: &str = r"// @FileName: /fragment.tsx
 /*a*/const j/*b*/sx =/*c*/ (
     /*5*/</*0*/>/*1*/
         <img />
@@ -4962,21 +4163,15 @@ const jsx3 = (
     <>/*7*/
     </>
 );/*e*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let start_range = f.marker_by_name(t, "0").ls_position;
-            let end_range = f.marker_by_name(t, "3").ls_position;
-            let linked_cursors1 = vec![lsproto::Range { start: start_range, end: start_range }, lsproto::Range { start: end_range, end: end_range }];
-            let start_range2 = f.marker_by_name(t, "10").ls_position;
-            let end_range2 = f.marker_by_name(t, "14").ls_position;
-            let linked_cursors2 = vec![lsproto::Range { start: start_range2, end: start_range2 }, lsproto::Range { start: end_range2, end: end_range2 }];
-            f.verify_linked_editing(t, go::map_of([("0".to_string(), linked_cursors1.clone()), ("1".to_string(), Vec::new()), ("2".to_string(), Vec::new()), ("3".to_string(), linked_cursors1), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), Vec::new()), ("7".to_string(), Vec::new()), ("8".to_string(), Vec::new()), ("9".to_string(), Vec::new()), ("10".to_string(), linked_cursors2.clone()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new()), ("14".to_string(), linked_cursors2), ("15".to_string(), Vec::new()), ("16".to_string(), Vec::new()), ("17".to_string(), Vec::new()), ("18".to_string(), Vec::new()), ("a".to_string(), Vec::new()), ("b".to_string(), Vec::new()), ("c".to_string(), Vec::new()), ("d".to_string(), Vec::new()), ("e".to_string(), Vec::new())]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        let start_range = f.marker_by_name(t, "0").ls_position;
+        let end_range = f.marker_by_name(t, "3").ls_position;
+        let linked_cursors1 = vec![lsproto::Range { start: start_range, end: start_range }, lsproto::Range { start: end_range, end: end_range }];
+        let start_range2 = f.marker_by_name(t, "10").ls_position;
+        let end_range2 = f.marker_by_name(t, "14").ls_position;
+        let linked_cursors2 = vec![lsproto::Range { start: start_range2, end: start_range2 }, lsproto::Range { start: end_range2, end: end_range2 }];
+        f.verify_linked_editing(t, go::map_of([("0".to_string(), linked_cursors1.clone()), ("1".to_string(), Vec::new()), ("2".to_string(), Vec::new()), ("3".to_string(), linked_cursors1), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), Vec::new()), ("7".to_string(), Vec::new()), ("8".to_string(), Vec::new()), ("9".to_string(), Vec::new()), ("10".to_string(), linked_cursors2.clone()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new()), ("14".to_string(), linked_cursors2), ("15".to_string(), Vec::new()), ("16".to_string(), Vec::new()), ("17".to_string(), Vec::new()), ("18".to_string(), Vec::new()), ("a".to_string(), Vec::new()), ("b".to_string(), Vec::new()), ("c".to_string(), Vec::new()), ("d".to_string(), Vec::new()), ("e".to_string(), Vec::new())]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4987,23 +4182,16 @@ use crate::tests::prelude::*;
 // linkedEditingJsxTag8_test.go:11
 pub fn test_linked_editing_jsx_tag8(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @FileName: /mismatchedNames.tsx
+    let content: &str = r"// @FileName: /mismatchedNames.tsx
 const A = thing;
 const B = thing;
 const jsx = (
     </*8*/A>
     </B>
 );";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_linked_editing(t, go::map_of([("8".to_string(), Vec::new())]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_linked_editing(t, go::map_of([("8".to_string(), Vec::new())]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5014,8 +4202,7 @@ use crate::tests::prelude::*;
 // linkedEditingJsxTag9_test.go:11
 pub fn test_linked_editing_jsx_tag9(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /whitespace.tsx
+    let content: &str = r"// @Filename: /whitespace.tsx
 const whitespaceOpening = (
    </*0*/ /*1*/div/*2*/ /*3*/> /*4*/
    <//*5*/di/*6*/v/*5end*/>
@@ -5028,18 +4215,12 @@ const triviaOpening = (
     /* this is/*14*/ comment *//*15*/</*16*//* /*17*/more/*18*/ comment *//*19*/ /*20start*/di/*20*/v/*20end*/ /* comments */>/*21*/Hello/*22*/
     <//*23*/ /*24*///*25*/* even/*26*/ more comment *//*27*/ /*28start*/d/*28*/iv/*28end*/ /* b/*29*/ye */>
 );";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let linked_cursors1 = vec![lsproto::Range { start: f.marker_by_name(t, "1").ls_position, end: f.marker_by_name(t, "2").ls_position }, lsproto::Range { start: f.marker_by_name(t, "5").ls_position, end: f.marker_by_name(t, "5end").ls_position }];
-            let linked_cursors2 = vec![lsproto::Range { start: f.marker_by_name(t, "7").ls_position, end: f.marker_by_name(t, "8end").ls_position }, lsproto::Range { start: f.marker_by_name(t, "10").ls_position, end: f.marker_by_name(t, "11").ls_position }];
-            let linked_cursors3 = vec![lsproto::Range { start: f.marker_by_name(t, "20start").ls_position, end: f.marker_by_name(t, "20end").ls_position }, lsproto::Range { start: f.marker_by_name(t, "28start").ls_position, end: f.marker_by_name(t, "28end").ls_position }];
-            f.verify_linked_editing(t, go::map_of([("0".to_string(), Vec::new()), ("1".to_string(), linked_cursors1.clone()), ("2".to_string(), linked_cursors1.clone()), ("3".to_string(), Vec::new()), ("4".to_string(), Vec::new()), ("5".to_string(), linked_cursors1.clone()), ("6".to_string(), linked_cursors1), ("7".to_string(), linked_cursors2.clone()), ("8".to_string(), linked_cursors2.clone()), ("9".to_string(), Vec::new()), ("10".to_string(), linked_cursors2.clone()), ("11".to_string(), linked_cursors2), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new()), ("14".to_string(), Vec::new()), ("15".to_string(), Vec::new()), ("16".to_string(), Vec::new()), ("17".to_string(), Vec::new()), ("18".to_string(), Vec::new()), ("19".to_string(), Vec::new()), ("20".to_string(), linked_cursors3.clone()), ("21".to_string(), Vec::new()), ("22".to_string(), Vec::new()), ("23".to_string(), Vec::new()), ("24".to_string(), Vec::new()), ("25".to_string(), Vec::new()), ("26".to_string(), Vec::new()), ("27".to_string(), Vec::new()), ("28".to_string(), linked_cursors3), ("29".to_string(), Vec::new())]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        let linked_cursors1 = vec![lsproto::Range { start: f.marker_by_name(t, "1").ls_position, end: f.marker_by_name(t, "2").ls_position }, lsproto::Range { start: f.marker_by_name(t, "5").ls_position, end: f.marker_by_name(t, "5end").ls_position }];
+        let linked_cursors2 = vec![lsproto::Range { start: f.marker_by_name(t, "7").ls_position, end: f.marker_by_name(t, "8end").ls_position }, lsproto::Range { start: f.marker_by_name(t, "10").ls_position, end: f.marker_by_name(t, "11").ls_position }];
+        let linked_cursors3 = vec![lsproto::Range { start: f.marker_by_name(t, "20start").ls_position, end: f.marker_by_name(t, "20end").ls_position }, lsproto::Range { start: f.marker_by_name(t, "28start").ls_position, end: f.marker_by_name(t, "28end").ls_position }];
+        f.verify_linked_editing(t, go::map_of([("0".to_string(), Vec::new()), ("1".to_string(), linked_cursors1.clone()), ("2".to_string(), linked_cursors1.clone()), ("3".to_string(), Vec::new()), ("4".to_string(), Vec::new()), ("5".to_string(), linked_cursors1.clone()), ("6".to_string(), linked_cursors1), ("7".to_string(), linked_cursors2.clone()), ("8".to_string(), linked_cursors2.clone()), ("9".to_string(), Vec::new()), ("10".to_string(), linked_cursors2.clone()), ("11".to_string(), linked_cursors2), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new()), ("14".to_string(), Vec::new()), ("15".to_string(), Vec::new()), ("16".to_string(), Vec::new()), ("17".to_string(), Vec::new()), ("18".to_string(), Vec::new()), ("19".to_string(), Vec::new()), ("20".to_string(), linked_cursors3.clone()), ("21".to_string(), Vec::new()), ("22".to_string(), Vec::new()), ("23".to_string(), Vec::new()), ("24".to_string(), Vec::new()), ("25".to_string(), Vec::new()), ("26".to_string(), Vec::new()), ("27".to_string(), Vec::new()), ("28".to_string(), linked_cursors3), ("29".to_string(), Vec::new())]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5050,8 +4231,7 @@ use crate::tests::prelude::*;
 // localFunction_test.go:10
 pub fn test_local_function(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"function /*1*/foo() {
+    let content: &str = r"function /*1*/foo() {
     function /*2*/bar2() {
     }
     var y = function /*3*/bar3() {
@@ -5059,18 +4239,12 @@ pub fn test_local_function(t: &T) {
 }
 var x = function /*4*/bar4() {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "function foo(): void", "");
-            f.verify_quick_info_at(t, "2", "(local function) bar2(): void", "");
-            f.verify_quick_info_at(t, "3", "(local function) bar3(): void", "");
-            f.verify_quick_info_at(t, "4", "(local function) bar4(): void", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "function foo(): void", "");
+        f.verify_quick_info_at(t, "2", "(local function) bar2(): void", "");
+        f.verify_quick_info_at(t, "3", "(local function) bar3(): void", "");
+        f.verify_quick_info_at(t, "4", "(local function) bar4(): void", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5081,8 +4255,7 @@ use crate::tests::prelude::*;
 // localGetReferences_test.go:10
 pub fn test_local_get_references(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: localGetReferences_1.ts
+    let content: &str = r#"// @Filename: localGetReferences_1.ts
 // Comment Refence Test: g/*43*/lobalVar
 // References to a variable declared in global.
 /*1*/var /*2*/globalVar: number = 2;
@@ -5265,15 +4438,9 @@ namespace remotemodTest {
 		var remoteboo = remotefoo;
 	}
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5284,23 +4451,16 @@ use crate::tests::prelude::*;
 // memberCompletionFromFunctionCall_test.go:11
 pub fn test_member_completion_from_function_call(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"declare interface ifoo {
+    let content: &str = r"declare interface ifoo {
     text: (value: any) => ifoo;
 }
 declare var foo: ifoo;
 foo.text(function() { })/**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.insert(t, ".");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("text".to_string())]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.insert(t, ".");
+        f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("text".to_string())]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5311,17 +4471,10 @@ use crate::tests::prelude::*;
 // memberCompletionOnRightSideOfImport_test.go:10
 pub fn test_member_completion_on_right_side_of_import(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "import x = M./**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "import x = M./**/";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5332,8 +4485,7 @@ use crate::tests::prelude::*;
 // memberCompletionOnTypeParameters_test.go:12
 pub fn test_member_completion_on_type_parameters(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface IFoo {
+    let content: &str = r"interface IFoo {
     x: number;
     y: string;
 }
@@ -5345,17 +4497,11 @@ function foo<S, T extends IFoo, U extends Object, V extends IFoo>() {
     u./*U*/;    // IFoo
     v./*V*/;    // IFoo
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("S".to_string()), None);
-            f.verify_completions(t, Any::StringSlice(vec!["T".to_string(), "V".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), detail: Some("(property) IFoo.x: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "y".to_string(), detail: Some("(property) IFoo.y: string".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("U".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("constructor".to_string()), Any::String("toString".to_string()), Any::String("toLocaleString".to_string()), Any::String("valueOf".to_string()), Any::String("hasOwnProperty".to_string()), Any::String("isPrototypeOf".to_string()), Any::String("propertyIsEnumerable".to_string())]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("S".to_string()), None);
+        f.verify_completions(t, Any::StringSlice(vec!["T".to_string(), "V".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), detail: Some("(property) IFoo.x: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "y".to_string(), detail: Some("(property) IFoo.y: string".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("U".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("constructor".to_string()), Any::String("toString".to_string()), Any::String("toLocaleString".to_string()), Any::String("valueOf".to_string()), Any::String("hasOwnProperty".to_string()), Any::String("isPrototypeOf".to_string()), Any::String("propertyIsEnumerable".to_string())]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5366,8 +4512,7 @@ use crate::tests::prelude::*;
 // memberCompletionOnTypeParameters2_test.go:11
 pub fn test_member_completion_on_type_parameters2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class A {
+    let content: &str = r"class A {
     foo(): string { return ''; }
 }
 
@@ -5381,15 +4526,9 @@ class C<U extends A, T extends A> {
     x: U;
     y = this.x./**/ // completion list here
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("foo".to_string())]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("foo".to_string())]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5400,8 +4539,7 @@ use crate::tests::prelude::*;
 // memberConstructorEdits_test.go:10
 pub fn test_member_constructor_edits(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#" namespace M {
+    let content: &str = r#" namespace M {
      export class A {
 		 constructor(a: string) {}
          public m(n: number) {
@@ -5420,18 +4558,12 @@ pub fn test_member_constructor_edits(t: &T) {
 	 var a = new A("s");
 	 var b = new B("s");
  }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_errors(t);
-            f.go_to_marker(t, "1");
-            f.insert(t, "public m(n: number) { return 0; }");
-            f.verify_no_errors(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_no_errors(t);
+        f.go_to_marker(t, "1");
+        f.insert(t, "public m(n: number) { return 0; }");
+        f.verify_no_errors(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5442,17 +4574,10 @@ use crate::tests::prelude::*;
 // memberListAfterDoubleDot_test.go:10
 pub fn test_member_list_after_double_dot(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "../**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "../**/";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5463,17 +4588,10 @@ use crate::tests::prelude::*;
 // memberListAfterSingleDot_test.go:10
 pub fn test_member_list_after_single_dot(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "./**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "./**/";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5484,20 +4602,13 @@ use crate::tests::prelude::*;
 // memberListErrorRecovery_test.go:13
 pub fn test_member_list_error_recovery(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class Foo { static fun() { }; }
+    let content: &str = r"class Foo { static fun() { }; }
 
 Foo./**/;
 /*1*/var bar;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "fun".to_string(), sort_text: Some("10".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "fun".to_string(), sort_text: Some("10".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5508,25 +4619,18 @@ use crate::tests::prelude::*;
 // memberListInFunctionCall_test.go:11
 pub fn test_member_list_in_function_call(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"function aa(x: any) {}
+    let content: &str = r#"function aa(x: any) {}
 aa({
   "1": function () {
     var b = "";
     b/**/;
   }
 });"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.insert(t, ".");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.insert(t, ".");
+        f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5537,23 +4641,16 @@ use crate::tests::prelude::*;
 // memberListInFunctionCall2_test.go:12
 pub fn test_member_list_in_function_call2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"type T = {
+    let content: &str = r"type T = {
     a: 1;
     b: 2;
 }
 function F(x: T) {
 }
 F({/*1*/} as const)";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "a".to_string(), detail: Some("(property) a: 1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("(property) b: 2".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "a".to_string(), detail: Some("(property) a: 1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("(property) b: 2".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5564,8 +4661,7 @@ use crate::tests::prelude::*;
 // memberListInReopenedEnum_test.go:12
 pub fn test_member_list_in_reopened_enum(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace M {
+    let content: &str = r"namespace M {
     enum E {
         A, B
     }
@@ -5574,15 +4670,9 @@ pub fn test_member_list_in_reopened_enum(t: &T) {
     }
     var x = E./*1*/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "A".to_string(), detail: Some("(enum member) E.A = 0".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "B".to_string(), detail: Some("(enum member) E.B = 1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "C".to_string(), detail: Some("(enum member) E.C = 0".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "D".to_string(), detail: Some("(enum member) E.D = 1".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "A".to_string(), detail: Some("(enum member) E.A = 0".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "B".to_string(), detail: Some("(enum member) E.B = 1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "C".to_string(), detail: Some("(enum member) E.C = 0".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "D".to_string(), detail: Some("(enum member) E.D = 1".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5593,8 +4683,7 @@ use crate::tests::prelude::*;
 // memberListInWithBlock_test.go:11
 pub fn test_member_list_in_with_block(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class c {
+    let content: &str = r"class c {
     static x: number;
     public foo() {
         with ({}) {
@@ -5604,16 +4693,10 @@ pub fn test_member_list_in_with_block(t: &T) {
         }
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), None);
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { excludes: vec!["foo".to_string(), "f".to_string(), "c".to_string(), "d".to_string(), "x".to_string(), "Object".to_string()], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), None);
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { excludes: vec!["foo".to_string(), "f".to_string(), "c".to_string(), "d".to_string(), "x".to_string(), "Object".to_string()], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5624,23 +4707,16 @@ use crate::tests::prelude::*;
 // memberListInWithBlock2_test.go:10
 pub fn test_member_list_in_with_block2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface IFoo {
+    let content: &str = r"interface IFoo {
     a: number;
 }
 
 with (x) {
     var y: IFoo = { /*1*/ };
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }

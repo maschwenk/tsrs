@@ -104,6 +104,135 @@ func (g *gen) deferStmt(d *ast.DeferStmt, rest []ast.Stmt) {
 	}
 }
 
+// canonicalFourslashTest emits the overwhelmingly common test shape through one hand-written Rust helper:
+//
+//	defer testutil.RecoverAndFail(t, "Panic on fourslash test")
+//	const content = "..."
+//	f, done := fourslash.NewFourslash(t, nil, content)
+//	defer done()
+//	// test actions
+//
+// The helper takes a function pointer, rather than a generic callback, so its defer scaffolding is compiled once.
+// Return false for any variation; the general defer lowering above preserves its exact Go semantics.
+func (g *gen) canonicalFourslashTest(stmts []ast.Stmt) bool {
+	recoverAt := -1
+	var recoverCall *ast.CallExpr
+	for i, stmt := range stmts {
+		if d, ok := stmt.(*ast.DeferStmt); ok {
+			recoverAt = i
+			recoverCall = d.Call
+			break
+		}
+	}
+	if recoverAt < 0 || len(recoverCall.Args) != 2 {
+		return false
+	}
+	recoverSel, ok := recoverCall.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	recoverFn, ok := g.info.Uses[recoverSel.Sel].(*types.Func)
+	if !ok || recoverFn.Pkg() == nil || recoverFn.Pkg().Path() != testutilPath || recoverFn.Name() != "RecoverAndFail" {
+		return false
+	}
+	rest := stmts[recoverAt+1:]
+	if len(rest) < 3 {
+		return false
+	}
+	msg := g.info.Types[recoverCall.Args[1]]
+	if msg.Value == nil || msg.Value.Kind() != constant.String || constant.StringVal(msg.Value) != "Panic on fourslash test" {
+		return false
+	}
+	t, ok := recoverCall.Args[0].(*ast.Ident)
+	if !ok || !isTestingTPtr(g.info.TypeOf(t)) {
+		return false
+	}
+
+	decl, ok := rest[0].(*ast.DeclStmt)
+	if !ok {
+		return false
+	}
+	gd, ok := decl.Decl.(*ast.GenDecl)
+	if !ok || gd.Tok != token.CONST || len(gd.Specs) != 1 {
+		return false
+	}
+	vs, ok := gd.Specs[0].(*ast.ValueSpec)
+	if !ok || len(vs.Names) != 1 {
+		return false
+	}
+	contentObj, ok := g.info.Defs[vs.Names[0]].(*types.Const)
+	if !ok || !isString(contentObj.Type()) {
+		return false
+	}
+	// The one fixture built at runtime can panic while allocating, so leave it inside the general recovery boundary.
+	if _, compressed := rustCompressedString(constant.StringVal(contentObj.Val())); compressed {
+		return false
+	}
+
+	assign, ok := rest[1].(*ast.AssignStmt)
+	if !ok || assign.Tok != token.DEFINE || len(assign.Lhs) != 2 || len(assign.Rhs) != 1 {
+		return false
+	}
+	fID, ok := assign.Lhs[0].(*ast.Ident)
+	if !ok {
+		return false
+	}
+	doneID, ok := assign.Lhs[1].(*ast.Ident)
+	if !ok {
+		return false
+	}
+	fObj := g.info.Defs[fID]
+	doneObj := g.info.Defs[doneID]
+	if fObj == nil || doneObj == nil || !isFourslashTestPtr(fObj.Type()) {
+		return false
+	}
+	newCall, ok := assign.Rhs[0].(*ast.CallExpr)
+	if !ok || len(newCall.Args) != 3 || !sameExpr(t, newCall.Args[0]) || !g.isNil(newCall.Args[1]) {
+		return false
+	}
+	sel, ok := newCall.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	newFn, ok := g.info.Uses[sel.Sel].(*types.Func)
+	if !ok || newFn.Pkg() == nil || newFn.Pkg().Path() != fsPath || newFn.Name() != "NewFourslash" {
+		return false
+	}
+	contentID, ok := newCall.Args[2].(*ast.Ident)
+	if !ok || g.info.Uses[contentID] != contentObj {
+		return false
+	}
+
+	doneDefer, ok := rest[2].(*ast.DeferStmt)
+	if !ok || len(doneDefer.Call.Args) != 0 {
+		return false
+	}
+	doneUse, ok := doneDefer.Call.Fun.(*ast.Ident)
+	if !ok || g.info.Uses[doneUse] != doneObj {
+		return false
+	}
+	for _, action := range rest[3:] {
+		if g.refersTo(contentObj, action) || g.refersTo(doneObj, action) {
+			return false
+		}
+	}
+
+	// Register the constant and the FourslashTest callback parameter as if the skipped statements had declared them.
+	g.stmts(stmts[:recoverAt])
+	g.stmts(rest[:1])
+	fName := ident(fObj.Name())
+	g.vars[fObj] = &varInfo{name: fName, kind: kPlace}
+	g.curF = fName
+	tName := ident(t.Name)
+	contentName := ident(contentObj.Name())
+	g.line("fourslash::run_generated_test(%s, %s, |%s, %s| {", tName, contentName, fName, tName)
+	g.indent++
+	g.stmts(rest[3:])
+	g.indent--
+	g.line("});")
+	return true
+}
+
 type scopeState struct {
 	curF, curT string
 }

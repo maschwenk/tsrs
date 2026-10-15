@@ -71,6 +71,12 @@ from 5.79 s (4.83 s frontend) to 4.70 s (3.78 s frontend), with the suite hashes
 Extracting all four strings of at least 64 KiB into generated data files cut Rust source from 13.5 MiB to 7.0 MiB
 but did not improve on that (4.69 s): `include_str!` still makes rustc load and embed the data. Not adopted.
 
+The canonical generated wrapper (outer `RecoverAndFail`, constant content, `NewFourslash` with default capabilities,
+inner `done`) now lives in one non-generic harness helper. The generator used it for 4,325 of 4,546 tests, cutting
+the generated shards from 163,056 to 132,781 lines and their `go::run` closures from 9,103 to 453. A paired isolated
+crate rebuild fell from 6.14 s to 4.03 s (-34%): frontend 4.82 s to 3.31 s, code generation 1.32 s to 0.72 s. The
+suite took 5.9 s before and 5.5 s after; all three result hashes above remained identical.
+
 For correctness CI, `lto = false` still ran ThinLTO within every optimized crate. On the same 12-core arm64 host and
 commit, a clean `ci` build of `tsrs`, `tsrs-test` and `tsrs-fourslash` took 43.81 s with that setting and
 34.57 s with `lto = "off"`, a 21.1% reduction. Keeping 16 codegen units was faster than raising it to 256 (37.32 s)

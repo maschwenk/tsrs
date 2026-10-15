@@ -6,8 +6,7 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports34-object-spread_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports34_object_spread(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @isolatedDeclarations: true
+    let content: &str = r#"// @isolatedDeclarations: true
 // @declaration: true
 // @Filename: /code.ts
 const Start = {
@@ -32,10 +31,8 @@ export const All = {
   ...End,
   z: 1,
 };"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'typeof All_Part1_1 & typeof Start & typeof All_Part3 & typeof All_Part4 & typeof End & typeof All_Part6'".to_string(), new_file_content: r#"const Start = {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'typeof All_Part1_1 & typeof Start & typeof All_Part3 & typeof All_Part4 & typeof End & typeof All_Part6'".to_string(), new_file_content: r#"const Start = {
   A: 'A',
   B: 'B',
 } as const;
@@ -67,11 +64,7 @@ export const All: typeof All_Part1_1 & typeof Start & typeof All_Part3 & typeof 
     ...End,
     ...All_Part6
 };"#.to_string(), index: 1, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -82,22 +75,15 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports35-variable-releative_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports35_variable_releative(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 // @Filename: /code.ts
 const foo = { a: 1 }
 export const exported = foo;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'typeof foo'".to_string(), new_file_content: r"const foo = { a: 1 }
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'typeof foo'".to_string(), new_file_content: r"const foo = { a: 1 }
 export const exported: typeof foo = foo;".to_string(), index: 1, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -108,25 +94,18 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports36-conditional-releative_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports36_conditional_releative(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @isolatedDeclarations: true
+    let content: &str = r#"// @isolatedDeclarations: true
 // @declaration: true
 // @Filename: /code.ts
 const A = "A"
 const B = "B"
 export const AB = Math.random()? A: B;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_available(t, &[r#"Add annotation of type '"A" | "B"'"#, "Add annotation of type 'typeof A | typeof B'", "Add annotation of type 'string'", r#"Add satisfies and an inline type assertion with '"A" | "B"'"#, "Add satisfies and an inline type assertion with 'typeof A | typeof B'", "Add satisfies and an inline type assertion with 'string'"]);
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add satisfies and an inline type assertion with 'typeof A | typeof B'".to_string(), new_file_content: r#"const A = "A"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_available(t, &[r#"Add annotation of type '"A" | "B"'"#, "Add annotation of type 'typeof A | typeof B'", "Add annotation of type 'string'", r#"Add satisfies and an inline type assertion with '"A" | "B"'"#, "Add satisfies and an inline type assertion with 'typeof A | typeof B'", "Add satisfies and an inline type assertion with 'string'"]);
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add satisfies and an inline type assertion with 'typeof A | typeof B'".to_string(), new_file_content: r#"const A = "A"
 const B = "B"
 export const AB = (Math.random() ? A : B) satisfies typeof A | typeof B as typeof A | typeof B;"#.to_string(), index: 4, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -137,8 +116,7 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports37-array-spread_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports37_array_spread(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @isolatedDeclarations: true
+    let content: &str = r#"// @isolatedDeclarations: true
 // @declaration: true
 // @Filename: /code.ts
 const Start = [
@@ -163,10 +141,8 @@ export const All = [
   ...End,
   1,
 ] as const;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type '[...typeof All_Part1_1, ...typeof Start, ...typeof All_Part3, ...typeof All_Part4, ...typeof End, ...typeof All_Part6]'".to_string(), new_file_content: r#"const Start = [
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type '[...typeof All_Part1_1, ...typeof Start, ...typeof All_Part3, ...typeof All_Part4, ...typeof End, ...typeof All_Part6]'".to_string(), new_file_content: r#"const Start = [
   'A',
   'B',
 ] as const;
@@ -205,11 +181,7 @@ export const All: [
     ...End,
     ...All_Part6
 ] as const;"#.to_string(), index: 1, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -220,25 +192,18 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports38-unique-symbol-return_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports38_unique_symbol_return(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 // @lib: es2019
 // @Filename: /code.ts
 const u: unique symbol = Symbol();
 export const fn = () => ({ u } as const);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type '{ readonly u: typeof u; }'".to_string(), new_file_content: r"const u: unique symbol = Symbol();
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type '{ readonly u: typeof u; }'".to_string(), new_file_content: r"const u: unique symbol = Symbol();
 export const fn = (): {
     readonly u: typeof u;
 } => ({ u } as const);".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -249,8 +214,7 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports39-extract-arr-to-variable_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports39_extract_arr_to_variable(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 // @lib: es2019
 // @Filename: /code.ts
@@ -260,34 +224,28 @@ export let o = {
         ...c
     ]
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Mark array literal as const".to_string(), new_file_content: r"let c: string[] = [];
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Mark array literal as const".to_string(), new_file_content: r"let c: string[] = [];
 export let o = {
     p: [
         ...c
     ] as const
 }".to_string(), index: 2, apply_changes: true, ..Default::default() });
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Extract to variable and replace with 'newLocal as typeof newLocal'".to_string(), new_file_content: r"let c: string[] = [];
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Extract to variable and replace with 'newLocal as typeof newLocal'".to_string(), new_file_content: r"let c: string[] = [];
 const newLocal = [
     ...c
 ] as const;
 export let o = {
     p: newLocal as typeof newLocal
 }".to_string(), index: 1, apply_changes: true, ..Default::default() });
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'readonly string[]'".to_string(), new_file_content: r"let c: string[] = [];
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'readonly string[]'".to_string(), new_file_content: r"let c: string[] = [];
 const newLocal: readonly string[] = [
     ...c
 ] as const;
 export let o = {
     p: newLocal as typeof newLocal
 }".to_string(), index: 0, apply_changes: true, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -298,28 +256,21 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports4_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports4(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 const a = 42;
 const b = 42;
 export class C {
   method() { return a + b };
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_available(t, &["Add return type 'number'"]);
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'number'".to_string(), new_file_content: r"const a = 42;
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_available(t, &["Add return type 'number'"]);
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'number'".to_string(), new_file_content: r"const a = 42;
 const b = 42;
 export class C {
   method(): number { return a + b };
 }".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -330,8 +281,7 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports40-extract-other-to-variable_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports40_extract_other_to_variable(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 // @lib: es2019
 // @Filename: /code.ts
@@ -341,28 +291,22 @@ export let o = {
         ...c
     ]
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Extract to variable and replace with 'newLocal as typeof newLocal'".to_string(), new_file_content: r"let c: string[] = [];
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Extract to variable and replace with 'newLocal as typeof newLocal'".to_string(), new_file_content: r"let c: string[] = [];
 const newLocal = Math.random() ? [] : [
     ...c
 ];
 export let o = {
     p: newLocal as typeof newLocal
 }".to_string(), index: 2, apply_changes: true, ..Default::default() });
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'string[]'".to_string(), new_file_content: r"let c: string[] = [];
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'string[]'".to_string(), new_file_content: r"let c: string[] = [];
 const newLocal: string[] = Math.random() ? [] : [
     ...c
 ];
 export let o = {
     p: newLocal as typeof newLocal
 }".to_string(), index: 0, apply_changes: true, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -373,23 +317,16 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports41-no-computed-enum-members_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports41_no_computed_enum_members(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @isolatedDeclarations: true
+    let content: &str = r#"// @isolatedDeclarations: true
 // @declaration: true
 // @lib: es2019
 // @Filename: /code.ts
 enum E {
     A = "foo".length
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -400,25 +337,18 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports42-static-readonly-class-symbol_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports42_static_readonly_class_symbol(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 // @lib: es2019
 // @Filename: /code.ts
 class A {
     static readonly p1 = Symbol();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'unique symbol'".to_string(), new_file_content: r"class A {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'unique symbol'".to_string(), new_file_content: r"class A {
     static readonly p1: unique symbol = Symbol();
 }".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -429,29 +359,22 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports43-expando-functions_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports43_expando_functions(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @isolatedDeclarations: true
+    let content: &str = r#"// @isolatedDeclarations: true
 // @declaration: true
 // @lib: es2019
 // @Filename: /code.ts
 const foo = (): void => {}
 foo.a = "A";
 foo.b = "C""#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type '{ (): void; a: string; b: string; }'".to_string(), new_file_content: r#"const foo: {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type '{ (): void; a: string; b: string; }'".to_string(), new_file_content: r#"const foo: {
     (): void;
     a: string;
     b: string;
 } = (): void => {}
 foo.a = "A";
 foo.b = "C""#.to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -462,29 +385,22 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports43-expando-functions-2_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports43_expando_functions_2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @isolatedDeclarations: true
+    let content: &str = r#"// @isolatedDeclarations: true
 // @declaration: true
 // @lib: es2019
 // @Filename: /code.ts
 const foo = () => {}
 foo/*a*/["a"] = "A";
 foo["b"] = "C""#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type '{ (): void; a: string; b: string; }'".to_string(), new_file_content: r#"const foo: {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type '{ (): void; a: string; b: string; }'".to_string(), new_file_content: r#"const foo: {
     (): void;
     a: string;
     b: string;
 } = () => {}
 foo["a"] = "A";
 foo["b"] = "C""#.to_string(), index: 1, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -495,29 +411,22 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports43-expando-functions-3_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports43_expando_functions_3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 // @lib: es2019
 // @Filename: /code.ts
 function foo(): void {}
 foo.x = 1;
 foo.y = 1;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Annotate types of properties expando function in a namespace".to_string(), new_file_content: r"function foo(): void {}
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Annotate types of properties expando function in a namespace".to_string(), new_file_content: r"function foo(): void {}
 declare namespace foo {
     export var x: number;
     export var y: number;
 }
 foo.x = 1;
 foo.y = 1;".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -528,8 +437,7 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports43-expando-functions-4_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports43_expando_functions_4(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @isolatedDeclarations: true
+    let content: &str = r#"// @isolatedDeclarations: true
 // @declaration: true
 // @lib: es2019
 // @Filename: /code.ts
@@ -537,21 +445,15 @@ function foo(): void {}
 // cannot name this property because it's an invalid variable name.
 foo["@bar"] = 42;
 foo.x = 1;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Annotate types of properties expando function in a namespace".to_string(), new_file_content: r#"function foo(): void {}
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Annotate types of properties expando function in a namespace".to_string(), new_file_content: r#"function foo(): void {}
 declare namespace foo {
     export var x: number;
 }
 // cannot name this property because it's an invalid variable name.
 foo["@bar"] = 42;
 foo.x = 1;"#.to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -562,8 +464,7 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports43-expando-functions-5_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports43_expando_functions_5(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 // @lib: es2019
 // @Filename: /code.ts
@@ -574,10 +475,8 @@ foo.y = 1;
 namespace foo {
   export let x = 42;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Annotate types of properties expando function in a namespace".to_string(), new_file_content: r"function foo(): void {}
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Annotate types of properties expando function in a namespace".to_string(), new_file_content: r"function foo(): void {}
 declare namespace foo {
     export var y: number;
 }
@@ -587,11 +486,7 @@ foo.y = 1;
 namespace foo {
   export let x = 42;
 }".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -602,22 +497,15 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports44-default-export_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports44_default_export(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 // @lib: es2019
 // @Filename: /code.ts
 export default 1 + 1;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Extract default export to variable".to_string(), new_file_content: r"const _default_1: number = 1 + 1;
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Extract default export to variable".to_string(), new_file_content: r"const _default_1: number = 1 + 1;
 export default _default_1;".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -628,8 +516,7 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports45-decorators_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports45_decorators(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 // @Filename: /code.ts
 function classDecorator<T extends Function> (value: T, context: ClassDecoratorContext) {}
@@ -659,10 +546,8 @@ export class A {
 
   @fieldDecorator classProp = foo();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixMissingTypeAnnotationOnExports".to_string(), new_file_content: r"function classDecorator<T extends Function> (value: T, context: ClassDecoratorContext) {}
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixMissingTypeAnnotationOnExports".to_string(), new_file_content: r"function classDecorator<T extends Function> (value: T, context: ClassDecoratorContext) {}
 function methodDecorator<This> (
   target: (...args: number[])=> number,
   context: ClassMethodDecoratorContext<This, (this: This, ...args: number[]) => number>) {}
@@ -689,11 +574,7 @@ export class A {
 
   @fieldDecorator classProp: number = foo();
 }".to_string() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -704,8 +585,7 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports46-decorators-experimental_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports46_decorators_experimental(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 // @experimentalDecorators: true
 // @Filename: /code.ts
@@ -735,10 +615,8 @@ export class A {
   set a(value) {}
   @fieldDecorator() classProp = foo();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixMissingTypeAnnotationOnExports".to_string(), new_file_content: r"function classDecorator<T extends Function>() { return (target: T) => target; }
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixMissingTypeAnnotationOnExports".to_string(), new_file_content: r"function classDecorator<T extends Function>() { return (target: T) => target; }
 function methodDecorator() { return (target: any, key: string, descriptor: PropertyDescriptor) => descriptor;}
 function parameterDecorator() { return (target: any, key: string, idx: number) => {};}
 function getterDecorator() { return (target: any, key: string) => {}; }
@@ -764,11 +642,7 @@ export class A {
   set a(value: number) {}
   @fieldDecorator() classProp: number = foo();
 }".to_string() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -779,8 +653,7 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports47_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports47(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @isolatedDeclarations: true
+    let content: &str = r#"// @isolatedDeclarations: true
 // @declaration: true
 // @moduleResolution: bundler
 // @target: es2018
@@ -811,16 +684,10 @@ import './';
 import './';
 // @filename: /a.tsx
 export const x = <div aria-label="label text" />;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "/a.tsx");
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'JSX.Element'".to_string(), new_file_content: r#"export const x: JSX.Element = <div aria-label="label text" />;"#.to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "/a.tsx");
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'JSX.Element'".to_string(), new_file_content: r#"export const x: JSX.Element = <div aria-label="label text" />;"#.to_string(), index: 0, ..Default::default() });
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -831,8 +698,7 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports48_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports48(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @isolatedDeclarations: true
+    let content: &str = r#"// @isolatedDeclarations: true
 // @declaration: true
 // @moduleResolution: bundler
 // @target: es2018
@@ -863,16 +729,10 @@ import './';
 import './';
 // @filename: /a.tsx
 export const x = <div aria-label="label text" />;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "/a.tsx");
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add satisfies and an inline type assertion with 'JSX.Element'".to_string(), new_file_content: r#"export const x = (<div aria-label="label text" />) satisfies JSX.Element as JSX.Element;"#.to_string(), index: 1, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "/a.tsx");
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add satisfies and an inline type assertion with 'JSX.Element'".to_string(), new_file_content: r#"export const x = (<div aria-label="label text" />) satisfies JSX.Element as JSX.Element;"#.to_string(), index: 1, ..Default::default() });
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -883,8 +743,7 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports49-private-name_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports49_private_name(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @isolatedDeclarations: true
+    let content: &str = r#"// @isolatedDeclarations: true
 // @declaration: true
 // @moduleResolution: bundler
 // @target: es2018
@@ -898,10 +757,8 @@ export function three() {
     type Z = string;
     return {} as Z;
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: r#"Add return type '""'"#.to_string(), new_file_content: r#"export function two(): "" {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: r#"Add return type '""'"#.to_string(), new_file_content: r#"export function two(): "" {
     const y = "";
     return {} as typeof y;
 }
@@ -910,7 +767,7 @@ export function three() {
     type Z = string;
     return {} as Z;
 }"#.to_string(), index: 0, ..Default::default() });
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'string'".to_string(), new_file_content: r#"export function two() {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'string'".to_string(), new_file_content: r#"export function two() {
     const y = "";
     return {} as typeof y;
 }
@@ -919,11 +776,7 @@ export function three(): string {
     type Z = string;
     return {} as Z;
 }"#.to_string(), index: 1, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -934,28 +787,21 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports5_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports5(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 const a = 42;
 const b = 42;
 export class C {
   get property() { return a + b; }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_available(t, &["Add return type 'number'"]);
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'number'".to_string(), new_file_content: r"const a = 42;
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_available(t, &["Add return type 'number'"]);
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'number'".to_string(), new_file_content: r"const a = 42;
 const b = 42;
 export class C {
   get property(): number { return a + b; }
 }".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -966,22 +812,15 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports50-generics-with-default_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports50_generics_with_default(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 // @lib: es2015
 let x: Iterator<number>;
 export const y = x;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'Iterator<number>'".to_string(), new_file_content: r"let x: Iterator<number>;
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'Iterator<number>'".to_string(), new_file_content: r"let x: Iterator<number>;
 export const y: Iterator<number> = x;".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -992,25 +831,18 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports51-slightly-more-complex-generics-with-default_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports51_slightly_more_complex_generics_with_default(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 export interface Foo<T, U = T[]> {}
 export function foo(x: Foo<string>) {
     return x;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'Foo<string>'".to_string(), new_file_content: r"export interface Foo<T, U = T[]> {}
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'Foo<string>'".to_string(), new_file_content: r"export interface Foo<T, U = T[]> {}
 export function foo(x: Foo<string>): Foo<string> {
     return x;
 }".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1021,25 +853,18 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports52-generics-oversimplification_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports52_generics_oversimplification(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 export interface Foo<T, U = T[]> {}
 export function foo(x: Foo<string, string[]>) {
     return x;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'Foo<string>'".to_string(), new_file_content: r"export interface Foo<T, U = T[]> {}
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'Foo<string>'".to_string(), new_file_content: r"export interface Foo<T, U = T[]> {}
 export function foo(x: Foo<string, string[]>): Foo<string> {
     return x;
 }".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1050,25 +875,18 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports53-nested-generic-types_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports53_nested_generic_types(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 export interface Foo<T, U = T[]> {}
 export function foo(x: Map<number, Foo<string>>) {
     return x;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'Map<number, Foo<string, string[]>>'".to_string(), new_file_content: r"export interface Foo<T, U = T[]> {}
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'Map<number, Foo<string, string[]>>'".to_string(), new_file_content: r"export interface Foo<T, U = T[]> {}
 export function foo(x: Map<number, Foo<string>>): Map<number, Foo<string, string[]>> {
     return x;
 }".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1079,24 +897,17 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports54-generator-generics_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports54_generator_generics(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 // @lib: es2015
 export function foo(x: Generator<number>) {
     return x;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'Generator<number>'".to_string(), new_file_content: r"export function foo(x: Generator<number>): Generator<number> {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'Generator<number>'".to_string(), new_file_content: r"export function foo(x: Generator<number>): Generator<number> {
     return x;
 }".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1107,24 +918,17 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports55-generator-return_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports55_generator_return(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 // @lib: es2015
 export function *foo() {
     yield 5;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'Generator<number, void, unknown>'".to_string(), new_file_content: r"export function *foo(): Generator<number, void, unknown> {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'Generator<number, void, unknown>'".to_string(), new_file_content: r"export function *foo(): Generator<number, void, unknown> {
     yield 5;
 }".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1135,8 +939,7 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports56-toplevel-import_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports56_toplevel_import(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @isolatedDeclarations: true
+    let content: &str = r#"// @isolatedDeclarations: true
 // @declaration: true
 // @Filename: /person-code.ts
 export interface Person { x: string; }
@@ -1148,21 +951,15 @@ import { getPerson } from "./person-code";
 export function wrapPerson() {
   return { person: getPerson() }
 };"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "/code.ts");
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type '{ person: Person; }'".to_string(), new_file_content: r#"import { getPerson, Person } from "./person-code";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "/code.ts");
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type '{ person: Person; }'".to_string(), new_file_content: r#"import { getPerson, Person } from "./person-code";
 export function wrapPerson(): {
     person: Person;
 } {
   return { person: getPerson() }
 };"#.to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1173,26 +970,19 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports57-generics-doesnt-drop-trailing-unknown_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports57_generics_doesnt_drop_trailing_unknown(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 // @lib: es2015
 
 let x: unknown;
 export const s = new Set([x]);
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'Set<unknown>'".to_string(), new_file_content: r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'Set<unknown>'".to_string(), new_file_content: r"
 let x: unknown;
 export const s: Set<unknown> = new Set([x]);
 ".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1203,24 +993,17 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports58-genercs-doesnt-drop-trailing-unknown-2_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports58_genercs_doesnt_drop_trailing_unknown_2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 // @lib: es2015
 
 export const s = new Set<unknown>();
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'Set<unknown>'".to_string(), new_file_content: r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'Set<unknown>'".to_string(), new_file_content: r"
 export const s: Set<unknown> = new Set<unknown>();
 ".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1231,25 +1014,18 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports59-drops-unneeded-after-unknown_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports59_drops_unneeded_after_unknown(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 
 export interface Foo<S = string, T = unknown, U = number> {}
 export function g(x: Foo<number, unknown, number>) { return x; }
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'Foo<number>'".to_string(), new_file_content: r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'Foo<number>'".to_string(), new_file_content: r"
 export interface Foo<S = string, T = unknown, U = number> {}
 export function g(x: Foo<number, unknown, number>): Foo<number> { return x; }
 ".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1260,21 +1036,14 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports6_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports6(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 function foo(): number[] { return [42]; }
 export const c = [...foo()];";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'number[]'".to_string(), new_file_content: r"function foo(): number[] { return [42]; }
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'number[]'".to_string(), new_file_content: r"function foo(): number[] { return [42]; }
 export const c: number[] = [...foo()];".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1285,25 +1054,18 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports60-drops-unneeded-non-trailing-unknown_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports60_drops_unneeded_non_trailing_unknown(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 
 export interface Foo<S = string, T = unknown> {}
 export function f(x: Foo<string, unknown>) { return x; }
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'Foo'".to_string(), new_file_content: r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'Foo'".to_string(), new_file_content: r"
 export interface Foo<S = string, T = unknown> {}
 export function f(x: Foo<string, unknown>): Foo { return x; }
 ".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1314,23 +1076,16 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports7_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports7(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 function foo(): number[] { return [42]; }
 export const c = { foo: foo() };";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type '{ foo: number[]; }'".to_string(), new_file_content: r"function foo(): number[] { return [42]; }
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type '{ foo: number[]; }'".to_string(), new_file_content: r"function foo(): number[] { return [42]; }
 export const c: {
     foo: number[];
 } = { foo: foo() };".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1341,22 +1096,15 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports8_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports8(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 function foo() {return 42;}
 export const g = function () { return foo(); };";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_available(t, &["Add return type 'number'"]);
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'number'".to_string(), new_file_content: r"function foo() {return 42;}
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_available(t, &["Add return type 'number'"]);
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'number'".to_string(), new_file_content: r"function foo() {return 42;}
 export const g = function (): number { return foo(); };".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1367,27 +1115,20 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports9_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports9(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 function foo( ){
     return 42;
 }
 const a = foo();
 export = a;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'number'".to_string(), new_file_content: r"function foo( ){
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'number'".to_string(), new_file_content: r"function foo( ){
     return 42;
 }
 const a: number = foo();
 export = a;".to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1398,19 +1139,12 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports_arrowParens_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports_arrow_parens(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @isolatedDeclarations: true
+    let content: &str = r#"// @isolatedDeclarations: true
 // @declaration: true
 export const func = x => x.substring("foo");"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixMissingTypeAnnotationOnExports".to_string(), new_file_content: r#"export const func = (x: any): any => x.substring("foo");"#.to_string() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixMissingTypeAnnotationOnExports".to_string(), new_file_content: r#"export const func = (x: any): any => x.substring("foo");"#.to_string() });
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1421,20 +1155,13 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports_arrowParensParamOnly_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports_arrow_parens_param_only(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 export const func = /*a*/x/*b*/ => 0;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "a");
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'any'".to_string(), new_file_content: "export const func = (x: any) => 0;".to_string(), apply_changes: true, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "a");
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'any'".to_string(), new_file_content: "export const func = (x: any) => 0;".to_string(), apply_changes: true, ..Default::default() });
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1445,30 +1172,23 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports_expandoNoDuplicates_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports_expando_no_duplicates(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @declaration: true
+    let content: &str = r"// @declaration: true
 // @isolatedDeclarations: true
 // @Filename: /foo.mts
 export function foo(): void {
 }
 
 foo.blah = 123;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_available_exact(t, &["Annotate types of properties expando function in a namespace"]);
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Annotate types of properties expando function in a namespace".to_string(), new_file_content: r"export function foo(): void {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_available_exact(t, &["Annotate types of properties expando function in a namespace"]);
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Annotate types of properties expando function in a namespace".to_string(), new_file_content: r"export function foo(): void {
 }
 export declare namespace foo {
     export var blah: number;
 }
 
 foo.blah = 123;".to_string(), ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1479,24 +1199,17 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExports_jsxWhitespaceText_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports_jsx_whitespace_text(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @isolatedDeclarations: true
+    let content: &str = r"// @isolatedDeclarations: true
 // @declaration: true
 // @module: preserve
 // @Filename: /test.tsx
 export const /**/elem = <div>
     <span />
 </div>;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.verify_code_fix_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.verify_code_fix_available(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1507,24 +1220,17 @@ use crate::tests::prelude::*;
 // codeFixMissingTypeAnnotationOnExportsTypePredicate1_test.go:10
 pub fn test_code_fix_missing_type_annotation_on_exports_type_predicate1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @isolatedDeclarations: true
+    let content: &str = r#"// @isolatedDeclarations: true
 // @declaration: true
 // @filename: index.ts
 export function isString(value: unknown) {
   return typeof value === "string";
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'value is string'".to_string(), new_file_content: r#"export function isString(value: unknown): value is string {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'value is string'".to_string(), new_file_content: r#"export function isString(value: unknown): value is string {
   return typeof value === "string";
 }"#.to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1535,22 +1241,15 @@ use crate::tests::prelude::*;
 // codeFixNegativeReplaceQualifiedNameWithIndexedAccessType01_test.go:10
 pub fn test_code_fix_negative_replace_qualified_name_with_indexed_access_type01(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"namespace Container {
+    let content: &str = r#"namespace Container {
     export interface Foo {
         bar: string;
     }
 }
 const x: [|Container.Foo.bar|] = """#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1561,23 +1260,16 @@ use crate::tests::prelude::*;
 // codeFixOverrideModifier18_test.go:10
 pub fn test_code_fix_override_modifier18(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @noImplicitOverride: true
+    let content: &str = r"// @noImplicitOverride: true
 class A {
     static foo() {}
 }
 class B extends A {
     [|static foo() {}|]
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &["fixAddOverrideModifier"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &["fixAddOverrideModifier"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1588,8 +1280,7 @@ use crate::tests::prelude::*;
 // codeFixPromoteTypeOnlyImportJsxTag_test.go:14
 pub fn test_code_fix_promote_type_only_import_jsx_tag(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @module: preserve
+    let content: &str = r#"// @module: preserve
 // @verbatimModuleSyntax: true
 // @jsx: react
 // @Filename: /react.ts
@@ -1599,25 +1290,18 @@ export default React;
 import type React from "./react";
 
 <Foo/**/ />;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.verify_import_fix_at_position(t, &[r#"import React from "./react";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.verify_import_fix_at_position(t, &[r#"import React from "./react";
 
 <Foo />;"#], None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 // codeFixPromoteTypeOnlyImportJsxTag_test.go:43
 pub fn test_code_fix_promote_type_only_import_jsx_tag_both_type_only(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @module: preserve
+    let content: &str = r#"// @module: preserve
 // @verbatimModuleSyntax: true
 // @jsx: react
 // @Filename: /react.ts
@@ -1630,22 +1314,16 @@ import type React from "./react";
 import type { Foo } from "./foo";
 
 <Foo/**/ />;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.verify_import_fix_at_position(t, &[r#"import type React from "./react";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.verify_import_fix_at_position(t, &[r#"import type React from "./react";
 import { Foo } from "./foo";
 
 <Foo />;"#, r#"import React from "./react";
 import type { Foo } from "./foo";
 
 <Foo />;"#], None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1656,8 +1334,7 @@ use crate::tests::prelude::*;
 // codeFixPromoteTypeOnlyOrderingCrash_test.go:13
 pub fn test_code_fix_promote_type_only_ordering_crash(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @module: node18
+    let content: &str = r#"// @module: node18
 // @verbatimModuleSyntax: true
 // @Filename: /bar.ts
 export interface AAA {}
@@ -1669,21 +1346,15 @@ import type {
 } from "./bar";
 
 let x: AAA = new BBB()"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "/foo.ts");
-            f.verify_import_fix_at_position(t, &[r#"import {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "/foo.ts");
+        f.verify_import_fix_at_position(t, &[r#"import {
     BBB,
     type AAA,
 } from "./bar";
 
 let x: AAA = new BBB()"#], None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1694,8 +1365,7 @@ use crate::tests::prelude::*;
 // codeFixPropertyOverrideAccess4_test.go:10
 pub fn test_code_fix_property_override_access4(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @strict: true
+    let content: &str = r"// @strict: true
 // @target: esnext
 // @lib: esnext
 const prop = Symbol.for('foo');
@@ -1706,15 +1376,9 @@ class A {
 class B extends A {
     get [prop]() { return 2; }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &["fixPropertyOverrideAccessor"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &["fixPropertyOverrideAccessor"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1725,8 +1389,7 @@ use crate::tests::prelude::*;
 // codeFixRemoveUnnecessaryAwait_mixedUnion_test.go:10
 pub fn test_code_fix_remove_unnecessary_await_mixed_union(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @target: esnext
+    let content: &str = r"// @target: esnext
 async function fn1(a: Promise<void> | void) {
   await a;
 }
@@ -1734,15 +1397,9 @@ async function fn1(a: Promise<void> | void) {
 async function fn2<T extends Promise<void> | void>(a: T) {
   await a;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_suggestion_diagnostics(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1753,20 +1410,13 @@ use crate::tests::prelude::*;
 // codeFixRemoveUnnecessaryAwait_notAvailableOnReturn_test.go:10
 pub fn test_code_fix_remove_unnecessary_await_not_available_on_return(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @target: esnext
+    let content: &str = r"// @target: esnext
 async function fn(): Promise<number> {
   return 0;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_suggestion_diagnostics(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1777,18 +1427,11 @@ use crate::tests::prelude::*;
 // codeFixRequireInTs3_test.go:10
 pub fn test_code_fix_require_in_ts3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /a.ts
+    let content: &str = r#"// @Filename: /a.ts
 const { a, b: { c } } = [|require("a")|];"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1799,20 +1442,13 @@ use crate::tests::prelude::*;
 // codeFixRequireInTs5_test.go:10
 pub fn test_code_fix_require_in_ts5(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /a.ts
+    let content: &str = r"// @Filename: /a.ts
 const a = 1;
 const b = 2;
 const foo = require(`foo${a}${b}`);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1823,19 +1459,12 @@ use crate::tests::prelude::*;
 // codeFixSpelling4_test.go:10
 pub fn test_code_fix_spelling4(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"export declare const despite: { the: any };
+    let content: &str = r"export declare const despite: { the: any };
 
 [|dispite.the|]";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_range_after_code_fix(t, "despite.the", false, 0, 0);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_range_after_code_fix(t, "despite.the", false, 0, 0);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1846,21 +1475,14 @@ use crate::tests::prelude::*;
 // codeFixSpelling5_test.go:10
 pub fn test_code_fix_spelling5(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: f1.ts
+    let content: &str = r#"// @Filename: f1.ts
 export const fooooooooo = 1;
 // @Filename: f2.ts
 import {[|fooooooooa|]} from "./f1"; fooooooooa;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "f2.ts");
-            f.verify_range_after_code_fix(t, "fooooooooo", false, 0, 0);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "f2.ts");
+        f.verify_range_after_code_fix(t, "fooooooooo", false, 0, 0);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1871,19 +1493,12 @@ use crate::tests::prelude::*;
 // codeFixSpellingCaseSensitive1_test.go:10
 pub fn test_code_fix_spelling_case_sensitive1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"export let Console = 1;
+    let content: &str = r"export let Console = 1;
 export let console = 1;
 [|conole|] = 1;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_range_after_code_fix(t, "console", false, 0, 0);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_range_after_code_fix(t, "console", false, 0, 0);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1894,19 +1509,12 @@ use crate::tests::prelude::*;
 // codeFixSpellingCaseSensitive2_test.go:10
 pub fn test_code_fix_spelling_case_sensitive2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"export let console = 1;
+    let content: &str = r"export let console = 1;
 export let Console = 1;
 [|conole|] = 1;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_range_after_code_fix(t, "console", false, 0, 0);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_range_after_code_fix(t, "console", false, 0, 0);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1917,19 +1525,12 @@ use crate::tests::prelude::*;
 // codeFixSpellingCaseSensitive3_test.go:10
 pub fn test_code_fix_spelling_case_sensitive3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class Node {}
+    let content: &str = r"class Node {}
 let node = new Node();
 [|nodes|]";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_range_after_code_fix(t, "node", false, 0, 0);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_range_after_code_fix(t, "node", false, 0, 0);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1940,19 +1541,12 @@ use crate::tests::prelude::*;
 // codeFixSpellingCaseWeight1_test.go:10
 pub fn test_code_fix_spelling_case_weight1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"let ABCDEFGHIJKLMNOPQR = 1;
+    let content: &str = r"let ABCDEFGHIJKLMNOPQR = 1;
 let abcdefghijklmnopqrs = 1;
 [|abcdefghijklmnopqr|]";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_range_after_code_fix(t, "abcdefghijklmnopqrs", false, 0, 0);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_range_after_code_fix(t, "abcdefghijklmnopqrs", false, 0, 0);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1963,19 +1557,12 @@ use crate::tests::prelude::*;
 // codeFixSpellingCaseWeight2_test.go:10
 pub fn test_code_fix_spelling_case_weight2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"let ABCDEFGHI = 1;
+    let content: &str = r"let ABCDEFGHI = 1;
 let abcdefghij = 1;
 [|abcdefghi|]";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_range_after_code_fix(t, "ABCDEFGHI", false, 0, 0);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_range_after_code_fix(t, "ABCDEFGHI", false, 0, 0);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1986,8 +1573,7 @@ use crate::tests::prelude::*;
 // codeFixSpellingJs3_test.go:10
 pub fn test_code_fix_spelling_js3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowjs: true
+    let content: &str = r"// @allowjs: true
 // @noEmit: true
 // @filename: a.js
 class Classe {
@@ -2003,15 +1589,9 @@ class Derivee extends Classe {
         return super.none
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_errors(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_no_errors(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2022,8 +1602,7 @@ use crate::tests::prelude::*;
 // codeFixSpellingJs5_test.go:10
 pub fn test_code_fix_spelling_js5(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowjs: true
+    let content: &str = r"// @allowjs: true
 // @noEmit: true
 // @filename: a.js
 var other = {
@@ -2042,15 +1621,9 @@ const atoc = setIntegral(() => console.log('ok'), 500)
 AudioBuffin // etc
 Jimmy
 Jon";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_errors(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_no_errors(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2061,8 +1634,7 @@ use crate::tests::prelude::*;
 // codeFixSpellingJs6_test.go:10
 pub fn test_code_fix_spelling_js6(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowjs: true
+    let content: &str = r"// @allowjs: true
 // @checkjs: false
 // @noEmit: true
 // @filename: spellingUncheckedJS.js
@@ -2113,15 +1685,9 @@ var other = {
 }
 window.argle
 self.blargle";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_errors(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_no_errors(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2132,8 +1698,7 @@ use crate::tests::prelude::*;
 // codeFixSpellingJs7_test.go:10
 pub fn test_code_fix_spelling_js7(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowjs: true
+    let content: &str = r"// @allowjs: true
 // @noEmit: true
 // @filename: spellingUncheckedJS.js
 // @ts-nocheck
@@ -2185,15 +1750,9 @@ var other = {
 }
 window.argle
 self.blargle";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_errors(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_no_errors(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2204,22 +1763,15 @@ use crate::tests::prelude::*;
 // codeFixSpellingJs8_test.go:10
 pub fn test_code_fix_spelling_js8(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowjs: true
+    let content: &str = r"// @allowjs: true
 // @noEmit: true
 // @filename: a.js
 var locals = {}
 // @ts-expect-error
 Object.keys(locale)";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_errors(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_no_errors(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2230,18 +1782,11 @@ use crate::tests::prelude::*;
 // codeFixSpellingShortName1_test.go:10
 pub fn test_code_fix_spelling_short_name1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"export let ab = 1;
+    let content: &str = r"export let ab = 1;
 [|aB|] = 1;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_range_after_code_fix(t, "ab", false, 0, 0);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_range_after_code_fix(t, "ab", false, 0, 0);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2252,18 +1797,11 @@ use crate::tests::prelude::*;
 // codeFixSpellingShortName2_test.go:10
 pub fn test_code_fix_spelling_short_name2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"export let ab = 1;
+    let content: &str = r"export let ab = 1;
 abc;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2274,8 +1812,7 @@ use crate::tests::prelude::*;
 // codeFixTopLevelAwait_module_blankCompilerOptionsInTsConfig_test.go:10
 pub fn test_code_fix_top_level_await_module_blank_compiler_options_in_ts_config(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: /dir/a.ts
+    let content: &str = r#"// @filename: /dir/a.ts
 declare const p: Promise<number>;
 await p;
 export {};
@@ -2285,15 +1822,9 @@ export {};
         "module": "commonjs"
     }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &["fixModuleOption"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &["fixModuleOption"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2304,8 +1835,7 @@ use crate::tests::prelude::*;
 // codeFixTopLevelAwait_module_compatibleCompilerOptionsInTsConfig_test.go:10
 pub fn test_code_fix_top_level_await_module_compatible_compiler_options_in_ts_config(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: /dir/a.ts
+    let content: &str = r#"// @filename: /dir/a.ts
 declare const p: Promise<number>;
 await p;
 export {};
@@ -2316,15 +1846,9 @@ export {};
         "module": "esnext"
     }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &["fixModuleOption"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &["fixModuleOption"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2335,8 +1859,7 @@ use crate::tests::prelude::*;
 // codeFixTopLevelAwait_module_missingCompilerOptionsInTsConfig_test.go:10
 pub fn test_code_fix_top_level_await_module_missing_compiler_options_in_ts_config(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: /dir/a.ts
+    let content: &str = r#"// @filename: /dir/a.ts
 declare const p: Promise<number>;
 await p;
 export {};
@@ -2346,15 +1869,9 @@ export {};
         "module": "commonjs"
     }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &["fixModuleOption"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &["fixModuleOption"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2365,20 +1882,13 @@ use crate::tests::prelude::*;
 // codeFixTopLevelAwait_module_noTsConfig_test.go:10
 pub fn test_code_fix_top_level_await_module_no_ts_config(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @filename: /dir/a.ts
+    let content: &str = r"// @filename: /dir/a.ts
 declare const p: Promise<number>;
 await p;
 export {};";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &["fixModuleOption"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &["fixModuleOption"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2389,8 +1899,7 @@ use crate::tests::prelude::*;
 // codeFixTopLevelAwait_module_targetES2017CompilerOptionsInTsConfig_test.go:10
 pub fn test_code_fix_top_level_await_module_target_es2017_compiler_options_in_ts_config(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: /dir/a.ts
+    let content: &str = r#"// @filename: /dir/a.ts
 declare const p: Promise<number>;
 await p;
 export {};
@@ -2400,16 +1909,10 @@ export {};
         "target": "es2017"
     }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &["fixTargetOption"]);
-            f.verify_code_fix_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &["fixTargetOption"]);
+        f.verify_code_fix_available(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2420,8 +1923,7 @@ use crate::tests::prelude::*;
 // codeFixTopLevelAwait_target_compatibleCompilerOptionsInTsConfig_test.go:10
 pub fn test_code_fix_top_level_await_target_compatible_compiler_options_in_ts_config(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: /dir/a.ts
+    let content: &str = r#"// @filename: /dir/a.ts
 declare const p: Promise<number>;
 await p;
 export {};
@@ -2432,15 +1934,9 @@ export {};
         "module": "esnext"
     }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2451,20 +1947,13 @@ use crate::tests::prelude::*;
 // codeFixTopLevelAwait_target_noTsConfig_test.go:10
 pub fn test_code_fix_top_level_await_target_no_ts_config(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @filename: /dir/a.ts
+    let content: &str = r"// @filename: /dir/a.ts
 declare const p: Promise<number>;
 await p;
 export {};";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2475,8 +1964,7 @@ use crate::tests::prelude::*;
 // codeFixTopLevelForAwait_module_blankCompilerOptionsInTsConfig_test.go:10
 pub fn test_code_fix_top_level_for_await_module_blank_compiler_options_in_ts_config(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: /dir/a.ts
+    let content: &str = r#"// @filename: /dir/a.ts
 declare const p: number[];
 for await (const _ of p);
 export {};
@@ -2486,15 +1974,9 @@ export {};
         "module": "commonjs"
     }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &["fixModuleOption"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &["fixModuleOption"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2505,8 +1987,7 @@ use crate::tests::prelude::*;
 // codeFixTopLevelForAwait_module_compatibleCompilerOptionsInTsConfig_test.go:10
 pub fn test_code_fix_top_level_for_await_module_compatible_compiler_options_in_ts_config(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: /dir/a.ts
+    let content: &str = r#"// @filename: /dir/a.ts
 declare const p: number[];
 for await (const _ of p);
 export {};
@@ -2517,15 +1998,9 @@ export {};
         "module": "esnext"
     }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &["fixModuleOption"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &["fixModuleOption"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2536,8 +2011,7 @@ use crate::tests::prelude::*;
 // codeFixTopLevelForAwait_module_missingCompilerOptionsInTsConfig_test.go:10
 pub fn test_code_fix_top_level_for_await_module_missing_compiler_options_in_ts_config(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: /dir/a.ts
+    let content: &str = r#"// @filename: /dir/a.ts
 declare const p: number[];
 for await (const _ of p);
 export {};
@@ -2547,15 +2021,9 @@ export {};
         "module": "commonjs"
     }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &["fixModuleOption"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &["fixModuleOption"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2566,20 +2034,13 @@ use crate::tests::prelude::*;
 // codeFixTopLevelForAwait_module_noTsConfig_test.go:10
 pub fn test_code_fix_top_level_for_await_module_no_ts_config(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @filename: /dir/a.ts
+    let content: &str = r"// @filename: /dir/a.ts
 declare const p: number[];
 for await (const _ of p);
 export {};";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &["fixModuleOption"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &["fixModuleOption"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2590,8 +2051,7 @@ use crate::tests::prelude::*;
 // codeFixTopLevelForAwait_module_targetES2017CompilerOptionsInTsConfig_test.go:10
 pub fn test_code_fix_top_level_for_await_module_target_es2017_compiler_options_in_ts_config(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: /dir/a.ts
+    let content: &str = r#"// @filename: /dir/a.ts
 declare const p: number[];
 for await (const _ of p);
 export {};
@@ -2601,16 +2061,10 @@ export {};
         "target": "es2017"
     }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &["fixTargetOption"]);
-            f.verify_code_fix_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &["fixTargetOption"]);
+        f.verify_code_fix_available(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2621,8 +2075,7 @@ use crate::tests::prelude::*;
 // codeFixTopLevelForAwait_target_compatibleCompilerOptionsInTsConfig_test.go:10
 pub fn test_code_fix_top_level_for_await_target_compatible_compiler_options_in_ts_config(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: /dir/a.ts
+    let content: &str = r#"// @filename: /dir/a.ts
 declare const p: number[];
 for await (const _ of p);
 export {};
@@ -2633,15 +2086,9 @@ export {};
         "module": "esnext"
     }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2652,20 +2099,13 @@ use crate::tests::prelude::*;
 // codeFixTopLevelForAwait_target_noTsConfig_test.go:10
 pub fn test_code_fix_top_level_for_await_target_no_ts_config(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @filename: /dir/a.ts
+    let content: &str = r"// @filename: /dir/a.ts
 declare const p: number[];
 for await (const _ of p);
 export {};";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2676,8 +2116,7 @@ use crate::tests::prelude::*;
 // codeFixUndeclaredPropertyAccesses_test.go:10
 pub fn test_code_fix_undeclared_property_accesses(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"interface I { x: number; }
+    let content: &str = r#"interface I { x: number; }
 let i: I;
 i.y;
 i.foo();
@@ -2690,15 +2129,9 @@ obj.c;
 type T<U> = I | U;
 let t: T<number>;
 t.x;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_available(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2709,18 +2142,11 @@ use crate::tests::prelude::*;
 // codeFixUnreachableCode_noSuggestionIfDisabled_test.go:10
 pub fn test_code_fix_unreachable_code_no_suggestion_if_disabled(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowUnreachableCode: true
+    let content: &str = r"// @allowUnreachableCode: true
 if (false) [|0;|]";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_suggestion_diagnostics(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2731,20 +2157,13 @@ use crate::tests::prelude::*;
 // codeFixUnusedIdentifier_parameter1_test.go:10
 pub fn test_code_fix_unused_identifier_parameter1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @noUnusedLocals: true
+    let content: &str = r"// @noUnusedLocals: true
 // @noUnusedParameters: true
 function g(a, b) { b; }
 g(1, 2);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &["Remove unused declaration for: 'a'"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &["Remove unused declaration for: 'a'"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2755,21 +2174,14 @@ use crate::tests::prelude::*;
 // codeFixUnusedIdentifier_suggestion_test.go:11
 pub fn test_code_fix_unused_identifier_suggestion(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @strict: false
+    let content: &str = r"// @strict: false
 function f([|p|]) {
     const [|x|] = 0;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("Parameter 'p' implicitly has an 'any' type, but a better type may be inferred from usage.".to_string()), ..Default::default() }, range: f.ranges()[0].ls_range, code: Some(lsproto::IntegerOrString { integer: Some(7044), ..Default::default() }), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'p' is declared but its value is never read.".to_string()), ..Default::default() }, range: f.ranges()[0].ls_range, code: Some(lsproto::IntegerOrString { integer: Some(6133), ..Default::default() }), tags: Some(vec![lsproto::DiagnosticTag::Unnecessary]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'x' is declared but its value is never read.".to_string()), ..Default::default() }, range: f.ranges()[1].ls_range, code: Some(lsproto::IntegerOrString { integer: Some(6133), ..Default::default() }), tags: Some(vec![lsproto::DiagnosticTag::Unnecessary]), ..Default::default() }]);
-            f.verify_code_fix_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("Parameter 'p' implicitly has an 'any' type, but a better type may be inferred from usage.".to_string()), ..Default::default() }, range: f.ranges()[0].ls_range, code: Some(lsproto::IntegerOrString { integer: Some(7044), ..Default::default() }), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'p' is declared but its value is never read.".to_string()), ..Default::default() }, range: f.ranges()[0].ls_range, code: Some(lsproto::IntegerOrString { integer: Some(6133), ..Default::default() }), tags: Some(vec![lsproto::DiagnosticTag::Unnecessary]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'x' is declared but its value is never read.".to_string()), ..Default::default() }, range: f.ranges()[1].ls_range, code: Some(lsproto::IntegerOrString { integer: Some(6133), ..Default::default() }), tags: Some(vec![lsproto::DiagnosticTag::Unnecessary]), ..Default::default() }]);
+        f.verify_code_fix_available(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2780,23 +2192,16 @@ use crate::tests::prelude::*;
 // codeFixUnusedInterfaceInNamespace1_test.go:10
 pub fn test_code_fix_unused_interface_in_namespace1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @noUnusedLocals: true
+    let content: &str = r"// @noUnusedLocals: true
  [| namespace greeter {
     interface interface1 {
     }
 } |]";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_range_after_code_fix(t, r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_range_after_code_fix(t, r"
 namespace greeter {
 }", false, 0, 0);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2807,24 +2212,17 @@ use crate::tests::prelude::*;
 // codeFixUnusedInterfaceInNamespace2_test.go:10
 pub fn test_code_fix_unused_interface_in_namespace2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @noUnusedLocals: true
+    let content: &str = r"// @noUnusedLocals: true
 namespace greeter {
     [| export interface interface2 {
     }
     interface interface1 {
     } |]
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_range_after_code_fix(t, r"export interface interface2 {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_range_after_code_fix(t, r"export interface interface2 {
 }", false, 0, 0);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2835,18 +2233,11 @@ use crate::tests::prelude::*;
 // codeFixUnusedLabel_noSuggestionIfDisabled_test.go:10
 pub fn test_code_fix_unused_label_no_suggestion_if_disabled(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowUnusedLabels: true
+    let content: &str = r"// @allowUnusedLabels: true
 [|foo|]: while (true) {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_suggestion_diagnostics(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2857,18 +2248,11 @@ use crate::tests::prelude::*;
 // codeFixUseBigIntLiteralWithNumericSeparators_test.go:10
 pub fn test_code_fix_use_big_int_literal_with_numeric_separators(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"6_402_373_705_728_000;  // 18! < 2 ** 53
+    let content: &str = r"6_402_373_705_728_000;  // 18! < 2 ** 53
 0x16_BE_EC_CA_73_00_00; // 18! < 2 ** 53";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &["useBigintLiteral"]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix_not_available(t, &["useBigintLiteral"]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2879,8 +2263,7 @@ use crate::tests::prelude::*;
 // codeLensFunctionExpressions01_test.go:12
 pub fn test_code_lens_function_expressions01(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"
+    let content: &str = r"
 // @filename: anonymousFunctionExpressions.ts
 export let anonFn1 = function () {};
 export const anonFn2 = function () {};
@@ -2909,15 +2292,9 @@ namedFn2();
 let namedFn3 = function namedFn3() {};
 const namedFn4 = function namedFn4() {};
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_code_lens(t, Some(lsutil::UserPreferences { code_lens: lsutil::CodeLensUserPreferences { references_code_lens_enabled: Tristate::True, references_code_lens_show_on_all_functions: Tristate::True, implementations_code_lens_enabled: Tristate::True, implementations_code_lens_show_on_interface_methods: Tristate::True, implementations_code_lens_show_on_all_class_methods: Tristate::True }, ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_code_lens(t, Some(lsutil::UserPreferences { code_lens: lsutil::CodeLensUserPreferences { references_code_lens_enabled: Tristate::True, references_code_lens_show_on_all_functions: Tristate::True, implementations_code_lens_enabled: Tristate::True, implementations_code_lens_show_on_interface_methods: Tristate::True, implementations_code_lens_show_on_all_class_methods: Tristate::True }, ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2928,8 +2305,7 @@ use crate::tests::prelude::*;
 // codeLensFunctionsAndConstants01_test.go:12
 pub fn test_code_lens_functions_and_constants01(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"
+    let content: &str = r#"
 // @module: preserve
 
 // @filename: ./exports.ts
@@ -2955,15 +2331,9 @@ import { foo, bar } from "./exports";
 foo(5);
 console.log(bar);
 "#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_code_lens(t, Some(lsutil::UserPreferences { code_lens: lsutil::CodeLensUserPreferences { references_code_lens_enabled: Tristate::True, references_code_lens_show_on_all_functions: Tristate::True, implementations_code_lens_enabled: Tristate::True, implementations_code_lens_show_on_interface_methods: Tristate::True, implementations_code_lens_show_on_all_class_methods: Tristate::True }, ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_code_lens(t, Some(lsutil::UserPreferences { code_lens: lsutil::CodeLensUserPreferences { references_code_lens_enabled: Tristate::True, references_code_lens_show_on_all_functions: Tristate::True, implementations_code_lens_enabled: Tristate::True, implementations_code_lens_show_on_interface_methods: Tristate::True, implementations_code_lens_show_on_all_class_methods: Tristate::True }, ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2974,8 +2344,7 @@ use crate::tests::prelude::*;
 // codeLensInterface01_test.go:12
 pub fn test_code_lens_interface01(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"
+    let content: &str = r#"
 // @module: preserve
 
 // @filename: ./pointable.ts
@@ -3010,15 +2379,9 @@ const p: Pointable = {
   },
 };
 "#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_code_lens(t, Some(lsutil::UserPreferences { code_lens: lsutil::CodeLensUserPreferences { references_code_lens_enabled: Tristate::True, references_code_lens_show_on_all_functions: Tristate::True, implementations_code_lens_enabled: Tristate::True, implementations_code_lens_show_on_interface_methods: Tristate::True, implementations_code_lens_show_on_all_class_methods: Tristate::True }, ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_code_lens(t, Some(lsutil::UserPreferences { code_lens: lsutil::CodeLensUserPreferences { references_code_lens_enabled: Tristate::True, references_code_lens_show_on_all_functions: Tristate::True, implementations_code_lens_enabled: Tristate::True, implementations_code_lens_show_on_interface_methods: Tristate::True, implementations_code_lens_show_on_all_class_methods: Tristate::True }, ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3029,8 +2392,7 @@ use crate::tests::prelude::*;
 // codeLensOverloads01_test.go:12
 pub fn test_code_lens_overloads01(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"
+    let content: &str = r#"
 export function foo(x: number): number;
 export function foo(x: string): string;
 export function foo(x: string | number): string | number {
@@ -3045,15 +2407,9 @@ foo("hello");
 // but is really just here to test how it affects how code lens.
 foo(Math.random() ? 1 : "hello");
 "#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_code_lens(t, Some(lsutil::UserPreferences { code_lens: lsutil::CodeLensUserPreferences { references_code_lens_enabled: Tristate::True, references_code_lens_show_on_all_functions: Tristate::True, implementations_code_lens_enabled: Tristate::True, implementations_code_lens_show_on_interface_methods: Tristate::True, implementations_code_lens_show_on_all_class_methods: Tristate::True }, ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_code_lens(t, Some(lsutil::UserPreferences { code_lens: lsutil::CodeLensUserPreferences { references_code_lens_enabled: Tristate::True, references_code_lens_show_on_all_functions: Tristate::True, implementations_code_lens_enabled: Tristate::True, implementations_code_lens_show_on_interface_methods: Tristate::True, implementations_code_lens_show_on_all_class_methods: Tristate::True }, ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3194,8 +2550,7 @@ use crate::tests::prelude::*;
 // codefixClassImplementInterface_omit_test.go:10
 pub fn test_codefix_class_implement_interface_omit(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"interface One {
+    let content: &str = r#"interface One {
     a: number;
     b: string;
 }
@@ -3205,10 +2560,8 @@ interface Two extends Omit<One, "a"> {
 }
 
 class TwoStore implements Two {[| |]}"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'Two'".to_string(), new_file_content: r#"interface One {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'Two'".to_string(), new_file_content: r#"interface One {
     a: number;
     b: string;
 }
@@ -3221,11 +2574,7 @@ class TwoStore implements Two {
     c: boolean;
     b: string;
 }"#.to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3236,8 +2585,7 @@ use crate::tests::prelude::*;
 // codefixCrashExportGlobal_test.go:10
 pub fn test_codefix_crash_export_global(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @module: commonjs
+    let content: &str = r"// @module: commonjs
 // @esModuleInterop: false
 // @allowSyntheticDefaultImports: false
 // @Filename: bar.ts
@@ -3258,18 +2606,12 @@ interface Root {
 
 declare const root: Root;
 export = root;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "bar.ts");
-            f.verify_code_fix_not_available(t, &[]);
-            f.go_to_file(t, "foo.d.ts");
-            f.verify_code_fix_not_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "bar.ts");
+        f.verify_code_fix_not_available(t, &[]);
+        f.go_to_file(t, "foo.d.ts");
+        f.verify_code_fix_not_available(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3280,19 +2622,12 @@ use crate::tests::prelude::*;
 // codefixEnableJsxFlag_noTsconfig_test.go:10
 pub fn test_codefix_enable_jsx_flag_no_tsconfig(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /dir/a.tsx
+    let content: &str = r"// @Filename: /dir/a.tsx
 export const Component = () => <></>";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "/dir/a.tsx");
-            f.verify_code_fix_not_available(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "/dir/a.tsx");
+        f.verify_code_fix_not_available(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3303,22 +2638,15 @@ use crate::tests::prelude::*;
 // codefixInferFromUsageNullish_test.go:10
 pub fn test_codefix_infer_from_usage_nullish(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @strict: false
+    let content: &str = r"// @strict: false
 // @noImplicitAny: true
 declare const a: string
 function wat([|b |]) {
     b(a ?? 1);
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_range_after_code_fix(t, "b: (arg0: string | number) => void", false, 0, 0);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_range_after_code_fix(t, "b: (arg0: string | number) => void", false, 0, 0);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3329,8 +2657,7 @@ use crate::tests::prelude::*;
 // commentsBlocks_test.go:10
 pub fn test_comments_blocks(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/// 1
+    let content: &str = r"/*1*/// 1
 var x,
     /*2*/// 2
     y,
@@ -3356,39 +2683,33 @@ if (true)
 else {
 /*12*/     // 12
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "// 1");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    // 2");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "    /* %3 */");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "// 4");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "    // 5");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "        // 6");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "    // 7");
-            f.go_to_marker(t, "8");
-            f.verify_current_line_content(t, "    // 8");
-            f.go_to_marker(t, "9");
-            f.verify_current_line_content(t, "// 9");
-            f.go_to_marker(t, "10");
-            f.verify_current_line_content(t, "    // 10");
-            f.go_to_marker(t, "11");
-            f.verify_current_line_content(t, "// 11");
-            f.go_to_marker(t, "12");
-            f.verify_current_line_content(t, "    // 12");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "// 1");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    // 2");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "    /* %3 */");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "// 4");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "    // 5");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "        // 6");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "    // 7");
+        f.go_to_marker(t, "8");
+        f.verify_current_line_content(t, "    // 8");
+        f.go_to_marker(t, "9");
+        f.verify_current_line_content(t, "// 9");
+        f.go_to_marker(t, "10");
+        f.verify_current_line_content(t, "    // 10");
+        f.go_to_marker(t, "11");
+        f.verify_current_line_content(t, "// 11");
+        f.go_to_marker(t, "12");
+        f.verify_current_line_content(t, "    // 12");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3399,8 +2720,7 @@ use crate::tests::prelude::*;
 // commentsEnumsFourslash_test.go:12
 pub fn test_comments_enums_fourslash(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/** Enum of colors*/
+    let content: &str = r"/** Enum of colors*/
 enum /*1*/Colors {
     /** Fancy name for 'blue'*/
     /*2*/Cornflower,
@@ -3409,23 +2729,17 @@ enum /*1*/Colors {
 }
 var /*4*/x = /*5*/Colors./*6*/Cornflower;
 x = Colors./*7*/FancyPink;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "enum Colors", "Enum of colors");
-            f.verify_quick_info_at(t, "2", "(enum member) Colors.Cornflower = 0", "Fancy name for 'blue'");
-            f.verify_quick_info_at(t, "3", "(enum member) Colors.FancyPink = 1", "Fancy name for 'pink'");
-            f.verify_quick_info_at(t, "4", "var x: Colors", "");
-            f.verify_quick_info_at(t, "5", "enum Colors", "Enum of colors");
-            f.verify_quick_info_at(t, "6", "(enum member) Colors.Cornflower = 0", "Fancy name for 'blue'");
-            f.verify_quick_info_at(t, "7", "(enum member) Colors.FancyPink = 1", "Fancy name for 'pink'");
-            f.verify_completions(t, Any::String("5".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "Colors".to_string(), detail: Some("enum Colors".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Enum of colors".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::StringSlice(vec!["6".to_string(), "7".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "Cornflower".to_string(), detail: Some("(enum member) Colors.Cornflower = 0".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Fancy name for 'blue'".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "FancyPink".to_string(), detail: Some("(enum member) Colors.FancyPink = 1".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Fancy name for 'pink'".to_string() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "enum Colors", "Enum of colors");
+        f.verify_quick_info_at(t, "2", "(enum member) Colors.Cornflower = 0", "Fancy name for 'blue'");
+        f.verify_quick_info_at(t, "3", "(enum member) Colors.FancyPink = 1", "Fancy name for 'pink'");
+        f.verify_quick_info_at(t, "4", "var x: Colors", "");
+        f.verify_quick_info_at(t, "5", "enum Colors", "Enum of colors");
+        f.verify_quick_info_at(t, "6", "(enum member) Colors.Cornflower = 0", "Fancy name for 'blue'");
+        f.verify_quick_info_at(t, "7", "(enum member) Colors.FancyPink = 1", "Fancy name for 'pink'");
+        f.verify_completions(t, Any::String("5".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "Colors".to_string(), detail: Some("enum Colors".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Enum of colors".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::StringSlice(vec!["6".to_string(), "7".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "Cornflower".to_string(), detail: Some("(enum member) Colors.Cornflower = 0".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Fancy name for 'blue'".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "FancyPink".to_string(), detail: Some("(enum member) Colors.FancyPink = 1".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Fancy name for 'pink'".to_string() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3436,8 +2750,7 @@ use crate::tests::prelude::*;
 // commentsExternalModulesFourslash_test.go:12
 pub fn test_comments_external_modules_fourslash(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: commentsExternalModules_file0.ts
+    let content: &str = r#"// @Filename: commentsExternalModules_file0.ts
 /** Namespace comment*/
 export namespace m/*1*/1 {
     /** b's comment*/
@@ -3466,37 +2779,31 @@ var my/*7*/var = new m1.m2./*8*/c();
 import ex/*9*/tMod = require("./commentsExternalModules_file0");
 /*10*/extMod./*11*/m1./*12*/fooExp/*13q*/ort(/*13*/);
 var new/*14*/Var = new extMod.m1.m2./*15*/c();"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_file(t, "commentsExternalModules_file0.ts");
-            f.verify_quick_info_at(t, "1", "namespace m1", "Namespace comment");
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("var b: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "b's comment".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), detail: Some("function foo(): number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "foo's comment".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "3");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "foo's comment".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "3q", "function foo(): number", "foo's comment");
-            f.verify_completions(t, Any::String("4".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "m1".to_string(), detail: Some("namespace m1".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Namespace comment".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("5".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("var m1.b: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "b's comment".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "fooExport".to_string(), detail: Some("function m1.fooExport(): number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "exported function".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "m2".to_string(), detail: Some("namespace m1.m2".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "m2 comments".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "6");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "exported function".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "6q", "function m1.fooExport(): number", "exported function");
-            f.verify_quick_info_at(t, "7", "var myvar: m1.m2.c", "");
-            f.verify_completions(t, Any::String("8".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "c".to_string(), detail: Some("constructor m1.m2.c(): m1.m2.c".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "class comment;".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i".to_string(), detail: Some("var m1.m2.i: m1.m2.c".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_file(t, "commentsExternalModules_file1.ts");
-            f.verify_quick_info_at(t, "9", r#"import extMod = require("./commentsExternalModules_file0")"#, "This is on import declaration");
-            f.verify_completions(t, Any::String("10".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "extMod".to_string(), detail: Some(r#"import extMod = require("./commentsExternalModules_file0")"#.to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "This is on import declaration".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("11".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "m1".to_string(), detail: Some("namespace extMod.m1".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Namespace comment".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("12".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("var extMod.m1.b: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "b's comment".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "fooExport".to_string(), detail: Some("function extMod.m1.fooExport(): number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "exported function".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "m2".to_string(), detail: Some("namespace extMod.m1.m2".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "m2 comments".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "13");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "exported function".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "13q", "function extMod.m1.fooExport(): number", "exported function");
-            f.verify_quick_info_at(t, "14", "var newVar: extMod.m1.m2.c", "");
-            f.verify_completions(t, Any::String("15".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "c".to_string(), detail: Some("constructor extMod.m1.m2.c(): extMod.m1.m2.c".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "class comment;".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i".to_string(), detail: Some("var extMod.m1.m2.i: extMod.m1.m2.c".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i".to_string() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_file(t, "commentsExternalModules_file0.ts");
+        f.verify_quick_info_at(t, "1", "namespace m1", "Namespace comment");
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("var b: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "b's comment".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), detail: Some("function foo(): number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "foo's comment".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "3");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "foo's comment".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "3q", "function foo(): number", "foo's comment");
+        f.verify_completions(t, Any::String("4".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "m1".to_string(), detail: Some("namespace m1".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Namespace comment".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("5".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("var m1.b: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "b's comment".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "fooExport".to_string(), detail: Some("function m1.fooExport(): number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "exported function".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "m2".to_string(), detail: Some("namespace m1.m2".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "m2 comments".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "6");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "exported function".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "6q", "function m1.fooExport(): number", "exported function");
+        f.verify_quick_info_at(t, "7", "var myvar: m1.m2.c", "");
+        f.verify_completions(t, Any::String("8".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "c".to_string(), detail: Some("constructor m1.m2.c(): m1.m2.c".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "class comment;".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i".to_string(), detail: Some("var m1.m2.i: m1.m2.c".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_file(t, "commentsExternalModules_file1.ts");
+        f.verify_quick_info_at(t, "9", r#"import extMod = require("./commentsExternalModules_file0")"#, "This is on import declaration");
+        f.verify_completions(t, Any::String("10".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "extMod".to_string(), detail: Some(r#"import extMod = require("./commentsExternalModules_file0")"#.to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "This is on import declaration".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("11".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "m1".to_string(), detail: Some("namespace extMod.m1".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Namespace comment".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("12".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("var extMod.m1.b: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "b's comment".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "fooExport".to_string(), detail: Some("function extMod.m1.fooExport(): number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "exported function".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "m2".to_string(), detail: Some("namespace extMod.m1.m2".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "m2 comments".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "13");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "exported function".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "13q", "function extMod.m1.fooExport(): number", "exported function");
+        f.verify_quick_info_at(t, "14", "var newVar: extMod.m1.m2.c", "");
+        f.verify_completions(t, Any::String("15".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "c".to_string(), detail: Some("constructor extMod.m1.m2.c(): extMod.m1.m2.c".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "class comment;".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i".to_string(), detail: Some("var extMod.m1.m2.i: extMod.m1.m2.c".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i".to_string() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3507,8 +2814,7 @@ use crate::tests::prelude::*;
 // commentsImportDeclaration_test.go:12
 pub fn test_comments_import_declaration(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: commentsImportDeclaration_file0.ts
+    let content: &str = r#"// @Filename: commentsImportDeclaration_file0.ts
 /** NamespaceComment*/
 export namespace m/*2*/1 {
     /** b's comment*/
@@ -3530,23 +2836,17 @@ export namespace m/*2*/1 {
 import /*3*/extMod = require("./commentsImportDeclaration_file0/*4*/");
 extMod./*6*/m1./*7*/fooEx/*8q*/port(/*8*/);
 var new/*9*/Var = new extMod.m1.m2./*10*/c();"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "2", "namespace m1", "NamespaceComment");
-            f.verify_quick_info_at(t, "3", r#"import extMod = require("./commentsImportDeclaration_file0")"#, "Import declaration");
-            f.verify_completions(t, Any::String("6".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "m1".to_string(), detail: Some("namespace extMod.m1".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "NamespaceComment".to_string() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("7".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("var extMod.m1.b: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "b's comment".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "fooExport".to_string(), detail: Some("function extMod.m1.fooExport(): number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "exported function".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "m2".to_string(), detail: Some("namespace extMod.m1.m2".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "m2 comments".to_string() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "8");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "exported function".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "8q", "function extMod.m1.fooExport(): number", "exported function");
-            f.verify_quick_info_at(t, "9", "var newVar: extMod.m1.m2.c", "");
-            f.verify_completions(t, Any::String("10".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "c".to_string(), detail: Some("constructor extMod.m1.m2.c(): extMod.m1.m2.c".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "class comment;".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i".to_string(), detail: Some("var extMod.m1.m2.i: extMod.m1.m2.c".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i".to_string() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "2", "namespace m1", "NamespaceComment");
+        f.verify_quick_info_at(t, "3", r#"import extMod = require("./commentsImportDeclaration_file0")"#, "Import declaration");
+        f.verify_completions(t, Any::String("6".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "m1".to_string(), detail: Some("namespace extMod.m1".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "NamespaceComment".to_string() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("7".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("var extMod.m1.b: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "b's comment".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "fooExport".to_string(), detail: Some("function extMod.m1.fooExport(): number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "exported function".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "m2".to_string(), detail: Some("namespace extMod.m1.m2".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "m2 comments".to_string() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "8");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "exported function".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "8q", "function extMod.m1.fooExport(): number", "exported function");
+        f.verify_quick_info_at(t, "9", "var newVar: extMod.m1.m2.c", "");
+        f.verify_completions(t, Any::String("10".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "c".to_string(), detail: Some("constructor extMod.m1.m2.c(): extMod.m1.m2.c".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "class comment;".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i".to_string(), detail: Some("var extMod.m1.m2.i: extMod.m1.m2.c".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i".to_string() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3557,8 +2857,7 @@ use crate::tests::prelude::*;
 // commentsInheritanceFourslash_test.go:12
 pub fn test_comments_inheritance_fourslash(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/** i1 is interface with properties*/
+    let content: &str = r"/** i1 is interface with properties*/
 interface i1 {
     /** i1_p1*/
     i1_p1: number;
@@ -3777,230 +3076,224 @@ class c6 extends c5 {
         this.d = /*53*/super./*54*/b;
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "11".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1_p1".to_string(), detail: Some("(property) i1.i1_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_f1".to_string(), detail: Some("(method) i1.i1_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_l1".to_string(), detail: Some("(property) i1.i1_l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_p1".to_string(), detail: Some("(property) i1.i1_nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_f1".to_string(), detail: Some("(method) i1.i1_nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_l1".to_string(), detail: Some("(property) i1.i1_nc_l1: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p1".to_string(), detail: Some("(property) i1.p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("(method) i1.f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "l1".to_string(), detail: Some("(property) i1.l1: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_p1".to_string(), detail: Some("(property) i1.nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f1".to_string(), detail: Some("(method) i1.nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_l1".to_string(), detail: Some("(property) i1.nc_l1: () => void".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "2");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i1_f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "3");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "4");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "5");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l2");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l3");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l4");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l5");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.verify_quick_info_at(t, "1iq", "var i1_i: i1", "");
-            f.verify_quick_info_at(t, "2q", "(method) i1.i1_f1(): void", "i1_f1");
-            f.verify_quick_info_at(t, "3q", "(method) i1.i1_nc_f1(): void", "");
-            f.verify_quick_info_at(t, "4q", "(method) i1.f1(): void", "");
-            f.verify_quick_info_at(t, "5q", "(method) i1.nc_f1(): void", "");
-            f.verify_quick_info_at(t, "l2q", "(property) i1.i1_l1: () => void", "i1_l1");
-            f.verify_quick_info_at(t, "l3q", "(property) i1.i1_nc_l1: () => void", "");
-            f.verify_quick_info_at(t, "l4q", "(property) i1.l1: () => void", "");
-            f.verify_quick_info_at(t, "l5q", "(property) i1.nc_l1: () => void", "");
-            f.verify_completions(t, Any::String("6".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1_p1".to_string(), detail: Some("(property) c1.i1_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_f1".to_string(), detail: Some("(method) c1.i1_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_l1".to_string(), detail: Some("(property) c1.i1_l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_p1".to_string(), detail: Some("(property) c1.i1_nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_f1".to_string(), detail: Some("(method) c1.i1_nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_l1".to_string(), detail: Some("(property) c1.i1_nc_l1: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p1".to_string(), detail: Some("(property) c1.p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c1_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("(method) c1.f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c1_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "l1".to_string(), detail: Some("(property) c1.l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c1_l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_p1".to_string(), detail: Some("(property) c1.nc_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c1_nc_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f1".to_string(), detail: Some("(method) c1.nc_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c1_nc_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_l1".to_string(), detail: Some("(property) c1.nc_l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c1_nc_l1".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "7");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i1_f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "9");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c1_f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "10");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c1_nc_f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "l9");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c1_l1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "l10");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c1_nc_l1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "8");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l7");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l8");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.verify_quick_info_at(t, "6iq", "var c1_i: c1", "");
-            f.verify_quick_info_at(t, "7q", "(method) c1.i1_f1(): void", "i1_f1");
-            f.verify_quick_info_at(t, "8q", "(method) c1.i1_nc_f1(): void", "");
-            f.verify_quick_info_at(t, "9q", "(method) c1.f1(): void", "c1_f1");
-            f.verify_quick_info_at(t, "10q", "(method) c1.nc_f1(): void", "c1_nc_f1");
-            f.verify_quick_info_at(t, "l7q", "(property) c1.i1_l1: () => void", "i1_l1");
-            f.verify_quick_info_at(t, "l8q", "(property) c1.i1_nc_l1: () => void", "");
-            f.verify_quick_info_at(t, "l9q", "(property) c1.l1: () => void", "c1_l1");
-            f.verify_quick_info_at(t, "l10q", "(property) c1.nc_l1: () => void", "c1_nc_l1");
-            f.verify_completions(t, Any::String("11".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1_p1".to_string(), detail: Some("(property) i1.i1_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_f1".to_string(), detail: Some("(method) i1.i1_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_l1".to_string(), detail: Some("(property) i1.i1_l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_p1".to_string(), detail: Some("(property) i1.i1_nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_f1".to_string(), detail: Some("(method) i1.i1_nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_l1".to_string(), detail: Some("(property) i1.i1_nc_l1: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p1".to_string(), detail: Some("(property) i1.p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("(method) i1.f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "l1".to_string(), detail: Some("(property) i1.l1: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_p1".to_string(), detail: Some("(property) i1.nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f1".to_string(), detail: Some("(method) i1.nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_l1".to_string(), detail: Some("(property) i1.nc_l1: () => void".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "12");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i1_f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "13");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "14");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "15");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l12");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l13");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l14");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l15");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.verify_quick_info_at(t, "12q", "(method) i1.i1_f1(): void", "i1_f1");
-            f.verify_quick_info_at(t, "13q", "(method) i1.i1_nc_f1(): void", "");
-            f.verify_quick_info_at(t, "14q", "(method) i1.f1(): void", "");
-            f.verify_quick_info_at(t, "15q", "(method) i1.nc_f1(): void", "");
-            f.verify_quick_info_at(t, "l12q", "(property) i1.i1_l1: () => void", "i1_l1");
-            f.verify_quick_info_at(t, "l13q", "(property) i1.i1_nc_l1: () => void", "");
-            f.verify_quick_info_at(t, "l14q", "(property) i1.l1: () => void", "");
-            f.verify_quick_info_at(t, "l15q", "(property) i1.nc_l1: () => void", "");
-            f.verify_completions(t, Any::String("16".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1_i".to_string(), detail: Some("var i1_i: i1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c1".to_string(), detail: Some("class c1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c1_i".to_string(), detail: Some("var c1_i: c1".to_string()), ..Default::default() })], excludes: vec!["i1".to_string()], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("16i".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1".to_string(), detail: Some("interface i1".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1 is interface with properties".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_quick_info_at(t, "17iq", "var c2_i: c2", "");
-            f.verify_quick_info_at(t, "18iq", "var c3_i: c3", "");
-            f.go_to_marker(t, "17");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c2 constructor".to_string(), ..Default::default() });
-            f.go_to_marker(t, "18");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.verify_quick_info_at(t, "18sq", "constructor c2(a: number): c2", "c2 constructor");
-            f.verify_quick_info_at(t, "18spropq", "class c2", "");
-            f.verify_quick_info_at(t, "18spropProp", "(property) c2.c2_p1: number", "c2 c2_p1");
-            f.verify_quick_info_at(t, "17q", "constructor c2(a: number): c2", "c2 constructor");
-            f.verify_quick_info_at(t, "18q", "constructor c3(): c3", "");
-            f.verify_completions(t, Any::StringSlice(vec!["19".to_string(), "29".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "c2_p1".to_string(), detail: Some("(property) c2.c2_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 c2_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_f1".to_string(), detail: Some("(method) c2.c2_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 c2_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_prop".to_string(), detail: Some("(property) c2.c2_prop: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 c2_prop".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_nc_p1".to_string(), detail: Some("(property) c2.c2_nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_nc_f1".to_string(), detail: Some("(method) c2.c2_nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_nc_prop".to_string(), detail: Some("(property) c2.c2_nc_prop: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p1".to_string(), detail: Some("(property) c2.p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("(method) c2.f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop".to_string(), detail: Some("(property) c2.prop: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 prop".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_p1".to_string(), detail: Some("(property) c2.nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f1".to_string(), detail: Some("(method) c2.nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_prop".to_string(), detail: Some("(property) c2.nc_prop: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "20");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c2 c2_f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "22");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c2 f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "21");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "23");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.verify_quick_info_at(t, "20q", "(method) c2.c2_f1(): void", "c2 c2_f1");
-            f.verify_quick_info_at(t, "21q", "(method) c2.c2_nc_f1(): void", "");
-            f.verify_quick_info_at(t, "22q", "(method) c2.f1(): void", "c2 f1");
-            f.verify_quick_info_at(t, "23q", "(method) c2.nc_f1(): void", "");
-            f.verify_completions(t, Any::String("24".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "c2_p1".to_string(), detail: Some("(property) c2.c2_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 c2_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_f1".to_string(), detail: Some("(method) c2.c2_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 c2_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_prop".to_string(), detail: Some("(property) c2.c2_prop: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 c2_prop".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_nc_p1".to_string(), detail: Some("(property) c2.c2_nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_nc_f1".to_string(), detail: Some("(method) c2.c2_nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_nc_prop".to_string(), detail: Some("(property) c2.c2_nc_prop: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p1".to_string(), detail: Some("(property) c3.p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c3 p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("(method) c3.f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c3 f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop".to_string(), detail: Some("(property) c3.prop: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c3 prop".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_p1".to_string(), detail: Some("(property) c3.nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f1".to_string(), detail: Some("(method) c3.nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_prop".to_string(), detail: Some("(property) c3.nc_prop: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "25");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c2 c2_f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "27");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c3 f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "26");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "28");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.verify_quick_info_at(t, "25q", "(method) c2.c2_f1(): void", "c2 c2_f1");
-            f.verify_quick_info_at(t, "26q", "(method) c2.c2_nc_f1(): void", "");
-            f.verify_quick_info_at(t, "27q", "(method) c3.f1(): void", "c3 f1");
-            f.verify_quick_info_at(t, "28q", "(method) c3.nc_f1(): void", "");
-            f.go_to_marker(t, "30");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c2 c2_f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "32");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c2 f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "31");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "33");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.verify_quick_info_at(t, "30q", "(method) c2.c2_f1(): void", "c2 c2_f1");
-            f.verify_quick_info_at(t, "31q", "(method) c2.c2_nc_f1(): void", "");
-            f.verify_quick_info_at(t, "32q", "(method) c2.f1(): void", "c2 f1");
-            f.verify_quick_info_at(t, "33q", "(method) c2.nc_f1(): void", "");
-            f.go_to_marker(t, "34");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c2 constructor".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "34iq", "var c4_i: c4", "");
-            f.verify_quick_info_at(t, "34q", "constructor c4(a: number): c4", "c2 constructor");
-            f.verify_completions(t, Any::String("35".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "c2".to_string(), detail: Some("class c2".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_i".to_string(), detail: Some("var c2_i: c2".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c3".to_string(), detail: Some("class c3".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c3_i".to_string(), detail: Some("var c3_i: c3".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c4".to_string(), detail: Some("class c4".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c4_i".to_string(), detail: Some("var c4_i: c4".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::StringSlice(vec!["36".to_string(), "46".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i2_p1".to_string(), detail: Some("(property) i2.i2_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_f1".to_string(), detail: Some("(method) i2.i2_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_l1".to_string(), detail: Some("(property) i2.i2_l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_p1".to_string(), detail: Some("(property) i2.i2_nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_f1".to_string(), detail: Some("(method) i2.i2_nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_l1".to_string(), detail: Some("(property) i2.i2_nc_l1: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p1".to_string(), detail: Some("(property) i2.p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2 p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("(method) i2.f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2 f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "l1".to_string(), detail: Some("(property) i2.l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2 l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_p1".to_string(), detail: Some("(property) i2.nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f1".to_string(), detail: Some("(method) i2.nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_l1".to_string(), detail: Some("(property) i2.nc_l1: () => void".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "37");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i2_f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "39");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i2 f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "38");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "40");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l37");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l37");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l39");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l40");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.verify_quick_info_at(t, "36iq", "var i2_i: i2", "");
-            f.verify_quick_info_at(t, "37iq", "var i3_i: i3", "");
-            f.verify_quick_info_at(t, "37q", "(method) i2.i2_f1(): void", "i2_f1");
-            f.verify_quick_info_at(t, "38q", "(method) i2.i2_nc_f1(): void", "");
-            f.verify_quick_info_at(t, "39q", "(method) i2.f1(): void", "i2 f1");
-            f.verify_quick_info_at(t, "40q", "(method) i2.nc_f1(): void", "");
-            f.verify_quick_info_at(t, "l37q", "(property) i2.i2_l1: () => void", "i2_l1");
-            f.verify_quick_info_at(t, "l38q", "(property) i2.i2_nc_l1: () => void", "");
-            f.verify_quick_info_at(t, "l39q", "(property) i2.l1: () => void", "i2 l1");
-            f.verify_quick_info_at(t, "l40q", "(property) i2.nc_l1: () => void", "");
-            f.verify_completions(t, Any::String("41".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i2_p1".to_string(), detail: Some("(property) i2.i2_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_f1".to_string(), detail: Some("(method) i2.i2_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_l1".to_string(), detail: Some("(property) i2.i2_l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_p1".to_string(), detail: Some("(property) i2.i2_nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_f1".to_string(), detail: Some("(method) i2.i2_nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_l1".to_string(), detail: Some("(property) i2.i2_nc_l1: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p1".to_string(), detail: Some("(property) i3.p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i3 p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("(method) i3.f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i3 f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "l1".to_string(), detail: Some("(property) i3.l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i3 l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_p1".to_string(), detail: Some("(property) i3.nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f1".to_string(), detail: Some("(method) i3.nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_l1".to_string(), detail: Some("(property) i3.nc_l1: () => void".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "42");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i2_f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "44");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i3 f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "43");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "45");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l42");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l43");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l44");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l45");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.verify_quick_info_at(t, "42q", "(method) i2.i2_f1(): void", "i2_f1");
-            f.verify_quick_info_at(t, "43q", "(method) i2.i2_nc_f1(): void", "");
-            f.verify_quick_info_at(t, "44q", "(method) i3.f1(): void", "i3 f1");
-            f.verify_quick_info_at(t, "45q", "(method) i3.nc_f1(): void", "");
-            f.verify_quick_info_at(t, "l42q", "(property) i2.i2_l1: () => void", "i2_l1");
-            f.verify_quick_info_at(t, "l43q", "(property) i2.i2_nc_l1: () => void", "");
-            f.verify_quick_info_at(t, "l44q", "(property) i3.l1: () => void", "i3 l1");
-            f.verify_quick_info_at(t, "l45q", "(property) i3.nc_l1: () => void", "");
-            f.verify_completions(t, Any::String("46".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i2_p1".to_string(), detail: Some("(property) i2.i2_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_f1".to_string(), detail: Some("(method) i2.i2_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_l1".to_string(), detail: Some("(property) i2.i2_l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_p1".to_string(), detail: Some("(property) i2.i2_nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_f1".to_string(), detail: Some("(method) i2.i2_nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_l1".to_string(), detail: Some("(property) i2.i2_nc_l1: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p1".to_string(), detail: Some("(property) i2.p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2 p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("(method) i2.f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2 f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "l1".to_string(), detail: Some("(property) i2.l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2 l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_p1".to_string(), detail: Some("(property) i2.nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f1".to_string(), detail: Some("(method) i2.nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_l1".to_string(), detail: Some("(property) i2.nc_l1: () => void".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "47");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i2_f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "49");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i2 f1".to_string(), ..Default::default() });
-            f.go_to_marker(t, "48");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l47");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l48");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l49");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.go_to_marker(t, "l50");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.verify_quick_info_at(t, "47q", "(method) i2.i2_f1(): void", "i2_f1");
-            f.verify_quick_info_at(t, "48q", "(method) i2.i2_nc_f1(): void", "");
-            f.verify_quick_info_at(t, "49q", "(method) i2.f1(): void", "i2 f1");
-            f.verify_quick_info_at(t, "50q", "(method) i2.nc_f1(): void", "");
-            f.verify_quick_info_at(t, "l47q", "(property) i2.i2_l1: () => void", "i2_l1");
-            f.verify_quick_info_at(t, "l48q", "(property) i2.i2_nc_l1: () => void", "");
-            f.verify_quick_info_at(t, "l49q", "(property) i2.l1: () => void", "i2 l1");
-            f.verify_quick_info_at(t, "l40q", "(property) i2.nc_l1: () => void", "");
-            f.verify_completions(t, Any::String("51".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i2_i".to_string(), detail: Some("var i2_i: i2".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i3_i".to_string(), detail: Some("var i3_i: i3".to_string()), ..Default::default() })], excludes: vec!["i2".to_string(), "i3".to_string()], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("51i".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i2".to_string(), detail: Some("interface i2".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i3".to_string(), detail: Some("interface i3".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_quick_info_at(t, "52", "constructor c5(): c5", "c5 class");
-            f.verify_quick_info_at(t, "53", "class c5", "c5 class");
-            f.verify_quick_info_at(t, "54", "(property) c5.b: number", "");
-            f.verify_quick_info_at(t, "55", "constructor c2(a: number): c2", "c2 constructor");
-            f.verify_quick_info_at(t, "56", "constructor c3(): c3", "");
-            f.verify_quick_info_at(t, "57", "constructor c6(): c6", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "11".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1_p1".to_string(), detail: Some("(property) i1.i1_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_f1".to_string(), detail: Some("(method) i1.i1_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_l1".to_string(), detail: Some("(property) i1.i1_l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_p1".to_string(), detail: Some("(property) i1.i1_nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_f1".to_string(), detail: Some("(method) i1.i1_nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_l1".to_string(), detail: Some("(property) i1.i1_nc_l1: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p1".to_string(), detail: Some("(property) i1.p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("(method) i1.f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "l1".to_string(), detail: Some("(property) i1.l1: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_p1".to_string(), detail: Some("(property) i1.nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f1".to_string(), detail: Some("(method) i1.nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_l1".to_string(), detail: Some("(property) i1.nc_l1: () => void".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "2");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i1_f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "3");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "4");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "5");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l2");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l3");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l4");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l5");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.verify_quick_info_at(t, "1iq", "var i1_i: i1", "");
+        f.verify_quick_info_at(t, "2q", "(method) i1.i1_f1(): void", "i1_f1");
+        f.verify_quick_info_at(t, "3q", "(method) i1.i1_nc_f1(): void", "");
+        f.verify_quick_info_at(t, "4q", "(method) i1.f1(): void", "");
+        f.verify_quick_info_at(t, "5q", "(method) i1.nc_f1(): void", "");
+        f.verify_quick_info_at(t, "l2q", "(property) i1.i1_l1: () => void", "i1_l1");
+        f.verify_quick_info_at(t, "l3q", "(property) i1.i1_nc_l1: () => void", "");
+        f.verify_quick_info_at(t, "l4q", "(property) i1.l1: () => void", "");
+        f.verify_quick_info_at(t, "l5q", "(property) i1.nc_l1: () => void", "");
+        f.verify_completions(t, Any::String("6".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1_p1".to_string(), detail: Some("(property) c1.i1_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_f1".to_string(), detail: Some("(method) c1.i1_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_l1".to_string(), detail: Some("(property) c1.i1_l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_p1".to_string(), detail: Some("(property) c1.i1_nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_f1".to_string(), detail: Some("(method) c1.i1_nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_l1".to_string(), detail: Some("(property) c1.i1_nc_l1: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p1".to_string(), detail: Some("(property) c1.p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c1_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("(method) c1.f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c1_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "l1".to_string(), detail: Some("(property) c1.l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c1_l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_p1".to_string(), detail: Some("(property) c1.nc_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c1_nc_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f1".to_string(), detail: Some("(method) c1.nc_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c1_nc_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_l1".to_string(), detail: Some("(property) c1.nc_l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c1_nc_l1".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "7");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i1_f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "9");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c1_f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "10");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c1_nc_f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "l9");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c1_l1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "l10");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c1_nc_l1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "8");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l7");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l8");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.verify_quick_info_at(t, "6iq", "var c1_i: c1", "");
+        f.verify_quick_info_at(t, "7q", "(method) c1.i1_f1(): void", "i1_f1");
+        f.verify_quick_info_at(t, "8q", "(method) c1.i1_nc_f1(): void", "");
+        f.verify_quick_info_at(t, "9q", "(method) c1.f1(): void", "c1_f1");
+        f.verify_quick_info_at(t, "10q", "(method) c1.nc_f1(): void", "c1_nc_f1");
+        f.verify_quick_info_at(t, "l7q", "(property) c1.i1_l1: () => void", "i1_l1");
+        f.verify_quick_info_at(t, "l8q", "(property) c1.i1_nc_l1: () => void", "");
+        f.verify_quick_info_at(t, "l9q", "(property) c1.l1: () => void", "c1_l1");
+        f.verify_quick_info_at(t, "l10q", "(property) c1.nc_l1: () => void", "c1_nc_l1");
+        f.verify_completions(t, Any::String("11".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1_p1".to_string(), detail: Some("(property) i1.i1_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_f1".to_string(), detail: Some("(method) i1.i1_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_l1".to_string(), detail: Some("(property) i1.i1_l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1_l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_p1".to_string(), detail: Some("(property) i1.i1_nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_f1".to_string(), detail: Some("(method) i1.i1_nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i1_nc_l1".to_string(), detail: Some("(property) i1.i1_nc_l1: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p1".to_string(), detail: Some("(property) i1.p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("(method) i1.f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "l1".to_string(), detail: Some("(property) i1.l1: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_p1".to_string(), detail: Some("(property) i1.nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f1".to_string(), detail: Some("(method) i1.nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_l1".to_string(), detail: Some("(property) i1.nc_l1: () => void".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "12");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i1_f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "13");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "14");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "15");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l12");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l13");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l14");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l15");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.verify_quick_info_at(t, "12q", "(method) i1.i1_f1(): void", "i1_f1");
+        f.verify_quick_info_at(t, "13q", "(method) i1.i1_nc_f1(): void", "");
+        f.verify_quick_info_at(t, "14q", "(method) i1.f1(): void", "");
+        f.verify_quick_info_at(t, "15q", "(method) i1.nc_f1(): void", "");
+        f.verify_quick_info_at(t, "l12q", "(property) i1.i1_l1: () => void", "i1_l1");
+        f.verify_quick_info_at(t, "l13q", "(property) i1.i1_nc_l1: () => void", "");
+        f.verify_quick_info_at(t, "l14q", "(property) i1.l1: () => void", "");
+        f.verify_quick_info_at(t, "l15q", "(property) i1.nc_l1: () => void", "");
+        f.verify_completions(t, Any::String("16".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1_i".to_string(), detail: Some("var i1_i: i1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c1".to_string(), detail: Some("class c1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c1_i".to_string(), detail: Some("var c1_i: c1".to_string()), ..Default::default() })], excludes: vec!["i1".to_string()], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("16i".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1".to_string(), detail: Some("interface i1".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i1 is interface with properties".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_quick_info_at(t, "17iq", "var c2_i: c2", "");
+        f.verify_quick_info_at(t, "18iq", "var c3_i: c3", "");
+        f.go_to_marker(t, "17");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c2 constructor".to_string(), ..Default::default() });
+        f.go_to_marker(t, "18");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.verify_quick_info_at(t, "18sq", "constructor c2(a: number): c2", "c2 constructor");
+        f.verify_quick_info_at(t, "18spropq", "class c2", "");
+        f.verify_quick_info_at(t, "18spropProp", "(property) c2.c2_p1: number", "c2 c2_p1");
+        f.verify_quick_info_at(t, "17q", "constructor c2(a: number): c2", "c2 constructor");
+        f.verify_quick_info_at(t, "18q", "constructor c3(): c3", "");
+        f.verify_completions(t, Any::StringSlice(vec!["19".to_string(), "29".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "c2_p1".to_string(), detail: Some("(property) c2.c2_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 c2_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_f1".to_string(), detail: Some("(method) c2.c2_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 c2_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_prop".to_string(), detail: Some("(property) c2.c2_prop: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 c2_prop".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_nc_p1".to_string(), detail: Some("(property) c2.c2_nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_nc_f1".to_string(), detail: Some("(method) c2.c2_nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_nc_prop".to_string(), detail: Some("(property) c2.c2_nc_prop: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p1".to_string(), detail: Some("(property) c2.p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("(method) c2.f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop".to_string(), detail: Some("(property) c2.prop: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 prop".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_p1".to_string(), detail: Some("(property) c2.nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f1".to_string(), detail: Some("(method) c2.nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_prop".to_string(), detail: Some("(property) c2.nc_prop: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "20");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c2 c2_f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "22");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c2 f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "21");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "23");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.verify_quick_info_at(t, "20q", "(method) c2.c2_f1(): void", "c2 c2_f1");
+        f.verify_quick_info_at(t, "21q", "(method) c2.c2_nc_f1(): void", "");
+        f.verify_quick_info_at(t, "22q", "(method) c2.f1(): void", "c2 f1");
+        f.verify_quick_info_at(t, "23q", "(method) c2.nc_f1(): void", "");
+        f.verify_completions(t, Any::String("24".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "c2_p1".to_string(), detail: Some("(property) c2.c2_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 c2_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_f1".to_string(), detail: Some("(method) c2.c2_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 c2_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_prop".to_string(), detail: Some("(property) c2.c2_prop: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c2 c2_prop".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_nc_p1".to_string(), detail: Some("(property) c2.c2_nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_nc_f1".to_string(), detail: Some("(method) c2.c2_nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_nc_prop".to_string(), detail: Some("(property) c2.c2_nc_prop: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p1".to_string(), detail: Some("(property) c3.p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c3 p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("(method) c3.f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c3 f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop".to_string(), detail: Some("(property) c3.prop: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "c3 prop".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_p1".to_string(), detail: Some("(property) c3.nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f1".to_string(), detail: Some("(method) c3.nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_prop".to_string(), detail: Some("(property) c3.nc_prop: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "25");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c2 c2_f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "27");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c3 f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "26");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "28");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.verify_quick_info_at(t, "25q", "(method) c2.c2_f1(): void", "c2 c2_f1");
+        f.verify_quick_info_at(t, "26q", "(method) c2.c2_nc_f1(): void", "");
+        f.verify_quick_info_at(t, "27q", "(method) c3.f1(): void", "c3 f1");
+        f.verify_quick_info_at(t, "28q", "(method) c3.nc_f1(): void", "");
+        f.go_to_marker(t, "30");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c2 c2_f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "32");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c2 f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "31");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "33");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.verify_quick_info_at(t, "30q", "(method) c2.c2_f1(): void", "c2 c2_f1");
+        f.verify_quick_info_at(t, "31q", "(method) c2.c2_nc_f1(): void", "");
+        f.verify_quick_info_at(t, "32q", "(method) c2.f1(): void", "c2 f1");
+        f.verify_quick_info_at(t, "33q", "(method) c2.nc_f1(): void", "");
+        f.go_to_marker(t, "34");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c2 constructor".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "34iq", "var c4_i: c4", "");
+        f.verify_quick_info_at(t, "34q", "constructor c4(a: number): c4", "c2 constructor");
+        f.verify_completions(t, Any::String("35".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "c2".to_string(), detail: Some("class c2".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_i".to_string(), detail: Some("var c2_i: c2".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c3".to_string(), detail: Some("class c3".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c3_i".to_string(), detail: Some("var c3_i: c3".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c4".to_string(), detail: Some("class c4".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c4_i".to_string(), detail: Some("var c4_i: c4".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::StringSlice(vec!["36".to_string(), "46".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i2_p1".to_string(), detail: Some("(property) i2.i2_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_f1".to_string(), detail: Some("(method) i2.i2_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_l1".to_string(), detail: Some("(property) i2.i2_l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_p1".to_string(), detail: Some("(property) i2.i2_nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_f1".to_string(), detail: Some("(method) i2.i2_nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_l1".to_string(), detail: Some("(property) i2.i2_nc_l1: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p1".to_string(), detail: Some("(property) i2.p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2 p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("(method) i2.f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2 f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "l1".to_string(), detail: Some("(property) i2.l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2 l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_p1".to_string(), detail: Some("(property) i2.nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f1".to_string(), detail: Some("(method) i2.nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_l1".to_string(), detail: Some("(property) i2.nc_l1: () => void".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "37");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i2_f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "39");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i2 f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "38");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "40");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l37");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l37");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l39");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l40");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.verify_quick_info_at(t, "36iq", "var i2_i: i2", "");
+        f.verify_quick_info_at(t, "37iq", "var i3_i: i3", "");
+        f.verify_quick_info_at(t, "37q", "(method) i2.i2_f1(): void", "i2_f1");
+        f.verify_quick_info_at(t, "38q", "(method) i2.i2_nc_f1(): void", "");
+        f.verify_quick_info_at(t, "39q", "(method) i2.f1(): void", "i2 f1");
+        f.verify_quick_info_at(t, "40q", "(method) i2.nc_f1(): void", "");
+        f.verify_quick_info_at(t, "l37q", "(property) i2.i2_l1: () => void", "i2_l1");
+        f.verify_quick_info_at(t, "l38q", "(property) i2.i2_nc_l1: () => void", "");
+        f.verify_quick_info_at(t, "l39q", "(property) i2.l1: () => void", "i2 l1");
+        f.verify_quick_info_at(t, "l40q", "(property) i2.nc_l1: () => void", "");
+        f.verify_completions(t, Any::String("41".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i2_p1".to_string(), detail: Some("(property) i2.i2_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_f1".to_string(), detail: Some("(method) i2.i2_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_l1".to_string(), detail: Some("(property) i2.i2_l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_p1".to_string(), detail: Some("(property) i2.i2_nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_f1".to_string(), detail: Some("(method) i2.i2_nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_l1".to_string(), detail: Some("(property) i2.i2_nc_l1: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p1".to_string(), detail: Some("(property) i3.p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i3 p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("(method) i3.f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i3 f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "l1".to_string(), detail: Some("(property) i3.l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i3 l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_p1".to_string(), detail: Some("(property) i3.nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f1".to_string(), detail: Some("(method) i3.nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_l1".to_string(), detail: Some("(property) i3.nc_l1: () => void".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "42");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i2_f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "44");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i3 f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "43");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "45");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l42");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l43");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l44");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l45");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.verify_quick_info_at(t, "42q", "(method) i2.i2_f1(): void", "i2_f1");
+        f.verify_quick_info_at(t, "43q", "(method) i2.i2_nc_f1(): void", "");
+        f.verify_quick_info_at(t, "44q", "(method) i3.f1(): void", "i3 f1");
+        f.verify_quick_info_at(t, "45q", "(method) i3.nc_f1(): void", "");
+        f.verify_quick_info_at(t, "l42q", "(property) i2.i2_l1: () => void", "i2_l1");
+        f.verify_quick_info_at(t, "l43q", "(property) i2.i2_nc_l1: () => void", "");
+        f.verify_quick_info_at(t, "l44q", "(property) i3.l1: () => void", "i3 l1");
+        f.verify_quick_info_at(t, "l45q", "(property) i3.nc_l1: () => void", "");
+        f.verify_completions(t, Any::String("46".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i2_p1".to_string(), detail: Some("(property) i2.i2_p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_f1".to_string(), detail: Some("(method) i2.i2_f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_l1".to_string(), detail: Some("(property) i2.i2_l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2_l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_p1".to_string(), detail: Some("(property) i2.i2_nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_f1".to_string(), detail: Some("(method) i2.i2_nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_nc_l1".to_string(), detail: Some("(property) i2.i2_nc_l1: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p1".to_string(), detail: Some("(property) i2.p1: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2 p1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("(method) i2.f1(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2 f1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "l1".to_string(), detail: Some("(property) i2.l1: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i2 l1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_p1".to_string(), detail: Some("(property) i2.nc_p1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f1".to_string(), detail: Some("(method) i2.nc_f1(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_l1".to_string(), detail: Some("(property) i2.nc_l1: () => void".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "47");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i2_f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "49");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "i2 f1".to_string(), ..Default::default() });
+        f.go_to_marker(t, "48");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l47");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l48");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l49");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.go_to_marker(t, "l50");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.verify_quick_info_at(t, "47q", "(method) i2.i2_f1(): void", "i2_f1");
+        f.verify_quick_info_at(t, "48q", "(method) i2.i2_nc_f1(): void", "");
+        f.verify_quick_info_at(t, "49q", "(method) i2.f1(): void", "i2 f1");
+        f.verify_quick_info_at(t, "50q", "(method) i2.nc_f1(): void", "");
+        f.verify_quick_info_at(t, "l47q", "(property) i2.i2_l1: () => void", "i2_l1");
+        f.verify_quick_info_at(t, "l48q", "(property) i2.i2_nc_l1: () => void", "");
+        f.verify_quick_info_at(t, "l49q", "(property) i2.l1: () => void", "i2 l1");
+        f.verify_quick_info_at(t, "l40q", "(property) i2.nc_l1: () => void", "");
+        f.verify_completions(t, Any::String("51".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i2_i".to_string(), detail: Some("var i2_i: i2".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i3_i".to_string(), detail: Some("var i3_i: i3".to_string()), ..Default::default() })], excludes: vec!["i2".to_string(), "i3".to_string()], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("51i".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i2".to_string(), detail: Some("interface i2".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i3".to_string(), detail: Some("interface i3".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_quick_info_at(t, "52", "constructor c5(): c5", "c5 class");
+        f.verify_quick_info_at(t, "53", "class c5", "c5 class");
+        f.verify_quick_info_at(t, "54", "(property) c5.b: number", "");
+        f.verify_quick_info_at(t, "55", "constructor c2(a: number): c2", "c2 constructor");
+        f.verify_quick_info_at(t, "56", "constructor c3(): c3", "");
+        f.verify_quick_info_at(t, "57", "constructor c6(): c6", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4011,8 +3304,7 @@ use crate::tests::prelude::*;
 // commentsInterfaceFourslash_test.go:12
 pub fn test_comments_interface_fourslash(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @lib: es5
+    let content: &str = r#"// @lib: es5
 /** this is interface 1*/
 interface i/*1*/1 {
 }
@@ -4080,84 +3372,78 @@ i3_i = {
 i3_i./*43q*/l(/*43*/10);
 i3_i.nc_/*44q*/f(/*44*/10);
 i3_i.nc/*45q*/_l(/*45*/10);"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "interface i1", "this is interface 1");
-            f.verify_quick_info_at(t, "2", "var i1_i: i1", "");
-            f.verify_quick_info_at(t, "3", "interface nc_i1", "");
-            f.verify_quick_info_at(t, "4", "var nc_i1_i: nc_i1", "");
-            f.verify_quick_info_at(t, "5", "interface i2", "this is interface 2 with members");
-            f.verify_quick_info_at(t, "6", "var i2_i: i2", "");
-            f.verify_quick_info_at(t, "7", "var i2_i_x: number", "");
-            f.verify_quick_info_at(t, "8", "(property) i2.x: number", "this is x");
-            f.verify_completions(t, Any::String("8".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_function_members_with_prototype_plus(&[Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), detail: Some("(property) i2.x: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "this is x".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), detail: Some("(property) i2.foo: (b: number) => string".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "this is foo".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_x".to_string(), detail: Some("(property) i2.nc_x: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_foo".to_string(), detail: Some("(property) i2.nc_foo: (b: number) => string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "fnfoo".to_string(), detail: Some("(method) i2.fnfoo(b: number): string".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "this is fnfoo".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_fnfoo".to_string(), detail: Some("(method) i2.nc_fnfoo(b: number): string".to_string()), ..Default::default() })])), ..Default::default() }), ..Default::default() }));
-            f.verify_quick_info_at(t, "9", "var i2_i_foo: (b: number) => string", "");
-            f.verify_quick_info_at(t, "10", "(property) i2.foo: (b: number) => string", "this is foo");
-            f.verify_quick_info_at(t, "11", "var i2_i_foo_r: string", "");
-            f.go_to_marker(t, "12");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), parameter_doc_comment: "param help".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "12q", "(property) i2.foo: (b: number) => string", "this is foo");
-            f.verify_quick_info_at(t, "13", "var i2_i_i2_si: number", "");
-            f.verify_quick_info_at(t, "13q", "var i2_i: i2", "");
-            f.verify_quick_info_at(t, "14", "var i2_i_i2_ii: number", "");
-            f.verify_quick_info_at(t, "14q", "var i2_i: i2", "");
-            f.verify_quick_info_at(t, "15", "var i2_i_n: any", "");
-            f.go_to_marker(t, "16");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "new method".to_string(), parameter_doc_comment: "param".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "16q", r"var i2_i: i2
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "interface i1", "this is interface 1");
+        f.verify_quick_info_at(t, "2", "var i1_i: i1", "");
+        f.verify_quick_info_at(t, "3", "interface nc_i1", "");
+        f.verify_quick_info_at(t, "4", "var nc_i1_i: nc_i1", "");
+        f.verify_quick_info_at(t, "5", "interface i2", "this is interface 2 with members");
+        f.verify_quick_info_at(t, "6", "var i2_i: i2", "");
+        f.verify_quick_info_at(t, "7", "var i2_i_x: number", "");
+        f.verify_quick_info_at(t, "8", "(property) i2.x: number", "this is x");
+        f.verify_completions(t, Any::String("8".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_function_members_with_prototype_plus(&[Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), detail: Some("(property) i2.x: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "this is x".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), detail: Some("(property) i2.foo: (b: number) => string".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "this is foo".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_x".to_string(), detail: Some("(property) i2.nc_x: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_foo".to_string(), detail: Some("(property) i2.nc_foo: (b: number) => string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "fnfoo".to_string(), detail: Some("(method) i2.fnfoo(b: number): string".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "this is fnfoo".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_fnfoo".to_string(), detail: Some("(method) i2.nc_fnfoo(b: number): string".to_string()), ..Default::default() })])), ..Default::default() }), ..Default::default() }));
+        f.verify_quick_info_at(t, "9", "var i2_i_foo: (b: number) => string", "");
+        f.verify_quick_info_at(t, "10", "(property) i2.foo: (b: number) => string", "this is foo");
+        f.verify_quick_info_at(t, "11", "var i2_i_foo_r: string", "");
+        f.go_to_marker(t, "12");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), parameter_doc_comment: "param help".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "12q", "(property) i2.foo: (b: number) => string", "this is foo");
+        f.verify_quick_info_at(t, "13", "var i2_i_i2_si: number", "");
+        f.verify_quick_info_at(t, "13q", "var i2_i: i2", "");
+        f.verify_quick_info_at(t, "14", "var i2_i_i2_ii: number", "");
+        f.verify_quick_info_at(t, "14q", "var i2_i: i2", "");
+        f.verify_quick_info_at(t, "15", "var i2_i_n: any", "");
+        f.go_to_marker(t, "16");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "new method".to_string(), parameter_doc_comment: "param".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "16q", r"var i2_i: i2
 new (i: i1) => any", "new method");
-            f.verify_quick_info_at(t, "17", "var i2_i_nc_x: number", "");
-            f.verify_quick_info_at(t, "18", "(property) i2.nc_x: number", "");
-            f.verify_quick_info_at(t, "19", "var i2_i_nc_foo: (b: number) => string", "");
-            f.verify_quick_info_at(t, "20", "(property) i2.nc_foo: (b: number) => string", "");
-            f.verify_quick_info_at(t, "21", "var i2_i_nc_foo_r: string", "");
-            f.go_to_marker(t, "22");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.verify_quick_info_at(t, "22q", "(property) i2.nc_foo: (b: number) => string", "");
-            f.verify_quick_info_at(t, "23", "var i2_i_r: number", "");
-            f.go_to_marker(t, "24");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is call signature".to_string(), parameter_doc_comment: "paramhelp a".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "24q", r"var i2_i: i2
+        f.verify_quick_info_at(t, "17", "var i2_i_nc_x: number", "");
+        f.verify_quick_info_at(t, "18", "(property) i2.nc_x: number", "");
+        f.verify_quick_info_at(t, "19", "var i2_i_nc_foo: (b: number) => string", "");
+        f.verify_quick_info_at(t, "20", "(property) i2.nc_foo: (b: number) => string", "");
+        f.verify_quick_info_at(t, "21", "var i2_i_nc_foo_r: string", "");
+        f.go_to_marker(t, "22");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.verify_quick_info_at(t, "22q", "(property) i2.nc_foo: (b: number) => string", "");
+        f.verify_quick_info_at(t, "23", "var i2_i_r: number", "");
+        f.go_to_marker(t, "24");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is call signature".to_string(), parameter_doc_comment: "paramhelp a".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "24q", r"var i2_i: i2
 (a: number, b: number) => number", "this is call signature");
-            f.go_to_marker(t, "25");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is call signature".to_string(), parameter_doc_comment: "paramhelp b".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "26", "var i2_i_fnfoo: (b: number) => string", "");
-            f.verify_quick_info_at(t, "27", "(method) i2.fnfoo(b: number): string", "this is fnfoo");
-            f.verify_quick_info_at(t, "28", "var i2_i_fnfoo_r: string", "");
-            f.go_to_marker(t, "29");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is fnfoo".to_string(), parameter_doc_comment: "param help".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "29q", "(method) i2.fnfoo(b: number): string", "this is fnfoo");
-            f.verify_quick_info_at(t, "30", "var i2_i_nc_fnfoo: (b: number) => string", "");
-            f.verify_quick_info_at(t, "31", "(method) i2.nc_fnfoo(b: number): string", "");
-            f.verify_quick_info_at(t, "32", "var i2_i_nc_fnfoo_r: string", "");
-            f.go_to_marker(t, "33");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.verify_quick_info_at(t, "33q", "(method) i2.nc_fnfoo(b: number): string", "");
-            f.verify_completions(t, Any::String("34".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1_i".to_string(), detail: Some("var i1_i: i1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_i1_i".to_string(), detail: Some("var nc_i1_i: nc_i1".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: String::new() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i".to_string(), detail: Some("var i2_i: i2".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_x".to_string(), detail: Some("var i2_i_x: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_foo".to_string(), detail: Some("var i2_i_foo: (b: number) => string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_foo_r".to_string(), detail: Some("var i2_i_foo_r: string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_i2_si".to_string(), detail: Some("var i2_i_i2_si: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_i2_ii".to_string(), detail: Some("var i2_i_i2_ii: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_n".to_string(), detail: Some("var i2_i_n: any".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_nc_x".to_string(), detail: Some("var i2_i_nc_x: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_nc_foo".to_string(), detail: Some("var i2_i_nc_foo: (b: number) => string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_nc_foo_r".to_string(), detail: Some("var i2_i_nc_foo_r: string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_r".to_string(), detail: Some("var i2_i_r: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_fnfoo".to_string(), detail: Some("var i2_i_fnfoo: (b: number) => string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_fnfoo_r".to_string(), detail: Some("var i2_i_fnfoo_r: string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_nc_fnfoo".to_string(), detail: Some("var i2_i_nc_fnfoo: (b: number) => string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_nc_fnfoo_r".to_string(), detail: Some("var i2_i_nc_fnfoo_r: string".to_string()), ..Default::default() })], excludes: vec!["i1".to_string(), "nc_i1".to_string(), "i2".to_string()], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("34i".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1".to_string(), detail: Some("interface i1".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "this is interface 1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_i1".to_string(), detail: Some("interface nc_i1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2".to_string(), detail: Some("interface i2".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "this is interface 2 with members".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("36".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "a".to_string(), detail: Some("(parameter) a: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i3_i a".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_quick_info_at(t, "40q", "var i3_i: i3", "");
-            f.verify_completions(t, Any::String("40".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i3_i".to_string(), detail: Some("var i3_i: i3".to_string()), ..Default::default() })], excludes: vec!["i3".to_string()], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "41");
-            f.verify_quick_info_is(t, "(method) i3.f(a: number): string", "Function i3 f");
-            f.verify_completions(t, Any::String("41".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "f".to_string(), detail: Some("(method) i3.f(a: number): string".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Function i3 f".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "l".to_string(), detail: Some("(property) i3.l: (b: number) => string".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i3 l".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f".to_string(), detail: Some("(method) i3.nc_f(a: number): string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_l".to_string(), detail: Some("(property) i3.nc_l: (b: number) => string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_x".to_string(), detail: Some("(property) i3.nc_x: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), detail: Some("(property) i3.x: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Comment i3 x".to_string() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "42");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "Function i3 f".to_string(), parameter_doc_comment: "number parameter".to_string(), ..Default::default() });
-            f.go_to_marker(t, "43");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), parameter_doc_comment: "comment i3 l b".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "43q", "(property) i3.l: (b: number) => string", "i3 l");
-            f.go_to_marker(t, "44");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.verify_quick_info_at(t, "44q", "(method) i3.nc_f(a: number): string", "");
-            f.go_to_marker(t, "45");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
-            f.verify_quick_info_at(t, "45q", "(property) i3.nc_l: (b: number) => string", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+        f.go_to_marker(t, "25");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is call signature".to_string(), parameter_doc_comment: "paramhelp b".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "26", "var i2_i_fnfoo: (b: number) => string", "");
+        f.verify_quick_info_at(t, "27", "(method) i2.fnfoo(b: number): string", "this is fnfoo");
+        f.verify_quick_info_at(t, "28", "var i2_i_fnfoo_r: string", "");
+        f.go_to_marker(t, "29");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is fnfoo".to_string(), parameter_doc_comment: "param help".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "29q", "(method) i2.fnfoo(b: number): string", "this is fnfoo");
+        f.verify_quick_info_at(t, "30", "var i2_i_nc_fnfoo: (b: number) => string", "");
+        f.verify_quick_info_at(t, "31", "(method) i2.nc_fnfoo(b: number): string", "");
+        f.verify_quick_info_at(t, "32", "var i2_i_nc_fnfoo_r: string", "");
+        f.go_to_marker(t, "33");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.verify_quick_info_at(t, "33q", "(method) i2.nc_fnfoo(b: number): string", "");
+        f.verify_completions(t, Any::String("34".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1_i".to_string(), detail: Some("var i1_i: i1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_i1_i".to_string(), detail: Some("var nc_i1_i: nc_i1".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: String::new() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i".to_string(), detail: Some("var i2_i: i2".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_x".to_string(), detail: Some("var i2_i_x: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_foo".to_string(), detail: Some("var i2_i_foo: (b: number) => string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_foo_r".to_string(), detail: Some("var i2_i_foo_r: string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_i2_si".to_string(), detail: Some("var i2_i_i2_si: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_i2_ii".to_string(), detail: Some("var i2_i_i2_ii: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_n".to_string(), detail: Some("var i2_i_n: any".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_nc_x".to_string(), detail: Some("var i2_i_nc_x: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_nc_foo".to_string(), detail: Some("var i2_i_nc_foo: (b: number) => string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_nc_foo_r".to_string(), detail: Some("var i2_i_nc_foo_r: string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_r".to_string(), detail: Some("var i2_i_r: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_fnfoo".to_string(), detail: Some("var i2_i_fnfoo: (b: number) => string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_fnfoo_r".to_string(), detail: Some("var i2_i_fnfoo_r: string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_nc_fnfoo".to_string(), detail: Some("var i2_i_nc_fnfoo: (b: number) => string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i_nc_fnfoo_r".to_string(), detail: Some("var i2_i_nc_fnfoo_r: string".to_string()), ..Default::default() })], excludes: vec!["i1".to_string(), "nc_i1".to_string(), "i2".to_string()], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("34i".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1".to_string(), detail: Some("interface i1".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "this is interface 1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_i1".to_string(), detail: Some("interface nc_i1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2".to_string(), detail: Some("interface i2".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "this is interface 2 with members".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("36".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "a".to_string(), detail: Some("(parameter) a: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i3_i a".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_quick_info_at(t, "40q", "var i3_i: i3", "");
+        f.verify_completions(t, Any::String("40".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i3_i".to_string(), detail: Some("var i3_i: i3".to_string()), ..Default::default() })], excludes: vec!["i3".to_string()], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "41");
+        f.verify_quick_info_is(t, "(method) i3.f(a: number): string", "Function i3 f");
+        f.verify_completions(t, Any::String("41".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "f".to_string(), detail: Some("(method) i3.f(a: number): string".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Function i3 f".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "l".to_string(), detail: Some("(property) i3.l: (b: number) => string".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "i3 l".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_f".to_string(), detail: Some("(method) i3.nc_f(a: number): string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_l".to_string(), detail: Some("(property) i3.nc_l: (b: number) => string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "nc_x".to_string(), detail: Some("(property) i3.nc_x: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), detail: Some("(property) i3.x: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Comment i3 x".to_string() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "42");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "Function i3 f".to_string(), parameter_doc_comment: "number parameter".to_string(), ..Default::default() });
+        f.go_to_marker(t, "43");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), parameter_doc_comment: "comment i3 l b".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "43q", "(property) i3.l: (b: number) => string", "i3 l");
+        f.go_to_marker(t, "44");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.verify_quick_info_at(t, "44q", "(method) i3.nc_f(a: number): string", "");
+        f.go_to_marker(t, "45");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: String::new(), ..Default::default() });
+        f.verify_quick_info_at(t, "45q", "(property) i3.nc_l: (b: number) => string", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4168,8 +3454,7 @@ use crate::tests::prelude::*;
 // commentsLinePreservation_test.go:10
 pub fn test_comments_line_preservation(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"/** This is firstLine
+    let content: &str = r#"/** This is firstLine
   * This is second Line
   * 
   * This is fourth Line
@@ -4282,68 +3567,62 @@ function /*l*/l(param1: string) { /*9*/param1 = "hello"; }
  second line text
  */
 function /*m*/m(param1: string) { /*10*/param1 = "hello"; }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "a", "var a: string", r"This is firstLine
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "a", "var a: string", r"This is firstLine
 This is second Line
 
 This is fourth Line");
-            f.verify_quick_info_at(t, "b", "var b: string", r"This is firstLine
+        f.verify_quick_info_at(t, "b", "var b: string", r"This is firstLine
 This is second Line
 
 This is fourth Line");
-            f.verify_quick_info_at(t, "c", "var c: string", r"This is firstLine
+        f.verify_quick_info_at(t, "c", "var c: string", r"This is firstLine
 This is second Line
 
 This is fourth Line");
-            f.verify_quick_info_at(t, "d", "function d(param: string): void", r"This is firstLine
+        f.verify_quick_info_at(t, "d", "function d(param: string): void", r"This is firstLine
 This is second Line");
-            f.verify_quick_info_at(t, "1", "(parameter) param: string", "");
-            f.verify_quick_info_at(t, "e", "function e(param: string): void", r"This is firstLine
+        f.verify_quick_info_at(t, "1", "(parameter) param: string", "");
+        f.verify_quick_info_at(t, "e", "function e(param: string): void", r"This is firstLine
 This is second Line");
-            f.verify_quick_info_at(t, "2", "(parameter) param: string", "");
-            f.verify_quick_info_at(t, "f", "function f(param1: string): void", r"This is firstLine
+        f.verify_quick_info_at(t, "2", "(parameter) param: string", "");
+        f.verify_quick_info_at(t, "f", "function f(param1: string): void", r"This is firstLine
 This is second Line");
-            f.verify_quick_info_at(t, "3", "(parameter) param1: string", r"first line of param
+        f.verify_quick_info_at(t, "3", "(parameter) param1: string", r"first line of param
 
 param information third line");
-            f.verify_quick_info_at(t, "g", "function g(param1: string): void", r"This is firstLine
+        f.verify_quick_info_at(t, "g", "function g(param1: string): void", r"This is firstLine
 This is second Line");
-            f.verify_quick_info_at(t, "4", "(parameter) param1: string", " param information first line");
-            f.verify_quick_info_at(t, "h", "function h(param1: string): void", r"This is firstLine
+        f.verify_quick_info_at(t, "4", "(parameter) param1: string", " param information first line");
+        f.verify_quick_info_at(t, "h", "function h(param1: string): void", r"This is firstLine
 This is second Line");
-            f.verify_quick_info_at(t, "5", "(parameter) param1: string", r" param information first line
+        f.verify_quick_info_at(t, "5", "(parameter) param1: string", r" param information first line
 
  param information third line");
-            f.verify_quick_info_at(t, "i", "function i(param1: string): void", r"This is firstLine
+        f.verify_quick_info_at(t, "i", "function i(param1: string): void", r"This is firstLine
 This is second Line");
-            f.verify_quick_info_at(t, "6", "(parameter) param1: string", r" param information first line
+        f.verify_quick_info_at(t, "6", "(parameter) param1: string", r" param information first line
 
  param information third line");
-            f.verify_quick_info_at(t, "j", "function j(param1: string): void", r"This is firstLine
+        f.verify_quick_info_at(t, "j", "function j(param1: string): void", r"This is firstLine
 This is second Line");
-            f.verify_quick_info_at(t, "7", "(parameter) param1: string", r" param information first line
+        f.verify_quick_info_at(t, "7", "(parameter) param1: string", r" param information first line
 
  param information third line");
-            f.verify_quick_info_at(t, "k", "function k(param1: string): void", r"This is firstLine
+        f.verify_quick_info_at(t, "k", "function k(param1: string): void", r"This is firstLine
 This is second Line");
-            f.verify_quick_info_at(t, "8", "(parameter) param1: string", "hello");
-            f.verify_quick_info_at(t, "l", "function l(param1: string): void", r"This is firstLine
+        f.verify_quick_info_at(t, "8", "(parameter) param1: string", "hello");
+        f.verify_quick_info_at(t, "l", "function l(param1: string): void", r"This is firstLine
 This is second Line");
-            f.verify_quick_info_at(t, "9", "(parameter) param1: string", r"first Line text
+        f.verify_quick_info_at(t, "9", "(parameter) param1: string", r"first Line text
 blank line that shouldnt be shown when starting this 
 second time information about the param again");
-            f.verify_quick_info_at(t, "m", "function m(param1: string): void", r"This is firstLine
+        f.verify_quick_info_at(t, "m", "function m(param1: string): void", r"This is firstLine
 This is second Line
 [1]: third * line");
-            f.verify_quick_info_at(t, "10", "(parameter) param1: string", r"first Line text
+        f.verify_quick_info_at(t, "10", "(parameter) param1: string", r"first Line text
 second line text");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4354,8 +3633,7 @@ use crate::tests::prelude::*;
 // commentsOverloadsFourslash_test.go:12
 pub fn test_comments_overloads_fourslash(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"/** this is signature 1*/
+    let content: &str = r#"/** this is signature 1*/
 function /*1*/f1(/**param a*/a: number): number;
 function /*2*/f1(b: string): number;
 function /*3*/f1(aOrb: any) {
@@ -4579,250 +3857,244 @@ ambient/*76*/F1(true);
 function foo(a/*77*/a: i3) {
 }
 foo(null);"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "function f1(a: number): number (+1 overload)", "this is signature 1");
-            f.verify_quick_info_at(t, "2", "function f1(b: string): number (+1 overload)", "this is signature 1");
-            f.verify_quick_info_at(t, "3", "function f1(a: number): number (+1 overload)", "this is signature 1");
-            f.verify_quick_info_at(t, "4q", "function f1(b: string): number (+1 overload)", "this is signature 1");
-            f.verify_quick_info_at(t, "o4q", "function f1(a: number): number (+1 overload)", "this is signature 1");
-            f.go_to_marker(t, "4");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.go_to_marker(t, "o4");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is signature 1".to_string(), parameter_doc_comment: "param a".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "5", "function f2(a: number): number (+1 overload)", "");
-            f.verify_quick_info_at(t, "6", "function f2(b: string): number (+1 overload)", "this is signature 2");
-            f.verify_quick_info_at(t, "7", "function f2(a: number): number (+1 overload)", "");
-            f.verify_quick_info_at(t, "8q", "function f2(b: string): number (+1 overload)", "this is signature 2");
-            f.verify_quick_info_at(t, "o8q", "function f2(a: number): number (+1 overload)", "");
-            f.go_to_marker(t, "8");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is signature 2".to_string(), overloads_count: 2, ..Default::default() });
-            f.go_to_marker(t, "o8");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_doc_comment: "param a".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "9", "function f3(a: number): number (+1 overload)", "");
-            f.verify_quick_info_at(t, "10", "function f3(b: string): number (+1 overload)", "");
-            f.verify_quick_info_at(t, "11", "function f3(a: number): number (+1 overload)", "");
-            f.verify_quick_info_at(t, "12q", "function f3(b: string): number (+1 overload)", "");
-            f.verify_quick_info_at(t, "o12q", "function f3(a: number): number (+1 overload)", "");
-            f.go_to_marker(t, "12");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.go_to_marker(t, "o12");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "13", "function f4(a: number): number (+1 overload)", "this is signature 4 - with number parameter");
-            f.verify_quick_info_at(t, "14", "function f4(b: string): number (+1 overload)", "this is signature 4 - with string parameter");
-            f.verify_quick_info_at(t, "15", "function f4(a: number): number (+1 overload)", "this is signature 4 - with number parameter");
-            f.verify_quick_info_at(t, "16q", "function f4(b: string): number (+1 overload)", "this is signature 4 - with string parameter");
-            f.verify_quick_info_at(t, "o16q", "function f4(a: number): number (+1 overload)", "this is signature 4 - with number parameter");
-            f.go_to_marker(t, "16");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is signature 4 - with string parameter".to_string(), overloads_count: 2, ..Default::default() });
-            f.go_to_marker(t, "o16");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is signature 4 - with number parameter".to_string(), parameter_doc_comment: "param a".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_completions(t, Any::String("17".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("function f1(a: number): number (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "this is signature 1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f2".to_string(), detail: Some("function f2(a: number): number (+1 overload)".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f3".to_string(), detail: Some("function f3(a: number): number (+1 overload)".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f4".to_string(), detail: Some("function f4(a: number): number (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "this is signature 4 - with number parameter".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("18".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1_i".to_string(), detail: Some(r"var i1_i: i1
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "function f1(a: number): number (+1 overload)", "this is signature 1");
+        f.verify_quick_info_at(t, "2", "function f1(b: string): number (+1 overload)", "this is signature 1");
+        f.verify_quick_info_at(t, "3", "function f1(a: number): number (+1 overload)", "this is signature 1");
+        f.verify_quick_info_at(t, "4q", "function f1(b: string): number (+1 overload)", "this is signature 1");
+        f.verify_quick_info_at(t, "o4q", "function f1(a: number): number (+1 overload)", "this is signature 1");
+        f.go_to_marker(t, "4");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.go_to_marker(t, "o4");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is signature 1".to_string(), parameter_doc_comment: "param a".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "5", "function f2(a: number): number (+1 overload)", "");
+        f.verify_quick_info_at(t, "6", "function f2(b: string): number (+1 overload)", "this is signature 2");
+        f.verify_quick_info_at(t, "7", "function f2(a: number): number (+1 overload)", "");
+        f.verify_quick_info_at(t, "8q", "function f2(b: string): number (+1 overload)", "this is signature 2");
+        f.verify_quick_info_at(t, "o8q", "function f2(a: number): number (+1 overload)", "");
+        f.go_to_marker(t, "8");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is signature 2".to_string(), overloads_count: 2, ..Default::default() });
+        f.go_to_marker(t, "o8");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_doc_comment: "param a".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "9", "function f3(a: number): number (+1 overload)", "");
+        f.verify_quick_info_at(t, "10", "function f3(b: string): number (+1 overload)", "");
+        f.verify_quick_info_at(t, "11", "function f3(a: number): number (+1 overload)", "");
+        f.verify_quick_info_at(t, "12q", "function f3(b: string): number (+1 overload)", "");
+        f.verify_quick_info_at(t, "o12q", "function f3(a: number): number (+1 overload)", "");
+        f.go_to_marker(t, "12");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.go_to_marker(t, "o12");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "13", "function f4(a: number): number (+1 overload)", "this is signature 4 - with number parameter");
+        f.verify_quick_info_at(t, "14", "function f4(b: string): number (+1 overload)", "this is signature 4 - with string parameter");
+        f.verify_quick_info_at(t, "15", "function f4(a: number): number (+1 overload)", "this is signature 4 - with number parameter");
+        f.verify_quick_info_at(t, "16q", "function f4(b: string): number (+1 overload)", "this is signature 4 - with string parameter");
+        f.verify_quick_info_at(t, "o16q", "function f4(a: number): number (+1 overload)", "this is signature 4 - with number parameter");
+        f.go_to_marker(t, "16");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is signature 4 - with string parameter".to_string(), overloads_count: 2, ..Default::default() });
+        f.go_to_marker(t, "o16");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is signature 4 - with number parameter".to_string(), parameter_doc_comment: "param a".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_completions(t, Any::String("17".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "f1".to_string(), detail: Some("function f1(a: number): number (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "this is signature 1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f2".to_string(), detail: Some("function f2(a: number): number (+1 overload)".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f3".to_string(), detail: Some("function f3(a: number): number (+1 overload)".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "f4".to_string(), detail: Some("function f4(a: number): number (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "this is signature 4 - with number parameter".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("18".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1_i".to_string(), detail: Some(r"var i1_i: i1
 new (b: number) => any (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "new 1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i2_i".to_string(), detail: Some(r"var i2_i: i2
 new (a: string) => any (+1 overload)".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i3_i".to_string(), detail: Some(r"var i3_i: i3
 new (a: string) => any (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "new 1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "i4_i".to_string(), detail: Some(r"var i4_i: i4
 new (a: string) => any (+1 overload)".to_string()), ..Default::default() })], excludes: vec!["i1".to_string(), "i2".to_string(), "i3".to_string(), "i4".to_string()], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "19");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "19q", r"var i1_i: i1
+        f.go_to_marker(t, "19");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "19q", r"var i1_i: i1
 new (b: number) => any (+1 overload)", "new 1");
-            f.go_to_marker(t, "20");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "new 1".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "20q", r"var i1_i: i1
+        f.go_to_marker(t, "20");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "new 1".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "20q", r"var i1_i: i1
 new (a: string) => any (+1 overload)", "new 1");
-            f.go_to_marker(t, "21");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this signature 1".to_string(), parameter_doc_comment: "param a".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "21q", r"var i1_i: i1
+        f.go_to_marker(t, "21");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this signature 1".to_string(), parameter_doc_comment: "param a".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "21q", r"var i1_i: i1
 (a: number) => number (+1 overload)", "this signature 1");
-            f.go_to_marker(t, "22");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is signature 2".to_string(), overloads_count: 2, ..Default::default() });
-            f.go_to_marker(t, "22q");
-            f.verify_quick_info_at(t, "22q", r"var i1_i: i1
+        f.go_to_marker(t, "22");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is signature 2".to_string(), overloads_count: 2, ..Default::default() });
+        f.go_to_marker(t, "22q");
+        f.verify_quick_info_at(t, "22q", r"var i1_i: i1
 (b: string) => number (+1 overload)", "this is signature 2");
-            f.verify_completions(t, Any::String("23".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), detail: Some("(method) i1.foo(a: number): number (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "foo 1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "foo2".to_string(), detail: Some("(method) i1.foo2(a: number): number (+1 overload)".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "foo3".to_string(), detail: Some("(method) i1.foo3(a: number): number (+1 overload)".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "foo4".to_string(), detail: Some("(method) i1.foo4(a: number): number (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "foo4 1".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "24");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "foo 1".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "24q", "(method) i1.foo(a: number): number (+1 overload)", "foo 1");
-            f.go_to_marker(t, "25");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "foo 2".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "25q", "(method) i1.foo(b: string): number (+1 overload)", "foo 2");
-            f.go_to_marker(t, "26");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "26q", "(method) i1.foo2(a: number): number (+1 overload)", "");
-            f.go_to_marker(t, "27");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "foo2 2".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "27q", "(method) i1.foo2(b: string): number (+1 overload)", "foo2 2");
-            f.go_to_marker(t, "28");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "28q", "(method) i1.foo3(a: number): number (+1 overload)", "");
-            f.go_to_marker(t, "29");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "29q", "(method) i1.foo3(b: string): number (+1 overload)", "");
-            f.go_to_marker(t, "30");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "foo4 1".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "30q", "(method) i1.foo4(a: number): number (+1 overload)", "foo4 1");
-            f.go_to_marker(t, "31");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "31q", "(method) i1.foo4(b: string): number (+1 overload)", "foo4 1");
-            f.go_to_marker(t, "32");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "new 2".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "32q", r"var i2_i: i2
+        f.verify_completions(t, Any::String("23".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), detail: Some("(method) i1.foo(a: number): number (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "foo 1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "foo2".to_string(), detail: Some("(method) i1.foo2(a: number): number (+1 overload)".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "foo3".to_string(), detail: Some("(method) i1.foo3(a: number): number (+1 overload)".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "foo4".to_string(), detail: Some("(method) i1.foo4(a: number): number (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "foo4 1".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "24");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "foo 1".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "24q", "(method) i1.foo(a: number): number (+1 overload)", "foo 1");
+        f.go_to_marker(t, "25");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "foo 2".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "25q", "(method) i1.foo(b: string): number (+1 overload)", "foo 2");
+        f.go_to_marker(t, "26");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "26q", "(method) i1.foo2(a: number): number (+1 overload)", "");
+        f.go_to_marker(t, "27");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "foo2 2".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "27q", "(method) i1.foo2(b: string): number (+1 overload)", "foo2 2");
+        f.go_to_marker(t, "28");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "28q", "(method) i1.foo3(a: number): number (+1 overload)", "");
+        f.go_to_marker(t, "29");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "29q", "(method) i1.foo3(b: string): number (+1 overload)", "");
+        f.go_to_marker(t, "30");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "foo4 1".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "30q", "(method) i1.foo4(a: number): number (+1 overload)", "foo4 1");
+        f.go_to_marker(t, "31");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "31q", "(method) i1.foo4(b: string): number (+1 overload)", "foo4 1");
+        f.go_to_marker(t, "32");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "new 2".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "32q", r"var i2_i: i2
 new (b: number) => any (+1 overload)", "new 2");
-            f.go_to_marker(t, "33");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "33q", r"var i2_i: i2
+        f.go_to_marker(t, "33");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "33q", r"var i2_i: i2
 new (a: string) => any (+1 overload)", "");
-            f.go_to_marker(t, "34");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "34q", r"var i2_i: i2
+        f.go_to_marker(t, "34");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "34q", r"var i2_i: i2
 (a: number) => number (+1 overload)", "");
-            f.go_to_marker(t, "35");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is signature 2".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "35q", r"var i2_i: i2
+        f.go_to_marker(t, "35");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is signature 2".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "35q", r"var i2_i: i2
 (b: string) => number (+1 overload)", "this is signature 2");
-            f.go_to_marker(t, "36");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "new 2".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "36q", r"var i3_i: i3
+        f.go_to_marker(t, "36");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "new 2".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "36q", r"var i3_i: i3
 new (b: number) => any (+1 overload)", "new 2");
-            f.go_to_marker(t, "37");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "new 1".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "37q", r"var i3_i: i3
+        f.go_to_marker(t, "37");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "new 1".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "37q", r"var i3_i: i3
 new (a: string) => any (+1 overload)", "new 1");
-            f.go_to_marker(t, "38");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is signature 1".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "38q", r"var i3_i: i3
+        f.go_to_marker(t, "38");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "this is signature 1".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "38q", r"var i3_i: i3
 (a: number) => number (+1 overload)", "this is signature 1");
-            f.go_to_marker(t, "39");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "39q", r"var i3_i: i3
+        f.go_to_marker(t, "39");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "39q", r"var i3_i: i3
 (b: string) => number (+1 overload)", "this is signature 1");
-            f.go_to_marker(t, "40");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "40q", r"var i4_i: i4
+        f.go_to_marker(t, "40");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "40q", r"var i4_i: i4
 new (b: number) => any (+1 overload)", "");
-            f.go_to_marker(t, "41");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "41q", r"var i4_i: i4
+        f.go_to_marker(t, "41");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "41q", r"var i4_i: i4
 new (a: string) => any (+1 overload)", "");
-            f.go_to_marker(t, "42");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "42q", r"var i4_i: i4
+        f.go_to_marker(t, "42");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "42q", r"var i4_i: i4
 (a: number) => number (+1 overload)", "");
-            f.go_to_marker(t, "43");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "43q", r"var i4_i: i4
+        f.go_to_marker(t, "43");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "43q", r"var i4_i: i4
 (b: string) => number (+1 overload)", "");
-            f.verify_completions(t, Any::String("44".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "prop1".to_string(), detail: Some("(method) c.prop1(a: number): number (+1 overload)".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop2".to_string(), detail: Some("(method) c.prop2(a: number): number (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "prop2 1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop3".to_string(), detail: Some("(method) c.prop3(a: number): number (+1 overload)".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop4".to_string(), detail: Some("(method) c.prop4(a: number): number (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "prop4 1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop5".to_string(), detail: Some("(method) c.prop5(a: number): number (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "prop5 1".to_string() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "45");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "45q", "(method) c.prop1(a: number): number (+1 overload)", "");
-            f.go_to_marker(t, "46");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "46q", "(method) c.prop1(b: string): number (+1 overload)", "");
-            f.go_to_marker(t, "47");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "prop2 1".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "47q", "(method) c.prop2(a: number): number (+1 overload)", "prop2 1");
-            f.go_to_marker(t, "48");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "48q", "(method) c.prop2(b: string): number (+1 overload)", "prop2 1");
-            f.go_to_marker(t, "49");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "49q", "(method) c.prop3(a: number): number (+1 overload)", "");
-            f.go_to_marker(t, "50");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "prop3 2".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "50q", "(method) c.prop3(b: string): number (+1 overload)", "prop3 2");
-            f.go_to_marker(t, "51");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "prop4 1".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "51q", "(method) c.prop4(a: number): number (+1 overload)", "prop4 1");
-            f.go_to_marker(t, "52");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "prop4 2".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "52q", "(method) c.prop4(b: string): number (+1 overload)", "prop4 2");
-            f.go_to_marker(t, "53");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "prop5 1".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "53q", "(method) c.prop5(a: number): number (+1 overload)", "prop5 1");
-            f.go_to_marker(t, "54");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "prop5 2".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "54q", "(method) c.prop5(b: string): number (+1 overload)", "prop5 2");
-            f.go_to_marker(t, "55");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "55q", "constructor c1(a: number): c1 (+1 overload)", "");
-            f.go_to_marker(t, "56");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "56q", "constructor c1(b: string): c1 (+1 overload)", "");
-            f.go_to_marker(t, "57");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c2 1".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "57q", "constructor c2(a: number): c2 (+1 overload)", "c2 1");
-            f.go_to_marker(t, "58");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "58q", "constructor c2(b: string): c2 (+1 overload)", "c2 1");
-            f.go_to_marker(t, "59");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "59q", "constructor c3(a: number): c3 (+1 overload)", "");
-            f.go_to_marker(t, "60");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c3 2".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "60q", "constructor c3(b: string): c3 (+1 overload)", "c3 2");
-            f.go_to_marker(t, "61");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c4 1".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "61q", "constructor c4(a: number): c4 (+1 overload)", "c4 1");
-            f.go_to_marker(t, "62");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c4 2".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "62q", "constructor c4(b: string): c4 (+1 overload)", "c4 2");
-            f.go_to_marker(t, "63");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c5 1".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "63q", "constructor c5(a: number): c5 (+1 overload)", "c5 1");
-            f.go_to_marker(t, "64");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c5 2".to_string(), overloads_count: 2, ..Default::default() });
-            f.verify_quick_info_at(t, "64q", "constructor c5(b: string): c5 (+1 overload)", "c5 2");
-            f.verify_completions(t, Any::String("65".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "c".to_string(), detail: Some("class c".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c1".to_string(), detail: Some("class c1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2".to_string(), detail: Some("class c2".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c3".to_string(), detail: Some("class c3".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c4".to_string(), detail: Some("class c4".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c5".to_string(), detail: Some("class c5".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c_i".to_string(), detail: Some("var c_i: c".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c1_i_1".to_string(), detail: Some("var c1_i_1: c1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_i_1".to_string(), detail: Some("var c2_i_1: c2".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c3_i_1".to_string(), detail: Some("var c3_i_1: c3".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c4_i_1".to_string(), detail: Some("var c4_i_1: c4".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c5_i_1".to_string(), detail: Some("var c5_i_1: c5".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c1_i_2".to_string(), detail: Some("var c1_i_2: c1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_i_2".to_string(), detail: Some("var c2_i_2: c2".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c3_i_2".to_string(), detail: Some("var c3_i_2: c3".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c4_i_2".to_string(), detail: Some("var c4_i_2: c4".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c5_i_2".to_string(), detail: Some("var c5_i_2: c5".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "multiOverload".to_string(), detail: Some("function multiOverload(a: number): string (+2 overloads)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "This is multiOverload F1 1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "ambientF1".to_string(), detail: Some("function ambientF1(a: number): string (+2 overloads)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "This is ambient F1 1".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_quick_info_at(t, "66", "var c1_i_1: c1", "");
-            f.verify_quick_info_at(t, "67", "var c2_i_2: c2", "");
-            f.verify_quick_info_at(t, "68", "var c3_i_2: c3", "");
-            f.verify_quick_info_at(t, "69", "var c4_i_1: c4", "");
-            f.verify_quick_info_at(t, "70", "var c5_i_1: c5", "");
-            f.verify_quick_info_at(t, "71", "function multiOverload(a: number): string (+2 overloads)", "This is multiOverload F1 1");
-            f.verify_quick_info_at(t, "72", "function multiOverload(b: string): string (+2 overloads)", "This is multiOverload F1 2");
-            f.verify_quick_info_at(t, "73", "function multiOverload(c: boolean): string (+2 overloads)", "This is multiOverload F1 3");
-            f.verify_quick_info_at(t, "74", "function ambientF1(a: number): string (+2 overloads)", "This is ambient F1 1");
-            f.verify_quick_info_at(t, "75", "function ambientF1(b: string): string (+2 overloads)", "This is ambient F1 2");
-            f.verify_quick_info_at(t, "76", "function ambientF1(c: boolean): boolean (+2 overloads)", "This is ambient F1 3");
-            f.verify_quick_info_at(t, "77", "(parameter) aa: i3", "");
-            f.verify_quick_info_at(t, "78", "constructor c1(a: number): c1 (+1 overload)", "");
-            f.verify_quick_info_at(t, "79", "constructor c1(b: string): c1 (+1 overload)", "");
-            f.verify_quick_info_at(t, "80", "constructor c1(a: number): c1 (+1 overload)", "");
-            f.verify_quick_info_at(t, "81", "constructor c2(a: number): c2 (+1 overload)", "c2 1");
-            f.verify_quick_info_at(t, "82", "constructor c2(b: string): c2 (+1 overload)", "c2 1");
-            f.verify_quick_info_at(t, "83", "constructor c2(a: number): c2 (+1 overload)", "c2 1");
-            f.verify_quick_info_at(t, "84", "constructor c3(a: number): c3 (+1 overload)", "");
-            f.verify_quick_info_at(t, "85", "constructor c3(b: string): c3 (+1 overload)", "c3 2");
-            f.verify_quick_info_at(t, "86", "constructor c3(a: number): c3 (+1 overload)", "");
-            f.verify_quick_info_at(t, "87", "constructor c4(a: number): c4 (+1 overload)", "c4 1");
-            f.verify_quick_info_at(t, "88", "constructor c4(b: string): c4 (+1 overload)", "c4 2");
-            f.verify_quick_info_at(t, "89", "constructor c4(a: number): c4 (+1 overload)", "c4 1");
-            f.verify_quick_info_at(t, "90", "constructor c5(a: number): c5 (+1 overload)", "c5 1");
-            f.verify_quick_info_at(t, "91", "constructor c5(b: string): c5 (+1 overload)", "c5 2");
-            f.verify_quick_info_at(t, "92", "constructor c5(a: number): c5 (+1 overload)", "c5 1");
-            f.verify_quick_info_at(t, "93", "(method) c.prop1(a: number): number (+1 overload)", "");
-            f.verify_quick_info_at(t, "94", "(method) c.prop1(b: string): number (+1 overload)", "");
-            f.verify_quick_info_at(t, "95", "(method) c.prop1(a: number): number (+1 overload)", "");
-            f.verify_quick_info_at(t, "96", "(method) c.prop2(a: number): number (+1 overload)", "prop2 1");
-            f.verify_quick_info_at(t, "97", "(method) c.prop2(b: string): number (+1 overload)", "prop2 1");
-            f.verify_quick_info_at(t, "98", "(method) c.prop2(a: number): number (+1 overload)", "prop2 1");
-            f.verify_quick_info_at(t, "99", "(method) c.prop3(a: number): number (+1 overload)", "");
-            f.verify_quick_info_at(t, "100", "(method) c.prop3(b: string): number (+1 overload)", "prop3 2");
-            f.verify_quick_info_at(t, "101", "(method) c.prop3(a: number): number (+1 overload)", "");
-            f.verify_quick_info_at(t, "102", "(method) c.prop4(a: number): number (+1 overload)", "prop4 1");
-            f.verify_quick_info_at(t, "103", "(method) c.prop4(b: string): number (+1 overload)", "prop4 2");
-            f.verify_quick_info_at(t, "104", "(method) c.prop4(a: number): number (+1 overload)", "prop4 1");
-            f.verify_quick_info_at(t, "105", "(method) c.prop5(a: number): number (+1 overload)", "prop5 1");
-            f.verify_quick_info_at(t, "106", "(method) c.prop5(b: string): number (+1 overload)", "prop5 2");
-            f.verify_quick_info_at(t, "107", "(method) c.prop5(a: number): number (+1 overload)", "prop5 1");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+        f.verify_completions(t, Any::String("44".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "prop1".to_string(), detail: Some("(method) c.prop1(a: number): number (+1 overload)".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop2".to_string(), detail: Some("(method) c.prop2(a: number): number (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "prop2 1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop3".to_string(), detail: Some("(method) c.prop3(a: number): number (+1 overload)".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop4".to_string(), detail: Some("(method) c.prop4(a: number): number (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "prop4 1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop5".to_string(), detail: Some("(method) c.prop5(a: number): number (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "prop5 1".to_string() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "45");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "45q", "(method) c.prop1(a: number): number (+1 overload)", "");
+        f.go_to_marker(t, "46");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "46q", "(method) c.prop1(b: string): number (+1 overload)", "");
+        f.go_to_marker(t, "47");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "prop2 1".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "47q", "(method) c.prop2(a: number): number (+1 overload)", "prop2 1");
+        f.go_to_marker(t, "48");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "48q", "(method) c.prop2(b: string): number (+1 overload)", "prop2 1");
+        f.go_to_marker(t, "49");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "49q", "(method) c.prop3(a: number): number (+1 overload)", "");
+        f.go_to_marker(t, "50");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "prop3 2".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "50q", "(method) c.prop3(b: string): number (+1 overload)", "prop3 2");
+        f.go_to_marker(t, "51");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "prop4 1".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "51q", "(method) c.prop4(a: number): number (+1 overload)", "prop4 1");
+        f.go_to_marker(t, "52");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "prop4 2".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "52q", "(method) c.prop4(b: string): number (+1 overload)", "prop4 2");
+        f.go_to_marker(t, "53");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "prop5 1".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "53q", "(method) c.prop5(a: number): number (+1 overload)", "prop5 1");
+        f.go_to_marker(t, "54");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "prop5 2".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "54q", "(method) c.prop5(b: string): number (+1 overload)", "prop5 2");
+        f.go_to_marker(t, "55");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "55q", "constructor c1(a: number): c1 (+1 overload)", "");
+        f.go_to_marker(t, "56");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "56q", "constructor c1(b: string): c1 (+1 overload)", "");
+        f.go_to_marker(t, "57");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c2 1".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "57q", "constructor c2(a: number): c2 (+1 overload)", "c2 1");
+        f.go_to_marker(t, "58");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "58q", "constructor c2(b: string): c2 (+1 overload)", "c2 1");
+        f.go_to_marker(t, "59");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "59q", "constructor c3(a: number): c3 (+1 overload)", "");
+        f.go_to_marker(t, "60");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c3 2".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "60q", "constructor c3(b: string): c3 (+1 overload)", "c3 2");
+        f.go_to_marker(t, "61");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c4 1".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "61q", "constructor c4(a: number): c4 (+1 overload)", "c4 1");
+        f.go_to_marker(t, "62");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c4 2".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "62q", "constructor c4(b: string): c4 (+1 overload)", "c4 2");
+        f.go_to_marker(t, "63");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c5 1".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "63q", "constructor c5(a: number): c5 (+1 overload)", "c5 1");
+        f.go_to_marker(t, "64");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "c5 2".to_string(), overloads_count: 2, ..Default::default() });
+        f.verify_quick_info_at(t, "64q", "constructor c5(b: string): c5 (+1 overload)", "c5 2");
+        f.verify_completions(t, Any::String("65".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "c".to_string(), detail: Some("class c".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c1".to_string(), detail: Some("class c1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2".to_string(), detail: Some("class c2".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c3".to_string(), detail: Some("class c3".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c4".to_string(), detail: Some("class c4".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c5".to_string(), detail: Some("class c5".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c_i".to_string(), detail: Some("var c_i: c".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c1_i_1".to_string(), detail: Some("var c1_i_1: c1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_i_1".to_string(), detail: Some("var c2_i_1: c2".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c3_i_1".to_string(), detail: Some("var c3_i_1: c3".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c4_i_1".to_string(), detail: Some("var c4_i_1: c4".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c5_i_1".to_string(), detail: Some("var c5_i_1: c5".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c1_i_2".to_string(), detail: Some("var c1_i_2: c1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c2_i_2".to_string(), detail: Some("var c2_i_2: c2".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c3_i_2".to_string(), detail: Some("var c3_i_2: c3".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c4_i_2".to_string(), detail: Some("var c4_i_2: c4".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "c5_i_2".to_string(), detail: Some("var c5_i_2: c5".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "multiOverload".to_string(), detail: Some("function multiOverload(a: number): string (+2 overloads)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "This is multiOverload F1 1".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "ambientF1".to_string(), detail: Some("function ambientF1(a: number): string (+2 overloads)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "This is ambient F1 1".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_quick_info_at(t, "66", "var c1_i_1: c1", "");
+        f.verify_quick_info_at(t, "67", "var c2_i_2: c2", "");
+        f.verify_quick_info_at(t, "68", "var c3_i_2: c3", "");
+        f.verify_quick_info_at(t, "69", "var c4_i_1: c4", "");
+        f.verify_quick_info_at(t, "70", "var c5_i_1: c5", "");
+        f.verify_quick_info_at(t, "71", "function multiOverload(a: number): string (+2 overloads)", "This is multiOverload F1 1");
+        f.verify_quick_info_at(t, "72", "function multiOverload(b: string): string (+2 overloads)", "This is multiOverload F1 2");
+        f.verify_quick_info_at(t, "73", "function multiOverload(c: boolean): string (+2 overloads)", "This is multiOverload F1 3");
+        f.verify_quick_info_at(t, "74", "function ambientF1(a: number): string (+2 overloads)", "This is ambient F1 1");
+        f.verify_quick_info_at(t, "75", "function ambientF1(b: string): string (+2 overloads)", "This is ambient F1 2");
+        f.verify_quick_info_at(t, "76", "function ambientF1(c: boolean): boolean (+2 overloads)", "This is ambient F1 3");
+        f.verify_quick_info_at(t, "77", "(parameter) aa: i3", "");
+        f.verify_quick_info_at(t, "78", "constructor c1(a: number): c1 (+1 overload)", "");
+        f.verify_quick_info_at(t, "79", "constructor c1(b: string): c1 (+1 overload)", "");
+        f.verify_quick_info_at(t, "80", "constructor c1(a: number): c1 (+1 overload)", "");
+        f.verify_quick_info_at(t, "81", "constructor c2(a: number): c2 (+1 overload)", "c2 1");
+        f.verify_quick_info_at(t, "82", "constructor c2(b: string): c2 (+1 overload)", "c2 1");
+        f.verify_quick_info_at(t, "83", "constructor c2(a: number): c2 (+1 overload)", "c2 1");
+        f.verify_quick_info_at(t, "84", "constructor c3(a: number): c3 (+1 overload)", "");
+        f.verify_quick_info_at(t, "85", "constructor c3(b: string): c3 (+1 overload)", "c3 2");
+        f.verify_quick_info_at(t, "86", "constructor c3(a: number): c3 (+1 overload)", "");
+        f.verify_quick_info_at(t, "87", "constructor c4(a: number): c4 (+1 overload)", "c4 1");
+        f.verify_quick_info_at(t, "88", "constructor c4(b: string): c4 (+1 overload)", "c4 2");
+        f.verify_quick_info_at(t, "89", "constructor c4(a: number): c4 (+1 overload)", "c4 1");
+        f.verify_quick_info_at(t, "90", "constructor c5(a: number): c5 (+1 overload)", "c5 1");
+        f.verify_quick_info_at(t, "91", "constructor c5(b: string): c5 (+1 overload)", "c5 2");
+        f.verify_quick_info_at(t, "92", "constructor c5(a: number): c5 (+1 overload)", "c5 1");
+        f.verify_quick_info_at(t, "93", "(method) c.prop1(a: number): number (+1 overload)", "");
+        f.verify_quick_info_at(t, "94", "(method) c.prop1(b: string): number (+1 overload)", "");
+        f.verify_quick_info_at(t, "95", "(method) c.prop1(a: number): number (+1 overload)", "");
+        f.verify_quick_info_at(t, "96", "(method) c.prop2(a: number): number (+1 overload)", "prop2 1");
+        f.verify_quick_info_at(t, "97", "(method) c.prop2(b: string): number (+1 overload)", "prop2 1");
+        f.verify_quick_info_at(t, "98", "(method) c.prop2(a: number): number (+1 overload)", "prop2 1");
+        f.verify_quick_info_at(t, "99", "(method) c.prop3(a: number): number (+1 overload)", "");
+        f.verify_quick_info_at(t, "100", "(method) c.prop3(b: string): number (+1 overload)", "prop3 2");
+        f.verify_quick_info_at(t, "101", "(method) c.prop3(a: number): number (+1 overload)", "");
+        f.verify_quick_info_at(t, "102", "(method) c.prop4(a: number): number (+1 overload)", "prop4 1");
+        f.verify_quick_info_at(t, "103", "(method) c.prop4(b: string): number (+1 overload)", "prop4 2");
+        f.verify_quick_info_at(t, "104", "(method) c.prop4(a: number): number (+1 overload)", "prop4 1");
+        f.verify_quick_info_at(t, "105", "(method) c.prop5(a: number): number (+1 overload)", "prop5 1");
+        f.verify_quick_info_at(t, "106", "(method) c.prop5(b: string): number (+1 overload)", "prop5 2");
+        f.verify_quick_info_at(t, "107", "(method) c.prop5(a: number): number (+1 overload)", "prop5 1");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4833,18 +4105,11 @@ use crate::tests::prelude::*;
 // commentsUnion_test.go:10
 pub fn test_comments_union(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"var a: Array<string> | Array<number>;
+    let content: &str = r"var a: Array<string> | Array<number>;
 a./*1*/length";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "(property) Array<T>.length: number", "Gets or sets the length of the array. This is a number one higher than the highest index in the array.");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "(property) Array<T>.length: number", "Gets or sets the length of the array. This is a number one higher than the highest index in the array.");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4855,8 +4120,7 @@ use crate::tests::prelude::*;
 // commentsVariables_test.go:12
 pub fn test_comments_variables(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/** This is my variable*/
+    let content: &str = r"/** This is my variable*/
 var myV/*1*/ariable = 10;
 /*2*/
 /** d variable*/
@@ -4896,38 +4160,32 @@ function foo2(b: string): void;
 function foo2(aOrb) {
 }
 var x = fo/*15*/o2;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "var myVariable: number", "This is my variable");
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "myVariable".to_string(), detail: Some("var myVariable: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "This is my variable".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "myVariable".to_string(), detail: Some("var myVariable: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "This is my variable".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "d".to_string(), detail: Some("var d: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "d variable".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("4".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), detail: Some("function foo(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "foos comment".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "fooVar".to_string(), detail: Some("var fooVar: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "fooVar comment".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "5");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "foos comment".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "5q", "function foo(): void", "foos comment");
-            f.go_to_marker(t, "6");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "fooVar comment".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "6q", "var fooVar: () => void", "fooVar comment");
-            f.verify_completions(t, Any::String("7".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), detail: Some("function foo(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "foos comment".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "fooVar".to_string(), detail: Some("var fooVar: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "fooVar comment".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "8");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "foos comment".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "8q", "function foo(): void", "foos comment");
-            f.go_to_marker(t, "9");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "fooVar comment".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "9q", "var fooVar: () => void", "fooVar comment");
-            f.verify_quick_info_at(t, "9aq", "var fooVar: () => void", "fooVar comment");
-            f.verify_completions(t, Any::String("10".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i".to_string(), detail: Some("var i: c".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "instance comment".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("11".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1_i".to_string(), detail: Some("var i1_i: i1".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "interface instance comments".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_quick_info_at(t, "12", "var fooVar: () => void", "fooVar comment");
-            f.verify_quick_info_at(t, "13", "var fooVar: () => void", "fooVar comment");
-            f.verify_quick_info_at(t, "14", "function foo(): void", "foos comment");
-            f.verify_quick_info_at(t, "15", "function foo2(a: number): void (+1 overload)", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "var myVariable: number", "This is my variable");
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "myVariable".to_string(), detail: Some("var myVariable: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "This is my variable".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "myVariable".to_string(), detail: Some("var myVariable: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "This is my variable".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "d".to_string(), detail: Some("var d: number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "d variable".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("4".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), detail: Some("function foo(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "foos comment".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "fooVar".to_string(), detail: Some("var fooVar: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "fooVar comment".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "5");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "foos comment".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "5q", "function foo(): void", "foos comment");
+        f.go_to_marker(t, "6");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "fooVar comment".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "6q", "var fooVar: () => void", "fooVar comment");
+        f.verify_completions(t, Any::String("7".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), detail: Some("function foo(): void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "foos comment".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "fooVar".to_string(), detail: Some("var fooVar: () => void".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "fooVar comment".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "8");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "foos comment".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "8q", "function foo(): void", "foos comment");
+        f.go_to_marker(t, "9");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { doc_comment: "fooVar comment".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "9q", "var fooVar: () => void", "fooVar comment");
+        f.verify_quick_info_at(t, "9aq", "var fooVar: () => void", "fooVar comment");
+        f.verify_completions(t, Any::String("10".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i".to_string(), detail: Some("var i: c".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "instance comment".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("11".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i1_i".to_string(), detail: Some("var i1_i: i1".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "interface instance comments".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_quick_info_at(t, "12", "var fooVar: () => void", "fooVar comment");
+        f.verify_quick_info_at(t, "13", "var fooVar: () => void", "fooVar comment");
+        f.verify_quick_info_at(t, "14", "function foo(): void", "foos comment");
+        f.verify_quick_info_at(t, "15", "function foo2(a: number): void (+1 overload)", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4938,18 +4196,11 @@ use crate::tests::prelude::*;
 // completionAfterAtChar_test.go:11
 pub fn test_completion_after_at_char(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 @a/**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBALS.clone()), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBALS.clone()), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4960,18 +4211,11 @@ use crate::tests::prelude::*;
 // completionAfterBackslashFollowingString_test.go:11
 pub fn test_completion_after_backslash_following_string(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @lib: es5
+    let content: &str = r#"// @lib: es5
 Harness.newLine = ""\n/**/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBALS.clone()), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBALS.clone()), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4982,20 +4226,13 @@ use crate::tests::prelude::*;
 // completionAfterBrace_test.go:11
 pub fn test_completion_after_brace(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 
 }/**/
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBALS.clone()), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBALS.clone()), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5006,17 +4243,10 @@ use crate::tests::prelude::*;
 // completionAfterCallExpression_test.go:11
 pub fn test_completion_after_call_expression(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "let x = someCall() /**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("satisfies".to_string()), Any::String("as".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "let x = someCall() /**/";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("satisfies".to_string()), Any::String("as".to_string())], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5027,18 +4257,11 @@ use crate::tests::prelude::*;
 // completionAfterDotDotDot_test.go:11
 pub fn test_completion_after_dot_dot_dot(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 .../**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBALS.clone()), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBALS.clone()), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5049,8 +4272,7 @@ use crate::tests::prelude::*;
 // completionAfterExtendsL10nInJs_test.go:10
 pub fn test_completion_after_extends_l10n_in_js(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"
+    let content: &str = r#"
 // @allowJs: true
 // @checkJs: true
 // @Filename: /interfaces.d.ts
@@ -5075,16 +4297,10 @@ class GenericL10n extends L10n/*1*/ {
 }
 
 "#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.get_completions(t, None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.get_completions(t, None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5095,19 +4311,12 @@ use crate::tests::prelude::*;
 // completionAfterImportWithJSDoc_test.go:15
 pub fn test_completion_after_import_with_jsdoc(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /index.ts
+    let content: &str = r"// @Filename: /index.ts
 /** hello! */
 import /**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems::default()), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems::default()), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5118,21 +4327,14 @@ use crate::tests::prelude::*;
 // completionAfterNewline_test.go:12
 pub fn test_completion_after_newline(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 let foo /*1*/
 /*2*/
 /*3*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), None);
-            f.verify_completions(t, Any::StringSlice(vec!["2".to_string(), "3".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_globals_plus(&[Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), ..Default::default() })], false)), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), None);
+        f.verify_completions(t, Any::StringSlice(vec!["2".to_string(), "3".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_globals_plus(&[Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), ..Default::default() })], false)), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5143,20 +4345,13 @@ use crate::tests::prelude::*;
 // completionAfterNewline2_test.go:12
 pub fn test_completion_after_newline2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 let foo = 5 as const /*1*/
 /*2*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), None);
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_globals_plus(&[Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), ..Default::default() })], false)), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), None);
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_globals_plus(&[Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), ..Default::default() })], false)), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5167,8 +4362,7 @@ use crate::tests::prelude::*;
 // completionAfterQuestionDot_test.go:12
 pub fn test_completion_after_question_dot(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @strict: true
+    let content: &str = r#"// @strict: true
 class User {
     #foo: User;
     bar: User;
@@ -5182,17 +4376,11 @@ class User {
         this?.bar[|?./*3*/|];
     }
 };"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "city".to_string(), detail: Some("(property) city: string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "postal code".to_string(), insert_text: Some(r#"?.["postal code"]"#.to_string()), detail: Some(r#"(property) "postal code": string"#.to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: r#"?.["postal code"]"#.to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "address".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "bar".to_string(), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "address".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "bar".to_string(), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "city".to_string(), detail: Some("(property) city: string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "postal code".to_string(), insert_text: Some(r#"?.["postal code"]"#.to_string()), detail: Some(r#"(property) "postal code": string"#.to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: r#"?.["postal code"]"#.to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "address".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "bar".to_string(), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "address".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "bar".to_string(), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5203,8 +4391,7 @@ use crate::tests::prelude::*;
 // completionAfterTrailingAtInJSDoc1_test.go:12
 pub fn test_completion_after_trailing_at_in_jsdoc1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: /atTagPosition.js
 /**
  * @/*1*/
@@ -5224,15 +4411,9 @@ function bar(x, y) {}
  */
 function baz(y) {}
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string(), "3".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "param".to_string(), kind: Some(lsproto::CompletionItemKind::Keyword), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string(), "3".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "param".to_string(), kind: Some(lsproto::CompletionItemKind::Keyword), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5243,21 +4424,14 @@ use crate::tests::prelude::*;
 // completionAmbientPropertyDeclaration_test.go:11
 pub fn test_completion_ambient_property_declaration(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class C {
+    let content: &str = r"class C {
     /*1*/ declare property: number;
     /*2*/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_CLASS_ELEMENT_KEYWORDS.clone()), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_CLASS_ELEMENT_KEYWORDS.clone()), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_CLASS_ELEMENT_KEYWORDS.clone()), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_CLASS_ELEMENT_KEYWORDS.clone()), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5268,20 +4442,13 @@ use crate::tests::prelude::*;
 // completionAsKeyword_test.go:13
 pub fn test_completion_as_keyword(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"const x = this /*1*/
+    let content: &str = r"const x = this /*1*/
 function foo() {
     const x = this /*2*/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "as".to_string(), sort_text: Some("15".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "as".to_string(), sort_text: Some("15".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5292,18 +4459,11 @@ use crate::tests::prelude::*;
 // completionAtCaseClause_test.go:11
 pub fn test_completion_at_case_clause(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 case /**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBALS.clone()), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBALS.clone()), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5314,17 +4474,10 @@ use crate::tests::prelude::*;
 // completionAtDottedNamespace_test.go:11
 pub fn test_completion_at_dotted_namespace(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "namespace wwer./**/w";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "namespace wwer./**/w";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5335,8 +4488,7 @@ use crate::tests::prelude::*;
 // completionAutoInsertQuestionDot_test.go:12
 pub fn test_completion_auto_insert_question_dot(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @strict: true
+    let content: &str = r#"// @strict: true
 interface User {
     address?: {
         city: string;
@@ -5345,15 +4497,9 @@ interface User {
 };
 declare const user: User;
 user.address[|./**/|]"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "city".to_string(), insert_text: Some("?.city".to_string()), detail: Some("(property) city: string".to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: "?.city".to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "postal code".to_string(), insert_text: Some(r#"?.["postal code"]"#.to_string()), detail: Some(r#"(property) "postal code": string"#.to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: r#"?.["postal code"]"#.to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "city".to_string(), insert_text: Some("?.city".to_string()), detail: Some("(property) city: string".to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: "?.city".to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "postal code".to_string(), insert_text: Some(r#"?.["postal code"]"#.to_string()), detail: Some(r#"(property) "postal code": string"#.to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: r#"?.["postal code"]"#.to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5364,22 +4510,15 @@ use crate::tests::prelude::*;
 // completionBeforeSemanticDiagnosticsInArrowFunction1_test.go:12
 pub fn test_completion_before_semantic_diagnostics_in_arrow_function1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"var f4 = <T>(x: T/**/ ) => {
+    let content: &str = r"var f4 = <T>(x: T/**/ ) => {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.backspace(t, 1);
-            f.insert(t, "A");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "T".to_string(), detail: Some("(type parameter) T in <T>(x: A): void".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_number_of_errors_in_current_file(t, 1);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.backspace(t, 1);
+        f.insert(t, "A");
+        f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "T".to_string(), detail: Some("(type parameter) T in <T>(x: A): void".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_number_of_errors_in_current_file(t, 1);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5390,8 +4529,7 @@ use crate::tests::prelude::*;
 // completionClassMemberAfterJSDocWithInvalidJSDocTagInTheComment1_test.go:11
 pub fn test_completion_class_member_after_jsdoc_with_invalid_jsdoc_tag_in_the_comment1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"export class NeedsPrefix {
+    let content: &str = r"export class NeedsPrefix {
   private _prefixes: {
     add: Record<string, any>;
     browsers: {selected: string[]};
@@ -5405,15 +4543,9 @@ pub fn test_completion_class_member_after_jsdoc_with_invalid_jsdoc_tag_in_the_co
     return true;
   }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems::default()), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems::default()), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5424,8 +4556,7 @@ use crate::tests::prelude::*;
 // completionClassMemberSnippetCrossFileNodeReuse1_test.go:14
 pub fn test_completion_class_member_snippet_cross_file_node_reuse1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @strict: true
+    let content: &str = r#"// @strict: true
 // @filename: KlassConstructor.ts
 type GenericConstructor<T> = new (...args: any[]) => T;
 export type KlassConstructor<Cls extends GenericConstructor<any>> =
@@ -5446,18 +4577,12 @@ export class CollapsibleContainerNode extends ElementNode {
 
   /*1*/
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let mut opts786 = f.get_options();
-            opts786.format_code_settings.insert_space_after_constructor = Tristate::False;
-            f.configure(t, opts786);
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: r#"["constructor"]"#.to_string(), insert_text: Some(r#"["constructor"]: KlassConstructor<typeof ElementNode>;"#.to_string()), filter_text: Some(r#"["constructor"]"#.to_string()), additional_text_edits: fourslash::ANY_TEXT_EDITS.clone(), data: Some(lsproto::CompletionItemData { source: "ClassMemberSnippet/".to_string(), ..Default::default() }), ..Default::default() })], ..Default::default() }), user_preferences: Some(lsutil::UserPreferences { include_completions_with_class_member_snippets: Tristate::True, ..Default::default() }) }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        let mut opts786 = f.get_options();
+        opts786.format_code_settings.insert_space_after_constructor = Tristate::False;
+        f.configure(t, opts786);
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: r#"["constructor"]"#.to_string(), insert_text: Some(r#"["constructor"]: KlassConstructor<typeof ElementNode>;"#.to_string()), filter_text: Some(r#"["constructor"]"#.to_string()), additional_text_edits: fourslash::ANY_TEXT_EDITS.clone(), data: Some(lsproto::CompletionItemData { source: "ClassMemberSnippet/".to_string(), ..Default::default() }), ..Default::default() })], ..Default::default() }), user_preferences: Some(lsutil::UserPreferences { include_completions_with_class_member_snippets: Tristate::True, ..Default::default() }) }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5468,8 +4593,7 @@ use crate::tests::prelude::*;
 // completionClassMembersAfterConstAssertionInitializer_test.go:13
 pub fn test_class_members_after_const_assertion_initializer(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"
+    let content: &str = r"
 interface A {
 	a: number
 	def: string
@@ -5480,15 +4604,9 @@ class B implements A {
 	/**/
 }
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(go::append(vec![Any::CompletionItem(lsproto::CompletionItem { label: "def".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("11".to_string()), ..Default::default() })], &util::COMPLETION_CLASS_ELEMENT_KEYWORDS[..])), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(go::append(vec![Any::CompletionItem(lsproto::CompletionItem { label: "def".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("11".to_string()), ..Default::default() })], &util::COMPLETION_CLASS_ELEMENT_KEYWORDS[..])), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5499,8 +4617,7 @@ use crate::tests::prelude::*;
 // completionCloneQuestionToken_test.go:14
 pub fn test_completion_clone_question_token(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @strict: false
+    let content: &str = r"// @strict: false
 // @Filename: /file2.ts
 type TCallback<T = any> = (options: T) => any;
 type InKeyOf<E> = { [K in keyof E]?: TCallback<E[K]>; };
@@ -5513,16 +4630,10 @@ type TwoKeys = Record<'a' | 'b', { thisFails?: any; }>
 class Foo extends Bar<TwoKeys> {
     /**/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "baz".to_string(), insert_text: Some(r"baz(a: { a?: (options: { thisFails?: any; }) => any; b?: (options: { thisFails?: any; }) => any; }): void {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "baz".to_string(), insert_text: Some(r"baz(a: { a?: (options: { thisFails?: any; }) => any; b?: (options: { thisFails?: any; }) => any; }): void {
 }".to_string()), filter_text: Some("baz".to_string()), ..Default::default() })], ..Default::default() }), user_preferences: Some(lsutil::UserPreferences { include_completions_with_class_member_snippets: Tristate::True, ..Default::default() }) }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5533,8 +4644,7 @@ use crate::tests::prelude::*;
 // completionColonToken_test.go:11
 pub fn test_completion_colon_token(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"
+    let content: &str = r"
 // @filename: /a.ts
 :/*a*/
 
@@ -5544,17 +4654,11 @@ function b(class: /*b*/) {}
 // @filename: /c.ts
 function c(enum: /*c*/) {}
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            for marker in f.ranges() {
-                f.verify_completions(t, Any::RangeMarker(marker), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: util::COMPLETION_GLOBALS.clone(), ..Default::default() }), ..Default::default() }));
-            }
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        for marker in f.ranges() {
+            f.verify_completions(t, Any::RangeMarker(marker), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: util::COMPLETION_GLOBALS.clone(), ..Default::default() }), ..Default::default() }));
+        }
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5565,8 +4669,7 @@ use crate::tests::prelude::*;
 // completionDetailSignature_test.go:13
 pub fn test_completion_detail_signature(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"
+    let content: &str = r"
 
 /*a*/
 
@@ -5575,16 +4678,10 @@ function foo(x: number): number;
 function foo(x: any): any {
     return x;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("a".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), kind: Some(lsproto::CompletionItemKind::Function), sort_text: Some("11".to_string()), detail: Some(r"function foo(x: string): string
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("a".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), kind: Some(lsproto::CompletionItemKind::Function), sort_text: Some("11".to_string()), detail: Some(r"function foo(x: string): string
 function foo(x: number): number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5595,8 +4692,7 @@ use crate::tests::prelude::*;
 // completionDetailsOfContextSensitiveParameterNoCrash_test.go:10
 pub fn test_completion_details_of_context_sensitive_parameter_no_crash(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @strict: true
+    let content: &str = r"// @strict: true
 type __ = never;
 
 interface CurriedFunction1<T1, R> {
@@ -5683,15 +4779,9 @@ export const createStyling: CurriedFunction3<
     },
     3
 );";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_hover(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_hover(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5702,8 +4792,7 @@ use crate::tests::prelude::*;
 // completionEntryAfterASIExpressionInClass_test.go:11
 pub fn test_completion_entry_after_asi_expression_in_class(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class Parent {
+    let content: &str = r"class Parent {
   protected shouldWork() {
       console.log();
   }
@@ -5720,15 +4809,9 @@ class ChildTwo extends Parent {
   x = () => 1
   /*root*/ //nothing
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::StringSlice(vec!["insideid".to_string(), "root".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("shouldWork".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::StringSlice(vec!["insideid".to_string(), "root".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("shouldWork".to_string())], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5739,8 +4822,7 @@ use crate::tests::prelude::*;
 // completionEntryClassMembersWithInferredFunctionReturnType1_test.go:14
 pub fn test_completion_entry_class_members_with_inferred_function_return_type1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: /tokenizer.ts
+    let content: &str = r#"// @filename: /tokenizer.ts
 export default abstract class Tokenizer {
   errorBuilder() {
     return (pos: number, lineStart: number, curLine: number) => {};
@@ -5752,16 +4834,10 @@ import Tokenizer from "./tokenizer.js";
 export default abstract class ExpressionParser extends Tokenizer {
   /**/
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "errorBuilder".to_string(), insert_text: Some(r"errorBuilder(): (pos: number, lineStart: number, curLine: number) => void {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "errorBuilder".to_string(), insert_text: Some(r"errorBuilder(): (pos: number, lineStart: number, curLine: number) => void {
 }".to_string()), filter_text: Some("errorBuilder".to_string()), ..Default::default() })], ..Default::default() }), user_preferences: Some(lsutil::UserPreferences { include_completions_with_class_member_snippets: Tristate::True, ..Default::default() }) }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5772,20 +4848,13 @@ use crate::tests::prelude::*;
 // completionEntryForArgumentConstrainedToString_test.go:11
 pub fn test_completion_entry_for_argument_constrained_to_string(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"declare function test<P extends "a" | "b">(p: P): void;
+    let content: &str = r#"declare function test<P extends "a" | "b">(p: P): void;
 
 test(/*ts*/)
 "#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::StringSlice(vec!["ts".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String(r#""a""#.to_string()), Any::String(r#""b""#.to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::StringSlice(vec!["ts".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String(r#""a""#.to_string()), Any::String(r#""b""#.to_string())], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5796,19 +4865,12 @@ use crate::tests::prelude::*;
 // completionEntryForArrayElementConstrainedToString_test.go:11
 pub fn test_completion_entry_for_array_element_constrained_to_string(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"declare function test<T extends 'a' | 'b'>(a: { foo: T[] }): void
+    let content: &str = r"declare function test<T extends 'a' | 'b'>(a: { foo: T[] }): void
 
 test({ foo: [/*ts*/] })";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::StringSlice(vec!["ts".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String(r#""a""#.to_string()), Any::String(r#""b""#.to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::StringSlice(vec!["ts".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String(r#""a""#.to_string()), Any::String(r#""b""#.to_string())], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5819,19 +4881,12 @@ use crate::tests::prelude::*;
 // completionEntryForArrayElementConstrainedToString2_test.go:11
 pub fn test_completion_entry_for_array_element_constrained_to_string2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"declare function test<T extends 'a' | 'b'>(a: { foo: T[] }): void
+    let content: &str = r"declare function test<T extends 'a' | 'b'>(a: { foo: T[] }): void
 
 test({ foo: ['a', /*ts*/] })";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::StringSlice(vec!["ts".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String(r#""a""#.to_string()), Any::String(r#""b""#.to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::StringSlice(vec!["ts".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String(r#""a""#.to_string()), Any::String(r#""b""#.to_string())], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5842,8 +4897,7 @@ use crate::tests::prelude::*;
 // completionEntryForClassMembers_StaticWhenBaseTypeIsNotResolved_test.go:11
 pub fn test_completion_entry_for_class_members_static_when_base_type_is_not_resolved(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /a.ts
+    let content: &str = r"// @Filename: /a.ts
 import React from 'react'
 class Slider extends React.Component {
     static defau/**/ltProps = {
@@ -5853,15 +4907,9 @@ class Slider extends React.Component {
     }
     handleChange = () => 10;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_CLASS_ELEMENT_KEYWORDS.clone()), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_CLASS_ELEMENT_KEYWORDS.clone()), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5872,24 +4920,17 @@ use crate::tests::prelude::*;
 // completionEntryForConst_test.go:12
 pub fn test_completion_entry_for_const(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"const c = "s";
+    let content: &str = r#"const c = "s";
 /*1*/
 const d = 1
 d/*2*/
 const e = 1
 /*3*/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::StringSlice(vec!["1".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "c".to_string(), detail: Some(r#"const c: "s""#.to_string()), kind: Some(lsproto::CompletionItemKind::Variable), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::StringSlice(vec!["2".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "d".to_string(), detail: Some("const d: 1".to_string()), kind: Some(lsproto::CompletionItemKind::Variable), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::StringSlice(vec!["3".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "e".to_string(), detail: Some("const e: 1".to_string()), kind: Some(lsproto::CompletionItemKind::Variable), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::StringSlice(vec!["1".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "c".to_string(), detail: Some(r#"const c: "s""#.to_string()), kind: Some(lsproto::CompletionItemKind::Variable), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::StringSlice(vec!["2".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "d".to_string(), detail: Some("const d: 1".to_string()), kind: Some(lsproto::CompletionItemKind::Variable), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::StringSlice(vec!["3".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "e".to_string(), detail: Some("const e: 1".to_string()), kind: Some(lsproto::CompletionItemKind::Variable), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5900,8 +4941,7 @@ use crate::tests::prelude::*;
 // completionEntryForDeferredMappedTypeMembers_test.go:11
 pub fn test_completion_entry_for_deferred_mapped_type_members(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: test.ts
+    let content: &str = r"// @Filename: test.ts
 interface A { a: A }
 declare let a: A;
 type Deep<T> = { [K in keyof T]: Deep<T[K]> }
@@ -5910,15 +4950,9 @@ const out = foo(a);
 out./*1*/a
 out.a./*2*/a
 out.a.a./*3*/a";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::MarkerSlice(f.markers()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("a".to_string())]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::MarkerSlice(f.markers()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("a".to_string())]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5929,19 +4963,12 @@ use crate::tests::prelude::*;
 // completionEntryForPropertyConstrainedToString_test.go:11
 pub fn test_completion_entry_for_property_constrained_to_string(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"declare function test<P extends "a" | "b">(p: { type: P }): void;
+    let content: &str = r#"declare function test<P extends "a" | "b">(p: { type: P }): void;
 
 test({ type: /*ts*/ })"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::StringSlice(vec!["ts".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String(r#""a""#.to_string()), Any::String(r#""b""#.to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::StringSlice(vec!["ts".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String(r#""a""#.to_string()), Any::String(r#""b""#.to_string())], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5952,8 +4979,7 @@ use crate::tests::prelude::*;
 // completionEntryForPropertyFromUnionOfModuleType_test.go:12
 pub fn test_completion_entry_for_property_from_union_of_module_type(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace E {
+    let content: &str = r"namespace E {
     export var n = 1;
     export var x = 0;
 }
@@ -5963,15 +4989,9 @@ namespace F {
 }
 var q: typeof E | typeof F;
 var j = q./*1*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "n".to_string(), detail: Some("(property) n: number".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "n".to_string(), detail: Some("(property) n: number".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5982,17 +5002,10 @@ use crate::tests::prelude::*;
 // completionEntryForShorthandPropertyAssignment_test.go:12
 pub fn test_completion_entry_for_shorthand_property_assignment(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "var person: {name:string; id:number} = {n/**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "name".to_string(), kind: Some(lsproto::CompletionItemKind::Field), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "var person: {name:string; id:number} = {n/**/";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "name".to_string(), kind: Some(lsproto::CompletionItemKind::Field), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6003,8 +5016,7 @@ use crate::tests::prelude::*;
 // completionEntryForUnionProperty_test.go:12
 pub fn test_completion_entry_for_union_property(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface One {
+    let content: &str = r"interface One {
     commonProperty: number;
     commonFunction(): number;
 }
@@ -6017,15 +5029,9 @@ interface Two {
 var x : One | Two;
 
 x./**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "commonFunction".to_string(), detail: Some("(method) commonFunction(): number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "commonProperty".to_string(), detail: Some("(property) commonProperty: string | number".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "commonFunction".to_string(), detail: Some("(method) commonFunction(): number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "commonProperty".to_string(), detail: Some("(property) commonProperty: string | number".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6036,8 +5042,7 @@ use crate::tests::prelude::*;
 // completionEntryForUnionProperty2_test.go:12
 pub fn test_completion_entry_for_union_property2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 interface One {
     commonProperty: string;
     commonFunction(): number;
@@ -6054,16 +5059,10 @@ var x : One | Two;
 
 x.commonProperty./*1*/;
 x.anotherProperty./*2*/;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "toLocaleString".to_string(), detail: Some("(method) toLocaleString(): string (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Returns a date converted to a string using the current locale.".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "toString".to_string(), detail: Some("(method) toString(): string (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Returns a string representation of a string.".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "valueOf".to_string(), detail: Some("(method) valueOf(): string | number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Returns the primitive value of the specified object.".to_string() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "toLocaleString".to_string(), detail: Some("(method) toLocaleString(): string (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Returns a date converted to a string using the current locale.".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "toString".to_string(), detail: Some("(method) toString(): string (+1 overload)".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Returns a string representation of a string.".to_string() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "valueOf".to_string(), detail: Some("(method) valueOf(): string | number".to_string()), documentation: Some(lsproto::StringOrMarkupContent { markup_content: Some(lsproto::MarkupContent { kind: lsproto::MarkupKind::Markdown, value: "Returns the primitive value of the specified object.".to_string() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6074,8 +5073,7 @@ use crate::tests::prelude::*;
 // completionEntryOnNarrowedType_test.go:12
 pub fn test_completion_entry_on_narrowed_type(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"function foo(strOrNum: string | number) {
+    let content: &str = r#"function foo(strOrNum: string | number) {
     /*1*/
     if (typeof strOrNum === "number") {
         strOrNum/*2*/;
@@ -6084,17 +5082,11 @@ pub fn test_completion_entry_on_narrowed_type(t: &T) {
         strOrNum/*3*/;
     }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "strOrNum".to_string(), detail: Some("(parameter) strOrNum: string | number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "strOrNum".to_string(), detail: Some("(parameter) strOrNum: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "strOrNum".to_string(), detail: Some("(parameter) strOrNum: string".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "strOrNum".to_string(), detail: Some("(parameter) strOrNum: string | number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "strOrNum".to_string(), detail: Some("(parameter) strOrNum: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "strOrNum".to_string(), detail: Some("(parameter) strOrNum: string".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6105,18 +5097,11 @@ use crate::tests::prelude::*;
 // completionExportFrom_test.go:13
 pub fn test_completion_export_from(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"export * /*1*/;
+    let content: &str = r"export * /*1*/;
 export {} /*2*/;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "from".to_string(), sort_text: Some("15".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "from".to_string(), sort_text: Some("15".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6127,8 +5112,7 @@ use crate::tests::prelude::*;
 // completionFilterText1_test.go:13
 pub fn test_completion_filter_text1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"
+    let content: &str = r"
 class Foo1 {
     #bar: number;
     constructor(bar: number) {
@@ -6185,22 +5169,16 @@ class Foo8 {
     }
 }
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::EditRange(fourslash::EditRange { insert: Some(Arc::clone(&f.ranges()[0])), replace: Some(Arc::clone(&f.ranges()[0])) }) }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("11".to_string()), filter_text: Some("bar".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("5".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("11".to_string()), filter_text: Some("bar".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::EditRange(fourslash::EditRange { insert: Some(Arc::clone(&f.ranges()[1])), replace: Some(Arc::clone(&f.ranges()[1])) }) }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("11".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("6".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::EditRange(fourslash::EditRange { insert: Some(Arc::clone(&f.ranges()[2])), replace: Some(Arc::clone(&f.ranges()[2])) }) }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("11".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("14".to_string()), filter_text: Some("bar".to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { insert_replace_edit: Some(lsproto::InsertReplaceEdit { new_text: "this.#bar".to_string(), insert: f.ranges()[3].ls_range, replace: f.ranges()[3].ls_range }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("7".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("14".to_string()), filter_text: Some("bar".to_string()), insert_text: Some("this.#bar".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("4".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("14".to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { insert_replace_edit: Some(lsproto::InsertReplaceEdit { new_text: "this.#bar".to_string(), insert: f.ranges()[4].ls_range, replace: f.ranges()[4].ls_range }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("8".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("14".to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { insert_replace_edit: Some(lsproto::InsertReplaceEdit { new_text: "this.#bar".to_string(), insert: f.ranges()[5].ls_range, replace: f.ranges()[5].ls_range }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::EditRange(fourslash::EditRange { insert: Some(Arc::clone(&f.ranges()[0])), replace: Some(Arc::clone(&f.ranges()[0])) }) }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("11".to_string()), filter_text: Some("bar".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("5".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("11".to_string()), filter_text: Some("bar".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::EditRange(fourslash::EditRange { insert: Some(Arc::clone(&f.ranges()[1])), replace: Some(Arc::clone(&f.ranges()[1])) }) }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("11".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("6".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::EditRange(fourslash::EditRange { insert: Some(Arc::clone(&f.ranges()[2])), replace: Some(Arc::clone(&f.ranges()[2])) }) }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("11".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("14".to_string()), filter_text: Some("bar".to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { insert_replace_edit: Some(lsproto::InsertReplaceEdit { new_text: "this.#bar".to_string(), insert: f.ranges()[3].ls_range, replace: f.ranges()[3].ls_range }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("7".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("14".to_string()), filter_text: Some("bar".to_string()), insert_text: Some("this.#bar".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("4".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("14".to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { insert_replace_edit: Some(lsproto::InsertReplaceEdit { new_text: "this.#bar".to_string(), insert: f.ranges()[4].ls_range, replace: f.ranges()[4].ls_range }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("8".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "#bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("14".to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { insert_replace_edit: Some(lsproto::InsertReplaceEdit { new_text: "this.#bar".to_string(), insert: f.ranges()[5].ls_range, replace: f.ranges()[5].ls_range }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6211,8 +5189,7 @@ use crate::tests::prelude::*;
 // completionFilterText2_test.go:13
 pub fn test_completion_filter_text2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @strict: true
+    let content: &str = r"// @strict: true
 declare const foo1: { bar: string } | undefined;
 if (true) {
     foo1[|.|]/*1*/
@@ -6221,16 +5198,10 @@ else {
     foo1?./*2*/
 }
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("11".to_string()), insert_text: Some("?.bar".to_string()), filter_text: Some(".bar".to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: "?.bar".to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("11".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("11".to_string()), insert_text: Some("?.bar".to_string()), filter_text: Some(".bar".to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: "?.bar".to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("11".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }

@@ -6,30 +6,23 @@ use crate::tests::prelude::*;
 // formatSelectionAfterTemplateLiteral1_test.go:10
 pub fn test_format_selection_after_template_literal1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"const a = `head${"x"};
+    let content: &str = r#"const a = `head${"x"};
 `;
 
 /*begin*/export const f = () => {
     return `world`;
 /*end*/}
 "#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "begin", "end");
-            f.verify_current_file_content(t, r#"const a = `head${"x"};
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "begin", "end");
+        f.verify_current_file_content(t, r#"const a = `head${"x"};
 `;
 
 export const f = () => {
     return `world`;
 }
 "#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -40,8 +33,7 @@ use crate::tests::prelude::*;
 // formatSelectionDocCommentInBlock_test.go:10
 pub fn test_format_selection_doc_comment_in_block(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"{
+    let content: &str = r"{
     /*1*//**
      * Some doc comment
      *//*2*/
@@ -53,11 +45,9 @@ while (true) {
  * Some doc comment
  *//*4*/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "1", "2");
-            f.verify_current_file_content(t, r"{
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "1", "2");
+        f.verify_current_file_content(t, r"{
     /**
      * Some doc comment
      */
@@ -69,8 +59,8 @@ while (true) {
  * Some doc comment
  */
 }");
-            f.format_selection(t, "3", "4");
-            f.verify_current_file_content(t, r"{
+        f.format_selection(t, "3", "4");
+        f.verify_current_file_content(t, r"{
     /**
      * Some doc comment
      */
@@ -82,11 +72,7 @@ while (true) {
      * Some doc comment
      */
 }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -97,23 +83,16 @@ use crate::tests::prelude::*;
 // formatSelectionEditAtEndOfRange_test.go:10
 pub fn test_format_selection_edit_at_end_of_range(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/var x = 1;/*2*/
+    let content: &str = r"/*1*/var x = 1;/*2*/
 void 0;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let mut opts110 = f.get_options();
-            opts110.format_code_settings.semicolons = lsutil::SemicolonPreference::Remove;
-            f.configure(t, opts110);
-            f.format_selection(t, "1", "2");
-            f.verify_current_file_content(t, r"var x = 1
+    fourslash::run_generated_test(t, content, |f, t| {
+        let mut opts110 = f.get_options();
+        opts110.format_code_settings.semicolons = lsutil::SemicolonPreference::Remove;
+        f.configure(t, opts110);
+        f.format_selection(t, "1", "2");
+        f.verify_current_file_content(t, r"var x = 1
 void 0;");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -124,8 +103,7 @@ use crate::tests::prelude::*;
 // formatSelectionInJSDocTypeLiteralNoCrash1_test.go:10
 pub fn test_format_selection_in_jsdoc_type_literal_no_crash1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @filename: index.js
 /**
  *
@@ -138,11 +116,9 @@ pub fn test_format_selection_in_jsdoc_type_literal_no_crash1(t: &T) {
  */
 
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "begin", "end");
-            f.verify_current_file_content(t, r"/**
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "begin", "end");
+        f.verify_current_file_content(t, r"/**
  *
  *
  * @typedef {Object} Fixture
@@ -153,11 +129,7 @@ pub fn test_format_selection_in_jsdoc_type_literal_no_crash1(t: &T) {
  */
 
 ");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -168,8 +140,7 @@ use crate::tests::prelude::*;
 // formatSelectionJsxWithBinaryExpression_test.go:10
 pub fn test_format_selection_jsx_with_binary_expression(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"//@Filename: file.tsx
+    let content: &str = r"//@Filename: file.tsx
 function TestWidget() {
     const test = true;
     return (
@@ -185,11 +156,9 @@ function TestWidget() {
         </div>
     );
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "1", "2");
-            f.verify_current_file_content(t, r"function TestWidget() {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "1", "2");
+        f.verify_current_file_content(t, r"function TestWidget() {
     const test = true;
     return (
         <div>
@@ -204,11 +173,7 @@ function TestWidget() {
         </div>
     );
 }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -219,31 +184,24 @@ use crate::tests::prelude::*;
 // formatSelectionPreserveTrailingWhitespace_test.go:11
 pub fn test_format_selection_preserve_trailing_whitespace(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"
+    let content: &str = r"
 /*begin*/;    
     
 /*end*/    
     
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let mut opts154 = f.get_options();
-            opts154.format_code_settings.editor_settings.trim_trailing_whitespace = Tristate::False;
-            f.configure(t, opts154);
-            f.format_selection(t, "begin", "end");
-            f.verify_current_file_content(t, r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        let mut opts154 = f.get_options();
+        opts154.format_code_settings.editor_settings.trim_trailing_whitespace = Tristate::False;
+        f.configure(t, opts154);
+        f.format_selection(t, "begin", "end");
+        f.verify_current_file_content(t, r"
 ;    
     
     
     
 ");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -254,26 +212,19 @@ use crate::tests::prelude::*;
 // formatSelectionSingleProperty_test.go:10
 pub fn test_format_selection_single_property(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"console.log({
+    let content: &str = r"console.log({
 }, {
 /*1*/    a: 1,
 /*2*/    b: 2
 })";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "1", "2");
-            f.verify_current_file_content(t, r"console.log({
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "1", "2");
+        f.verify_current_file_content(t, r"console.log({
 }, {
     a: 1,
     b: 2
 })");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -284,8 +235,7 @@ use crate::tests::prelude::*;
 // formatSelectionUnterminatedBacktickInJSDocNoCrash1_test.go:10
 pub fn test_format_selection_unterminated_backtick_in_jsdoc_no_crash1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @filename: index.js
 export class Manifest {
   /**
@@ -302,11 +252,9 @@ export class Manifest {
 }
 
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "begin", "end");
-            f.verify_current_file_content(t, r"export class Manifest {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "begin", "end");
+        f.verify_current_file_content(t, r"export class Manifest {
   /**
    * @template {ExtensionType} ExtType
    * @param {ExtType} extType - `dri
@@ -321,11 +269,7 @@ export class Manifest {
 }
 
 ");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -336,18 +280,11 @@ use crate::tests::prelude::*;
 // formatSelectionWithTrivia_test.go:10
 pub fn test_format_selection_with_trivia(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "if (true) {     \n  //   \n   /*begin*/   \n     //    \n     ;    \n       \n      }/*end*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "begin", "end");
-            f.verify_current_file_content(t, "if (true) {     \n  //   \n\n    //    \n    ;\n\n}");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "if (true) {     \n  //   \n   /*begin*/   \n     //    \n     ;    \n       \n      }/*end*/";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "begin", "end");
+        f.verify_current_file_content(t, "if (true) {     \n  //   \n\n    //    \n    ;\n\n}");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -358,18 +295,11 @@ use crate::tests::prelude::*;
 // formatSelectionWithTrivia2_test.go:10
 pub fn test_format_selection_with_trivia2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "/*begin*/;    \n    \n/*end*/    \n    ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "begin", "end");
-            f.verify_current_file_content(t, ";\n\n\n    ");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "/*begin*/;    \n    \n/*end*/    \n    ";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "begin", "end");
+        f.verify_current_file_content(t, ";\n\n\n    ");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -380,22 +310,15 @@ use crate::tests::prelude::*;
 // formatSelectionWithTrivia3_test.go:10
 pub fn test_format_selection_with_trivia3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"if (true) {
+    let content: &str = r"if (true) {
 /*begin*/// test comment
 /*end*/}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "begin", "end");
-            f.verify_current_file_content(t, r"if (true) {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "begin", "end");
+        f.verify_current_file_content(t, r"if (true) {
     // test comment
 }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -406,24 +329,17 @@ use crate::tests::prelude::*;
 // formatSelectionWithTrivia4_test.go:10
 pub fn test_format_selection_with_trivia4(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"if (true) {
+    let content: &str = r"if (true) {
 /*begin*/// test comment
 /*end*/console.log();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "begin", "end");
-            f.verify_current_file_content(t, r"if (true) {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "begin", "end");
+        f.verify_current_file_content(t, r"if (true) {
     // test comment
 console.log();
 }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -434,24 +350,17 @@ use crate::tests::prelude::*;
 // formatSelectionWithTrivia5_test.go:10
 pub fn test_format_selection_with_trivia5(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"if (true) {
+    let content: &str = r"if (true) {
 /*begin*/// test comment
 /*end*/    console.log();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "begin", "end");
-            f.verify_current_file_content(t, r"if (true) {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "begin", "end");
+        f.verify_current_file_content(t, r"if (true) {
     // test comment
     console.log();
 }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -462,20 +371,13 @@ use crate::tests::prelude::*;
 // formatSelectionWithTrivia6_test.go:10
 pub fn test_format_selection_with_trivia6(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*begin*/    // test comment
+    let content: &str = r"/*begin*/    // test comment
 /*end*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "begin", "end");
-            f.verify_current_file_content(t, r"// test comment
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "begin", "end");
+        f.verify_current_file_content(t, r"// test comment
 ");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -486,22 +388,15 @@ use crate::tests::prelude::*;
 // formatSelectionWithTrivia7_test.go:10
 pub fn test_format_selection_with_trivia7(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"if (true) {
+    let content: &str = r"if (true) {
 /*begin*/// test comment/*end*/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "begin", "end");
-            f.verify_current_file_content(t, r"if (true) {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "begin", "end");
+        f.verify_current_file_content(t, r"if (true) {
     // test comment
 }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -512,22 +407,15 @@ use crate::tests::prelude::*;
 // formatSelectionWithTrivia8_test.go:10
 pub fn test_format_selection_with_trivia8(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*begin*/;
+    let content: &str = r"/*begin*/;
     
 /*end*/console.log();";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "begin", "end");
-            f.verify_current_file_content(t, r";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "begin", "end");
+        f.verify_current_file_content(t, r";
 
 console.log();");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -538,8 +426,7 @@ use crate::tests::prelude::*;
 // formatSimulatingScriptBlocks_test.go:10
 pub fn test_format_simulating_script_blocks(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"/* BEGIN EXTERNAL SOURCE */
+    let content: &str = r#"/* BEGIN EXTERNAL SOURCE */
 /*begin5*/
                         var a = 1;
                         alert("/*end5*//********//*begin4*/");
@@ -557,21 +444,19 @@ pub fn test_format_simulating_script_blocks(t: &T) {
             var f = 1;
         /*end1*/
 /* END EXTERNAL SOURCE */"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let mut opts640 = f.get_options();
-            opts640.format_code_settings.editor_settings.base_indent_size = 12;
-            f.configure(t, opts640);
-            f.format_selection(t, "begin1", "end1");
-            f.format_selection(t, "begin2", "end2");
-            f.format_selection(t, "begin3", "end3");
-            let mut opts794 = f.get_options();
-            opts794.format_code_settings.editor_settings.base_indent_size = 24;
-            f.configure(t, opts794);
-            f.format_selection(t, "begin4", "end4");
-            f.format_selection(t, "begin5", "end5");
-            f.verify_current_file_content(t, r#"/* BEGIN EXTERNAL SOURCE */
+    fourslash::run_generated_test(t, content, |f, t| {
+        let mut opts640 = f.get_options();
+        opts640.format_code_settings.editor_settings.base_indent_size = 12;
+        f.configure(t, opts640);
+        f.format_selection(t, "begin1", "end1");
+        f.format_selection(t, "begin2", "end2");
+        f.format_selection(t, "begin3", "end3");
+        let mut opts794 = f.get_options();
+        opts794.format_code_settings.editor_settings.base_indent_size = 24;
+        f.configure(t, opts794);
+        f.format_selection(t, "begin4", "end4");
+        f.format_selection(t, "begin5", "end5");
+        f.verify_current_file_content(t, r#"/* BEGIN EXTERNAL SOURCE */
 
                         var a = 1;
                         alert("/********/");
@@ -589,11 +474,7 @@ pub fn test_format_simulating_script_blocks(t: &T) {
             var f = 1;
 
 /* END EXTERNAL SOURCE */"#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -604,8 +485,7 @@ use crate::tests::prelude::*;
 // formatSpaceAfterImplementsExtends_test.go:10
 pub fn test_format_space_after_implements_extends(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class C1 implements Array<string>{
+    let content: &str = r"class C1 implements Array<string>{
 }
 
 class C2 implements Number{
@@ -616,11 +496,9 @@ class C3 extends Array<string>{
 
 class C4 extends Number{
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"class C1 implements Array<string> {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"class C1 implements Array<string> {
 }
 
 class C2 implements Number {
@@ -631,11 +509,7 @@ class C3 extends Array<string> {
 
 class C4 extends Number {
 }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -646,8 +520,7 @@ use crate::tests::prelude::*;
 // formatSpaceAfterTemplateHeadAndMiddle_test.go:11
 pub fn test_format_space_after_template_head_and_middle(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"const a1 = `${1}${1}`;
+    let content: &str = r"const a1 = `${1}${1}`;
 const a2 = `
     ${1}${1}
 `;
@@ -667,14 +540,12 @@ const a6 = `
     text ${1}
     text
 `;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let mut opts405 = f.get_options();
-            opts405.format_code_settings.insert_space_after_opening_and_before_closing_template_string_braces = Tristate::True;
-            f.configure(t, opts405);
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"const a1 = `${ 1 }${ 1 }`;
+    fourslash::run_generated_test(t, content, |f, t| {
+        let mut opts405 = f.get_options();
+        opts405.format_code_settings.insert_space_after_opening_and_before_closing_template_string_braces = Tristate::True;
+        f.configure(t, opts405);
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"const a1 = `${ 1 }${ 1 }`;
 const a2 = `
     ${ 1 }${ 1 }
 `;
@@ -694,11 +565,7 @@ const a6 = `
     text ${ 1 }
     text
 `;");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -709,8 +576,7 @@ use crate::tests::prelude::*;
 // formatSpaceBetweenFunctionAndArrayIndex_test.go:10
 pub fn test_format_space_between_function_and_array_index(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 
 function test() {
     return [];
@@ -718,23 +584,17 @@ function test() {
 
 test() [0]
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"
 function test() {
     return [];
 }
 
 test()[0]
 ");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -745,18 +605,11 @@ use crate::tests::prelude::*;
 // formatTemplateStringOnPaste_test.go:10
 pub fn test_format_template_string_on_paste(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "const x = `${0}/*0*/abc/*1*/`;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "0", "1");
-            f.verify_current_file_content(t, "const x = `${0}abc`;");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "const x = `${0}/*0*/abc/*1*/`;";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "0", "1");
+        f.verify_current_file_content(t, "const x = `${0}abc`;");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -767,26 +620,19 @@ use crate::tests::prelude::*;
 // formatTrimRemainingRange_test.go:10
 pub fn test_format_trim_remaining_range(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
     ;
     /*
     
 */";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r";
 /*
  
 */");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -797,28 +643,21 @@ use crate::tests::prelude::*;
 // formatTryCatch_test.go:10
 pub fn test_format_try_catch(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"function test() {
+    let content: &str = r"function test() {
     /*try*/try {
     }
     /*catch*/catch (e) {
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.format_document(t, "");
-            f.format_document(t, "");
-            f.go_to_marker(t, "try");
-            f.verify_current_line_content(t, "    try {");
-            f.go_to_marker(t, "catch");
-            f.verify_current_line_content(t, "    catch (e) {");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.format_document(t, "");
+        f.format_document(t, "");
+        f.go_to_marker(t, "try");
+        f.verify_current_line_content(t, "    try {");
+        f.go_to_marker(t, "catch");
+        f.verify_current_line_content(t, "    catch (e) {");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -829,26 +668,19 @@ use crate::tests::prelude::*;
 // formatTryFinally_test.go:10
 pub fn test_format_try_finally(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"if (true) try  {
+    let content: &str = r"if (true) try  {
     // ...
 }   finally    {
     // ...
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"if (true) try {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"if (true) try {
     // ...
 } finally {
     // ...
 }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -859,19 +691,12 @@ use crate::tests::prelude::*;
 // formatTsx_test.go:10
 pub fn test_format_tsx(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: foo.tsx
+    let content: &str = r"// @Filename: foo.tsx
 <div><p>'</p><p>{function(){return 1;}]}</p></div>";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, "<div><p>'</p><p>{function() { return 1; }]}</p></div>");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, "<div><p>'</p><p>{function() { return 1; }]}</p></div>");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -882,8 +707,7 @@ use crate::tests::prelude::*;
 // formatTsxClosingAfterJsxText_test.go:10
 pub fn test_format_tsx_closing_after_jsx_text(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: foo.tsx
+    let content: &str = r"// @Filename: foo.tsx
 
 const a = (
     <div>
@@ -897,11 +721,9 @@ const b = (
                </div>
 )
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"
 const a = (
     <div>
         text
@@ -914,11 +736,7 @@ const b = (
     </div>
 )
 ");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -929,29 +747,22 @@ use crate::tests::prelude::*;
 // formatTsxMultilineAttributeString_test.go:10
 pub fn test_format_tsx_multiline_attribute_string(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: foo.tsx
+    let content: &str = r#"// @Filename: foo.tsx
 (
     <input
         value="x
         x"
     />
 );"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r#"(
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r#"(
     <input
         value="x
         x"
     />
 );"#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -962,23 +773,16 @@ use crate::tests::prelude::*;
 // formatTSXWithInlineComment_test.go:10
 pub fn test_format_tsx_with_inline_comment(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: foo.tsx
+    let content: &str = r"// @Filename: foo.tsx
 const a = <div>
     // <a />
 </div>";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"const a = <div>
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"const a = <div>
     // <a />
 </div>");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -989,29 +793,22 @@ use crate::tests::prelude::*;
 // formatTypeAnnotation1_test.go:11
 pub fn test_format_type_annotation1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"function foo(x: number, y?: string): number {}
+    let content: &str = r"function foo(x: number, y?: string): number {}
 interface Foo {
     x: number;
     y?: number;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let mut opts207 = f.get_options();
-            opts207.format_code_settings.insert_space_before_type_annotation = Tristate::True;
-            f.configure(t, opts207);
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"function foo(x : number, y ?: string) : number { }
+    fourslash::run_generated_test(t, content, |f, t| {
+        let mut opts207 = f.get_options();
+        opts207.format_code_settings.insert_space_before_type_annotation = Tristate::True;
+        f.configure(t, opts207);
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"function foo(x : number, y ?: string) : number { }
 interface Foo {
     x : number;
     y ?: number;
 }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1022,26 +819,19 @@ use crate::tests::prelude::*;
 // formatTypeAnnotation2_test.go:10
 pub fn test_format_type_annotation2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"function foo(x : number, y ?: string) : number {}
+    let content: &str = r"function foo(x : number, y ?: string) : number {}
 interface Foo {
     x : number;
     y ?: number;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"function foo(x: number, y?: string): number { }
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"function foo(x: number, y?: string): number { }
 interface Foo {
     x: number;
     y?: number;
 }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1052,29 +842,22 @@ use crate::tests::prelude::*;
 // formatTypeArgumentOnNewLine_test.go:10
 pub fn test_format_type_argument_on_new_line(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"const genericObject = new GenericObject<
+    let content: &str = r"const genericObject = new GenericObject<
   /*1*/{}
 >();
 const genericObject2 = new GenericObject2<
   /*2*/{},
   /*3*/{}
 >();";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "    {}");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    {},");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "    {}");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "    {}");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    {},");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "    {}");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1085,19 +868,12 @@ use crate::tests::prelude::*;
 // formatTypeParameters_test.go:10
 pub fn test_format_type_parameters(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "/**/type Bar<T extends any[]= any[]> = T";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "");
-            f.verify_current_line_content(t, "type Bar<T extends any[] = any[]> = T");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "/**/type Bar<T extends any[]= any[]> = T";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "");
+        f.verify_current_line_content(t, "type Bar<T extends any[] = any[]> = T");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1108,19 +884,12 @@ use crate::tests::prelude::*;
 // formatV8Directive_test.go:10
 pub fn test_format_v8_directive(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: foo.js
+    let content: &str = r"// @Filename: foo.js
 function foo() {}
 /*1*/%PrepareFunctionForOptimization(foo)/*2*/;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "1", "2");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "1", "2");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1131,8 +900,7 @@ use crate::tests::prelude::*;
 // formatVariableDeclarationList_test.go:10
 pub fn test_format_variable_declaration_list(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/var   fun1   =   function   (     )     {
+    let content: &str = r"/*1*/var   fun1   =   function   (     )     {
 /*2*/            var               x   =   'foo'             ,
 /*3*/                z   =   'bar'           ;
 /*4*/                return  x            ;
@@ -1145,39 +913,33 @@ pub fn test_format_variable_declaration_list(t: &T) {
 /*10*/            x   =   'Foo'           ;
 /*11*/                return   fun            ;
 /*12*/}   (           fun1            )   )       ;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "var fun1 = function() {");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    var x = 'foo',");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "        z = 'bar';");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "    return x;");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "},");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "    fun2 = (function(f) {");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "        var fun = function() {");
-            f.go_to_marker(t, "8");
-            f.verify_current_line_content(t, "            console.log(f());");
-            f.go_to_marker(t, "9");
-            f.verify_current_line_content(t, "        },");
-            f.go_to_marker(t, "10");
-            f.verify_current_line_content(t, "            x = 'Foo';");
-            f.go_to_marker(t, "11");
-            f.verify_current_line_content(t, "        return fun;");
-            f.go_to_marker(t, "12");
-            f.verify_current_line_content(t, "    }(fun1));");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "var fun1 = function() {");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    var x = 'foo',");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "        z = 'bar';");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "    return x;");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "},");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "    fun2 = (function(f) {");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "        var fun = function() {");
+        f.go_to_marker(t, "8");
+        f.verify_current_line_content(t, "            console.log(f());");
+        f.go_to_marker(t, "9");
+        f.verify_current_line_content(t, "        },");
+        f.go_to_marker(t, "10");
+        f.verify_current_line_content(t, "            x = 'Foo';");
+        f.go_to_marker(t, "11");
+        f.verify_current_line_content(t, "        return fun;");
+        f.go_to_marker(t, "12");
+        f.verify_current_line_content(t, "    }(fun1));");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1188,8 +950,7 @@ use crate::tests::prelude::*;
 // formatWithStatement_test.go:11
 pub fn test_format_with_statement(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"with /*1*/(foo.bar)
+    let content: &str = r"with /*1*/(foo.bar)
 
    {/*2*/
 
@@ -1198,38 +959,32 @@ pub fn test_format_with_statement(t: &T) {
 with (bar.blah)/*4*/
 {/*5*/
 }/*6*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let mut opts227 = f.get_options();
-            opts227.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::False;
-            f.configure(t, opts227);
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "with (foo.bar) {");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "with (bar.blah) {");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "}");
-            let mut opts565 = f.get_options();
-            opts565.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::True;
-            f.configure(t, opts565);
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "with (foo.bar)");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "{");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "with (bar.blah)");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "{");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        let mut opts227 = f.get_options();
+        opts227.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::False;
+        f.configure(t, opts227);
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "with (foo.bar) {");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "with (bar.blah) {");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "}");
+        let mut opts565 = f.get_options();
+        opts565.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::True;
+        f.configure(t, opts565);
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "with (foo.bar)");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "{");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "with (bar.blah)");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "{");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1240,26 +995,19 @@ use crate::tests::prelude::*;
 // formatonkey01_test.go:10
 pub fn test_formatonkey01(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 switch (1) {
     case 1:
         {
             /*1*/
         break;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.go_to_marker(t, "1");
-            f.insert(t, "}");
-            f.verify_current_line_content(t, "        }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.go_to_marker(t, "1");
+        f.insert(t, "}");
+        f.verify_current_line_content(t, "        }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1270,23 +1018,16 @@ use crate::tests::prelude::*;
 // formattingAfterChainedFatArrow_test.go:10
 pub fn test_formatting_after_chained_fat_arrow(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"var x = n => p => {
+    let content: &str = r"var x = n => p => {
     while (true) {
         void 0;
     }/**/
 };";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.format_document(t, "");
-            f.verify_current_line_content(t, "    }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.format_document(t, "");
+        f.verify_current_line_content(t, "    }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1297,25 +1038,18 @@ use crate::tests::prelude::*;
 // formattingAfterMultiLineIfCondition_test.go:10
 pub fn test_formatting_after_multi_line_if_condition(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r" var foo;
+    let content: &str = r" var foo;
  if (foo &&
      foo) {
 /*comment*/     // This is a comment
      foo.toString();
  /**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.insert(t, "}");
-            f.go_to_marker(t, "comment");
-            f.verify_current_line_content(t, "    // This is a comment");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.insert(t, "}");
+        f.go_to_marker(t, "comment");
+        f.verify_current_line_content(t, "    // This is a comment");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1326,25 +1060,18 @@ use crate::tests::prelude::*;
 // formattingAfterMultiLineString_test.go:10
 pub fn test_formatting_after_multi_line_string(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"class foo {
+    let content: &str = r#"class foo {
     stop() {
         var s = "hello\/*1*/
 "/*2*/
     }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "2");
-            f.insert_line(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, r#"        var s = "hello\"#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "2");
+        f.insert_line(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, r#"        var s = "hello\"#);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1355,8 +1082,7 @@ use crate::tests::prelude::*;
 // formattingArrayLiteral_test.go:10
 pub fn test_formatting_array_literal(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/x= [];
+    let content: &str = r"/*1*/x= [];
 y = [
 /*2*/           1,
 /*3*/  2
@@ -1366,29 +1092,23 @@ z = [[
 /*5*/  1,
 /*6*/             2
 /*7*/      ]  ];";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "x = [];");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    1,");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "    2");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "];");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "    1,");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "    2");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "]];");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "x = [];");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    1,");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "    2");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "];");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "    1,");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "    2");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "]];");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1399,26 +1119,19 @@ use crate::tests::prelude::*;
 // formattingAwait_test.go:10
 pub fn test_formatting_await(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"async function f() {
+    let content: &str = r"async function f() {
     for          await (const x of g()) {
         console.log(x);
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"async function f() {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"async function f() {
     for await (const x of g()) {
         console.log(x);
     }
 }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1429,24 +1142,17 @@ use crate::tests::prelude::*;
 // formattingBlockInCaseClauses_test.go:10
 pub fn test_formatting_block_in_case_clauses(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"switch (1) {
+    let content: &str = r"switch (1) {
     case 1:
         {
             /*1*/
         break;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, "}");
-            f.verify_current_line_content(t, "        }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert(t, "}");
+        f.verify_current_line_content(t, "        }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1457,8 +1163,7 @@ use crate::tests::prelude::*;
 // formattingChainingMethods_test.go:10
 pub fn test_formatting_chaining_methods(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r" z$ = this.store.select(this.fake())
+    let content: &str = r" z$ = this.store.select(this.fake())
      .ofType(
       'ACTION',
       'ACTION-2'
@@ -1478,11 +1183,9 @@ pub fn test_formatting_chaining_methods(t: &T) {
 1
     .toFixed(
         2);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"z$ = this.store.select(this.fake())
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"z$ = this.store.select(this.fake())
     .ofType(
         'ACTION',
         'ACTION-2'
@@ -1502,11 +1205,7 @@ pub fn test_formatting_chaining_methods(t: &T) {
 1
     .toFixed(
         2);");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1517,31 +1216,24 @@ use crate::tests::prelude::*;
 // formattingComma_test.go:10
 pub fn test_formatting_comma(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "var x = [1 , 2];/*x*/\nvar y = ( 1  , 2 );/*y*/\nvar z1 = 1 , zz = 2;/*z1*/\nvar z2 = {\n    x: 1 ,/*z2*/\n    y: 2\n};\nvar z3 = (\n    () => { }  ,/*z3*/\n    () => { }\n    );\nvar z4 = [\n    () => { } ,/*z4*/\n    () => { }\n];\nvar z5 = {\n    x: () => { } ,/*z5*/\n    y: () => { }\n}; ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "x");
-            f.verify_current_line_content(t, "var x = [1, 2];");
-            f.go_to_marker(t, "y");
-            f.verify_current_line_content(t, "var y = (1, 2);");
-            f.go_to_marker(t, "z1");
-            f.verify_current_line_content(t, "var z1 = 1, zz = 2;");
-            f.go_to_marker(t, "z2");
-            f.verify_current_line_content(t, "    x: 1,");
-            f.go_to_marker(t, "z3");
-            f.verify_current_line_content(t, "    () => { },");
-            f.go_to_marker(t, "z4");
-            f.verify_current_line_content(t, "    () => { },");
-            f.go_to_marker(t, "z5");
-            f.verify_current_line_content(t, "    x: () => { },");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "var x = [1 , 2];/*x*/\nvar y = ( 1  , 2 );/*y*/\nvar z1 = 1 , zz = 2;/*z1*/\nvar z2 = {\n    x: 1 ,/*z2*/\n    y: 2\n};\nvar z3 = (\n    () => { }  ,/*z3*/\n    () => { }\n    );\nvar z4 = [\n    () => { } ,/*z4*/\n    () => { }\n];\nvar z5 = {\n    x: () => { } ,/*z5*/\n    y: () => { }\n}; ";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "x");
+        f.verify_current_line_content(t, "var x = [1, 2];");
+        f.go_to_marker(t, "y");
+        f.verify_current_line_content(t, "var y = (1, 2);");
+        f.go_to_marker(t, "z1");
+        f.verify_current_line_content(t, "var z1 = 1, zz = 2;");
+        f.go_to_marker(t, "z2");
+        f.verify_current_line_content(t, "    x: 1,");
+        f.go_to_marker(t, "z3");
+        f.verify_current_line_content(t, "    () => { },");
+        f.go_to_marker(t, "z4");
+        f.verify_current_line_content(t, "    () => { },");
+        f.go_to_marker(t, "z5");
+        f.verify_current_line_content(t, "    x: () => { },");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1552,8 +1244,7 @@ use crate::tests::prelude::*;
 // formattingCommentsBeforeErrors_test.go:10
 pub fn test_formatting_comments_before_errors(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace A {
+    let content: &str = r"namespace A {
     interface B {
         // a
         // b
@@ -1566,19 +1257,13 @@ pub fn test_formatting_comments_before_errors(t: &T) {
         bar();
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert(t, r"
 ");
-            f.go_to_marker(t, "0");
-            f.verify_current_line_content(t, "        // d ");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+        f.go_to_marker(t, "0");
+        f.verify_current_line_content(t, "        // d ");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1589,19 +1274,12 @@ use crate::tests::prelude::*;
 // formattingConditionalOperator_test.go:10
 pub fn test_formatting_conditional_operator(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "var x=true?1:2";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_bof(t);
-            f.verify_current_line_content(t, "var x = true ? 1 : 2");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "var x=true?1:2";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_bof(t);
+        f.verify_current_line_content(t, "var x = true ? 1 : 2");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1612,22 +1290,15 @@ use crate::tests::prelude::*;
 // formattingConditionalTypes_test.go:10
 pub fn test_formatting_conditional_types(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*L1*/type Diff1<T, U> = T extends U?never:T;
+    let content: &str = r"/*L1*/type Diff1<T, U> = T extends U?never:T;
 /*L2*/type Diff2<T, U> = T    extends    U  ?    never   :     T;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "L1");
-            f.verify_current_line_content(t, "type Diff1<T, U> = T extends U ? never : T;");
-            f.go_to_marker(t, "L2");
-            f.verify_current_line_content(t, "type Diff2<T, U> = T extends U ? never : T;");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "L1");
+        f.verify_current_line_content(t, "type Diff1<T, U> = T extends U ? never : T;");
+        f.go_to_marker(t, "L2");
+        f.verify_current_line_content(t, "type Diff2<T, U> = T extends U ? never : T;");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1638,25 +1309,18 @@ use crate::tests::prelude::*;
 // formattingCrash_test.go:11
 pub fn test_formatting_crash(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "/**/module Default{ \n}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let mut opts131 = f.get_options();
-            opts131.format_code_settings.place_open_brace_on_new_line_for_functions = Tristate::True;
-            f.configure(t, opts131);
-            let mut opts199 = f.get_options();
-            opts199.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::True;
-            f.configure(t, opts199);
-            f.format_document(t, "");
-            f.go_to_marker(t, "");
-            f.verify_current_line_content(t, "module Default");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "/**/module Default{ \n}";
+    fourslash::run_generated_test(t, content, |f, t| {
+        let mut opts131 = f.get_options();
+        opts131.format_code_settings.place_open_brace_on_new_line_for_functions = Tristate::True;
+        f.configure(t, opts131);
+        let mut opts199 = f.get_options();
+        opts199.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::True;
+        f.configure(t, opts199);
+        f.format_document(t, "");
+        f.go_to_marker(t, "");
+        f.verify_current_line_content(t, "module Default");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1667,81 +1331,74 @@ use crate::tests::prelude::*;
 // formattingDecorators_test.go:10
 pub fn test_formatting_decorators(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "/*1*/        @    decorator1    \n/*2*/            @        decorator2\n/*3*/    @decorator3\n/*4*/        @    decorator4    @            decorator5\n/*5*/class C {\n/*6*/            @    decorator6    \n/*7*/                @        decorator7\n/*8*/        @decorator8\n/*9*/    method1() { }\n\n/*10*/        @    decorator9    @            decorator10 @decorator11            method2() { }\n\n    method3(\n/*11*/                @    decorator12    \n/*12*/                    @        decorator13\n/*13*/            @decorator14\n/*14*/        x) { }\n\n    method4(\n/*15*/            @    decorator15    @            decorator16 @decorator17             x) { }\n\n/*16*/            @    decorator18    \n/*17*/                @        decorator19\n/*18*/        @decorator20    \n/*19*/    [\"computed1\"]() { }\n\n/*20*/        @    decorator21    @            decorator22 @decorator23            [\"computed2\"]() { }\n\n/*21*/            @    decorator24    \n/*22*/                @        decorator25\n/*23*/        @decorator26\n/*24*/    get accessor1() { }\n\n/*25*/        @    decorator27    @            decorator28 @decorator29            get accessor2() { }\n\n/*26*/            @    decorator30    \n/*27*/                @        decorator31\n/*28*/        @decorator32\n/*29*/    property1;\n\n/*30*/        @    decorator33    @            decorator34 @decorator35            property2;\n/*31*/function test(@decorator36@decorator37 param) {};\n/*32*/function test2(@decorator38()@decorator39()param) {};\n}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "@decorator1");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "@decorator2");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "@decorator3");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "@decorator4 @decorator5");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "class C {");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "    @decorator6");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "    @decorator7");
-            f.go_to_marker(t, "8");
-            f.verify_current_line_content(t, "    @decorator8");
-            f.go_to_marker(t, "9");
-            f.verify_current_line_content(t, "    method1() { }");
-            f.go_to_marker(t, "10");
-            f.verify_current_line_content(t, "    @decorator9 @decorator10 @decorator11 method2() { }");
-            f.go_to_marker(t, "11");
-            f.verify_current_line_content(t, "        @decorator12");
-            f.go_to_marker(t, "12");
-            f.verify_current_line_content(t, "        @decorator13");
-            f.go_to_marker(t, "13");
-            f.verify_current_line_content(t, "        @decorator14");
-            f.go_to_marker(t, "14");
-            f.verify_current_line_content(t, "        x) { }");
-            f.go_to_marker(t, "15");
-            f.verify_current_line_content(t, "        @decorator15 @decorator16 @decorator17 x) { }");
-            f.go_to_marker(t, "16");
-            f.verify_current_line_content(t, "    @decorator18");
-            f.go_to_marker(t, "17");
-            f.verify_current_line_content(t, "    @decorator19");
-            f.go_to_marker(t, "18");
-            f.verify_current_line_content(t, "    @decorator20");
-            f.go_to_marker(t, "19");
-            f.verify_current_line_content(t, r#"    ["computed1"]() { }"#);
-            f.go_to_marker(t, "20");
-            f.verify_current_line_content(t, r#"    @decorator21 @decorator22 @decorator23 ["computed2"]() { }"#);
-            f.go_to_marker(t, "21");
-            f.verify_current_line_content(t, "    @decorator24");
-            f.go_to_marker(t, "22");
-            f.verify_current_line_content(t, "    @decorator25");
-            f.go_to_marker(t, "23");
-            f.verify_current_line_content(t, "    @decorator26");
-            f.go_to_marker(t, "24");
-            f.verify_current_line_content(t, "    get accessor1() { }");
-            f.go_to_marker(t, "25");
-            f.verify_current_line_content(t, "    @decorator27 @decorator28 @decorator29 get accessor2() { }");
-            f.go_to_marker(t, "26");
-            f.verify_current_line_content(t, "    @decorator30");
-            f.go_to_marker(t, "27");
-            f.verify_current_line_content(t, "    @decorator31");
-            f.go_to_marker(t, "28");
-            f.verify_current_line_content(t, "    @decorator32");
-            f.go_to_marker(t, "29");
-            f.verify_current_line_content(t, "    property1;");
-            f.go_to_marker(t, "30");
-            f.verify_current_line_content(t, "    @decorator33 @decorator34 @decorator35 property2;");
-            f.go_to_marker(t, "31");
-            f.verify_current_line_content(t, "function test(@decorator36 @decorator37 param) { };");
-            f.go_to_marker(t, "32");
-            f.verify_current_line_content(t, "function test2(@decorator38() @decorator39() param) { };");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "/*1*/        @    decorator1    \n/*2*/            @        decorator2\n/*3*/    @decorator3\n/*4*/        @    decorator4    @            decorator5\n/*5*/class C {\n/*6*/            @    decorator6    \n/*7*/                @        decorator7\n/*8*/        @decorator8\n/*9*/    method1() { }\n\n/*10*/        @    decorator9    @            decorator10 @decorator11            method2() { }\n\n    method3(\n/*11*/                @    decorator12    \n/*12*/                    @        decorator13\n/*13*/            @decorator14\n/*14*/        x) { }\n\n    method4(\n/*15*/            @    decorator15    @            decorator16 @decorator17             x) { }\n\n/*16*/            @    decorator18    \n/*17*/                @        decorator19\n/*18*/        @decorator20    \n/*19*/    [\"computed1\"]() { }\n\n/*20*/        @    decorator21    @            decorator22 @decorator23            [\"computed2\"]() { }\n\n/*21*/            @    decorator24    \n/*22*/                @        decorator25\n/*23*/        @decorator26\n/*24*/    get accessor1() { }\n\n/*25*/        @    decorator27    @            decorator28 @decorator29            get accessor2() { }\n\n/*26*/            @    decorator30    \n/*27*/                @        decorator31\n/*28*/        @decorator32\n/*29*/    property1;\n\n/*30*/        @    decorator33    @            decorator34 @decorator35            property2;\n/*31*/function test(@decorator36@decorator37 param) {};\n/*32*/function test2(@decorator38()@decorator39()param) {};\n}";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "@decorator1");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "@decorator2");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "@decorator3");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "@decorator4 @decorator5");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "class C {");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "    @decorator6");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "    @decorator7");
+        f.go_to_marker(t, "8");
+        f.verify_current_line_content(t, "    @decorator8");
+        f.go_to_marker(t, "9");
+        f.verify_current_line_content(t, "    method1() { }");
+        f.go_to_marker(t, "10");
+        f.verify_current_line_content(t, "    @decorator9 @decorator10 @decorator11 method2() { }");
+        f.go_to_marker(t, "11");
+        f.verify_current_line_content(t, "        @decorator12");
+        f.go_to_marker(t, "12");
+        f.verify_current_line_content(t, "        @decorator13");
+        f.go_to_marker(t, "13");
+        f.verify_current_line_content(t, "        @decorator14");
+        f.go_to_marker(t, "14");
+        f.verify_current_line_content(t, "        x) { }");
+        f.go_to_marker(t, "15");
+        f.verify_current_line_content(t, "        @decorator15 @decorator16 @decorator17 x) { }");
+        f.go_to_marker(t, "16");
+        f.verify_current_line_content(t, "    @decorator18");
+        f.go_to_marker(t, "17");
+        f.verify_current_line_content(t, "    @decorator19");
+        f.go_to_marker(t, "18");
+        f.verify_current_line_content(t, "    @decorator20");
+        f.go_to_marker(t, "19");
+        f.verify_current_line_content(t, r#"    ["computed1"]() { }"#);
+        f.go_to_marker(t, "20");
+        f.verify_current_line_content(t, r#"    @decorator21 @decorator22 @decorator23 ["computed2"]() { }"#);
+        f.go_to_marker(t, "21");
+        f.verify_current_line_content(t, "    @decorator24");
+        f.go_to_marker(t, "22");
+        f.verify_current_line_content(t, "    @decorator25");
+        f.go_to_marker(t, "23");
+        f.verify_current_line_content(t, "    @decorator26");
+        f.go_to_marker(t, "24");
+        f.verify_current_line_content(t, "    get accessor1() { }");
+        f.go_to_marker(t, "25");
+        f.verify_current_line_content(t, "    @decorator27 @decorator28 @decorator29 get accessor2() { }");
+        f.go_to_marker(t, "26");
+        f.verify_current_line_content(t, "    @decorator30");
+        f.go_to_marker(t, "27");
+        f.verify_current_line_content(t, "    @decorator31");
+        f.go_to_marker(t, "28");
+        f.verify_current_line_content(t, "    @decorator32");
+        f.go_to_marker(t, "29");
+        f.verify_current_line_content(t, "    property1;");
+        f.go_to_marker(t, "30");
+        f.verify_current_line_content(t, "    @decorator33 @decorator34 @decorator35 property2;");
+        f.go_to_marker(t, "31");
+        f.verify_current_line_content(t, "function test(@decorator36 @decorator37 param) { };");
+        f.go_to_marker(t, "32");
+        f.verify_current_line_content(t, "function test2(@decorator38() @decorator39() param) { };");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1752,19 +1409,12 @@ use crate::tests::prelude::*;
 // formattingDoubleLessThan_test.go:10
 pub fn test_formatting_double_less_than(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "/*1*/if (<number>foo < <number>bar) {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "if (<number>foo < <number>bar) { }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "/*1*/if (<number>foo < <number>bar) {}";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "if (<number>foo < <number>bar) { }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1775,25 +1425,18 @@ use crate::tests::prelude::*;
 // formattingElseInsideAFunction_test.go:10
 pub fn test_formatting_else_inside_a_function(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"var x = function() {
+    let content: &str = r"var x = function() {
     if (true) {
     /*1*/} else {/*2*/
 }
 
 // newline at the end of the file";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "2");
-            f.insert_line(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "    } else {");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "2");
+        f.insert_line(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "    } else {");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1804,19 +1447,12 @@ use crate::tests::prelude::*;
 // formattingEqualsBeforeBracketInTypeAlias_test.go:10
 pub fn test_formatting_equals_before_bracket_in_type_alias(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "type X    =     [number]/*1*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, ";");
-            f.verify_current_line_content(t, "type X = [number];");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "type X    =     [number]/*1*/";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert(t, ";");
+        f.verify_current_line_content(t, "type X = [number];");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1827,24 +1463,17 @@ use crate::tests::prelude::*;
 // formattingExpressionsInIfCondition_test.go:10
 pub fn test_formatting_expressions_in_if_condition(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"if (a === 1 ||
+    let content: &str = r"if (a === 1 ||
     /*0*/b === 2 ||/*1*/
     c === 3) {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert(t, r"
 ");
-            f.go_to_marker(t, "0");
-            f.verify_current_line_content(t, "    b === 2 ||");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+        f.go_to_marker(t, "0");
+        f.verify_current_line_content(t, "    b === 2 ||");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1855,8 +1484,7 @@ use crate::tests::prelude::*;
 // formattingFatArrowFunctions_test.go:10
 pub fn test_formatting_fat_arrow_functions(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// valid
+    let content: &str = r"// valid
     (         )           =>    1  ;/*1*/
     (        arg )           =>    2  ;/*2*/
         arg       =>    2  ;/*3*/
@@ -1969,191 +1597,185 @@ pub fn test_formatting_fat_arrow_functions(t: &T) {
 /*86*/        (        a )           =>        (        b )           =>        (        c )           =>    121   ,
 /*87*/        false       ?            (        a )           =>    0     :        (        b )           =>    122
  /*88*/)      ;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "() => 1;");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "(arg) => 2;");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "arg => 2;");
-            f.go_to_marker(t, "3a");
-            f.verify_current_line_content(t, "arg => 2;");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "(arg = 1) => 3;");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "(arg?) => 4;");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "(arg: number) => 5;");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "(arg: number = 0) => 6;");
-            f.go_to_marker(t, "8");
-            f.verify_current_line_content(t, "(arg?: number) => 7;");
-            f.go_to_marker(t, "9");
-            f.verify_current_line_content(t, "(...arg: number[]) => 8;");
-            f.go_to_marker(t, "10");
-            f.verify_current_line_content(t, "(arg1, arg2) => 12;");
-            f.go_to_marker(t, "11");
-            f.verify_current_line_content(t, "(arg1 = 1, arg2 = 3) => 13;");
-            f.go_to_marker(t, "12");
-            f.verify_current_line_content(t, "(arg1?, arg2?) => 14;");
-            f.go_to_marker(t, "13");
-            f.verify_current_line_content(t, "(arg1: number, arg2: number) => 15;");
-            f.go_to_marker(t, "14");
-            f.verify_current_line_content(t, "(arg1: number = 0, arg2: number = 1) => 16;");
-            f.go_to_marker(t, "15");
-            f.verify_current_line_content(t, "(arg1?: number, arg2?: number) => 17;");
-            f.go_to_marker(t, "16");
-            f.verify_current_line_content(t, "(arg1, ...arg2: number[]) => 18;");
-            f.go_to_marker(t, "17");
-            f.verify_current_line_content(t, "(arg1, arg2?: number) => 19;");
-            f.go_to_marker(t, "18");
-            f.verify_current_line_content(t, "(() => 21);");
-            f.go_to_marker(t, "19");
-            f.verify_current_line_content(t, "((arg) => 22);");
-            f.go_to_marker(t, "20");
-            f.verify_current_line_content(t, "((arg = 1) => 23);");
-            f.go_to_marker(t, "21");
-            f.verify_current_line_content(t, "((arg?) => 24);");
-            f.go_to_marker(t, "22");
-            f.verify_current_line_content(t, "((arg: number) => 25);");
-            f.go_to_marker(t, "23");
-            f.verify_current_line_content(t, "((arg: number = 0) => 26);");
-            f.go_to_marker(t, "24");
-            f.verify_current_line_content(t, "((arg?: number) => 27);");
-            f.go_to_marker(t, "25");
-            f.verify_current_line_content(t, "((...arg: number[]) => 28);");
-            f.go_to_marker(t, "26");
-            f.verify_current_line_content(t, "(((((arg) => { return 32; }))));");
-            f.go_to_marker(t, "27");
-            f.verify_current_line_content(t, "false ? () => 41 : null;");
-            f.go_to_marker(t, "28");
-            f.verify_current_line_content(t, "false ? (arg) => 42 : null;");
-            f.go_to_marker(t, "29");
-            f.verify_current_line_content(t, "false ? (arg = 1) => 43 : null;");
-            f.go_to_marker(t, "30");
-            f.verify_current_line_content(t, "false ? (arg?) => 44 : null;");
-            f.go_to_marker(t, "31");
-            f.verify_current_line_content(t, "false ? (arg: number) => 45 : null;");
-            f.go_to_marker(t, "32");
-            f.verify_current_line_content(t, "false ? (arg?: number) => 46 : null;");
-            f.go_to_marker(t, "33");
-            f.verify_current_line_content(t, "false ? (arg?: number = 0) => 47 : null;");
-            f.go_to_marker(t, "34");
-            f.verify_current_line_content(t, "false ? (...arg: number[]) => 48 : null;");
-            f.go_to_marker(t, "35");
-            f.verify_current_line_content(t, "false ? (() => 51) : null;");
-            f.go_to_marker(t, "36");
-            f.verify_current_line_content(t, "false ? ((arg) => 52) : null;");
-            f.go_to_marker(t, "37");
-            f.verify_current_line_content(t, "false ? ((arg = 1) => 53) : null;");
-            f.go_to_marker(t, "38");
-            f.verify_current_line_content(t, "false ? ((arg?) => 54) : null;");
-            f.go_to_marker(t, "39");
-            f.verify_current_line_content(t, "false ? ((arg: number) => 55) : null;");
-            f.go_to_marker(t, "40");
-            f.verify_current_line_content(t, "false ? ((arg?: number) => 56) : null;");
-            f.go_to_marker(t, "41");
-            f.verify_current_line_content(t, "false ? ((arg?: number = 0) => 57) : null;");
-            f.go_to_marker(t, "42");
-            f.verify_current_line_content(t, "false ? ((...arg: number[]) => 58) : null;");
-            f.go_to_marker(t, "43");
-            f.verify_current_line_content(t, "false ? null : () => 61;");
-            f.go_to_marker(t, "44");
-            f.verify_current_line_content(t, "false ? null : (arg) => 62;");
-            f.go_to_marker(t, "45");
-            f.verify_current_line_content(t, "false ? null : (arg = 1) => 63;");
-            f.go_to_marker(t, "46");
-            f.verify_current_line_content(t, "false ? null : (arg?) => 64;");
-            f.go_to_marker(t, "47");
-            f.verify_current_line_content(t, "false ? null : (arg: number) => 65;");
-            f.go_to_marker(t, "48");
-            f.verify_current_line_content(t, "false ? null : (arg?: number) => 66;");
-            f.go_to_marker(t, "49");
-            f.verify_current_line_content(t, "false ? null : (arg?: number = 0) => 67;");
-            f.go_to_marker(t, "50");
-            f.verify_current_line_content(t, "false ? null : (...arg: number[]) => 68;");
-            f.go_to_marker(t, "51");
-            f.verify_current_line_content(t, "((a?) => { return a; }) ? (b?) => { return b; } : (c?) => { return c; };");
-            f.go_to_marker(t, "52");
-            f.verify_current_line_content(t, "((a?) => { return a; }) ? (b) => (c) => 81 : (c) => (d) => 82;");
-            f.go_to_marker(t, "53");
-            f.verify_current_line_content(t, "((arg) => 90) instanceof Function;");
-            f.go_to_marker(t, "54");
-            f.verify_current_line_content(t, "((arg = 1) => 91) instanceof Function;");
-            f.go_to_marker(t, "55");
-            f.verify_current_line_content(t, "((arg?) => 92) instanceof Function;");
-            f.go_to_marker(t, "56");
-            f.verify_current_line_content(t, "((arg: number) => 93) instanceof Function;");
-            f.go_to_marker(t, "57");
-            f.verify_current_line_content(t, "((arg: number = 1) => 94) instanceof Function;");
-            f.go_to_marker(t, "58");
-            f.verify_current_line_content(t, "((arg?: number) => 95) instanceof Function;");
-            f.go_to_marker(t, "59");
-            f.verify_current_line_content(t, "((...arg: number[]) => 96) instanceof Function;");
-            f.go_to_marker(t, "60");
-            f.verify_current_line_content(t, "'' + ((arg) => 100);");
-            f.go_to_marker(t, "61");
-            f.verify_current_line_content(t, "((arg) => 0) + '' + ((arg) => 101);");
-            f.go_to_marker(t, "62");
-            f.verify_current_line_content(t, "((arg = 1) => 0) + '' + ((arg = 2) => 102);");
-            f.go_to_marker(t, "63");
-            f.verify_current_line_content(t, "((arg?) => 0) + '' + ((arg?) => 103);");
-            f.go_to_marker(t, "64");
-            f.verify_current_line_content(t, "((arg: number) => 0) + '' + ((arg: number) => 104);");
-            f.go_to_marker(t, "65");
-            f.verify_current_line_content(t, "((arg: number = 1) => 0) + '' + ((arg: number = 2) => 105);");
-            f.go_to_marker(t, "66");
-            f.verify_current_line_content(t, "((arg?: number) => 0) + '' + ((arg?: number) => 106);");
-            f.go_to_marker(t, "67");
-            f.verify_current_line_content(t, "((...arg: number[]) => 0) + '' + ((...arg: number[]) => 107);");
-            f.go_to_marker(t, "68");
-            f.verify_current_line_content(t, "((arg1, arg2?) => 0) + '' + ((arg1, arg2?) => 108);");
-            f.go_to_marker(t, "69");
-            f.verify_current_line_content(t, "((arg1, ...arg2: number[]) => 0) + '' + ((arg1, ...arg2: number[]) => 108);");
-            f.go_to_marker(t, "70");
-            f.verify_current_line_content(t, "function foo(...arg: any[]) { }");
-            f.go_to_marker(t, "71");
-            f.verify_current_line_content(t, "foo(");
-            f.go_to_marker(t, "72");
-            f.verify_current_line_content(t, "    (a) => 110,");
-            f.go_to_marker(t, "73");
-            f.verify_current_line_content(t, "    ((a) => 111),");
-            f.go_to_marker(t, "74");
-            f.verify_current_line_content(t, "    (a) => {");
-            f.go_to_marker(t, "75");
-            f.verify_current_line_content(t, "        return 112;");
-            f.go_to_marker(t, "76");
-            f.verify_current_line_content(t, "    },");
-            f.go_to_marker(t, "77");
-            f.verify_current_line_content(t, "    (a?) => 113,");
-            f.go_to_marker(t, "78");
-            f.verify_current_line_content(t, "    (a, b?) => 114,");
-            f.go_to_marker(t, "79");
-            f.verify_current_line_content(t, "    (a: number) => 115,");
-            f.go_to_marker(t, "80");
-            f.verify_current_line_content(t, "    (a: number = 0) => 116,");
-            f.go_to_marker(t, "81");
-            f.verify_current_line_content(t, "    (a = 0) => 117,");
-            f.go_to_marker(t, "82");
-            f.verify_current_line_content(t, "    (a: number = 0) => 118,");
-            f.go_to_marker(t, "83");
-            f.verify_current_line_content(t, "    (a?, b?: number) => 118,");
-            f.go_to_marker(t, "84");
-            f.verify_current_line_content(t, "    (...a: number[]) => 119,");
-            f.go_to_marker(t, "85");
-            f.verify_current_line_content(t, "    (a, b = 0, ...c: number[]) => 120,");
-            f.go_to_marker(t, "86");
-            f.verify_current_line_content(t, "    (a) => (b) => (c) => 121,");
-            f.go_to_marker(t, "87");
-            f.verify_current_line_content(t, "    false ? (a) => 0 : (b) => 122");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "() => 1;");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "(arg) => 2;");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "arg => 2;");
+        f.go_to_marker(t, "3a");
+        f.verify_current_line_content(t, "arg => 2;");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "(arg = 1) => 3;");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "(arg?) => 4;");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "(arg: number) => 5;");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "(arg: number = 0) => 6;");
+        f.go_to_marker(t, "8");
+        f.verify_current_line_content(t, "(arg?: number) => 7;");
+        f.go_to_marker(t, "9");
+        f.verify_current_line_content(t, "(...arg: number[]) => 8;");
+        f.go_to_marker(t, "10");
+        f.verify_current_line_content(t, "(arg1, arg2) => 12;");
+        f.go_to_marker(t, "11");
+        f.verify_current_line_content(t, "(arg1 = 1, arg2 = 3) => 13;");
+        f.go_to_marker(t, "12");
+        f.verify_current_line_content(t, "(arg1?, arg2?) => 14;");
+        f.go_to_marker(t, "13");
+        f.verify_current_line_content(t, "(arg1: number, arg2: number) => 15;");
+        f.go_to_marker(t, "14");
+        f.verify_current_line_content(t, "(arg1: number = 0, arg2: number = 1) => 16;");
+        f.go_to_marker(t, "15");
+        f.verify_current_line_content(t, "(arg1?: number, arg2?: number) => 17;");
+        f.go_to_marker(t, "16");
+        f.verify_current_line_content(t, "(arg1, ...arg2: number[]) => 18;");
+        f.go_to_marker(t, "17");
+        f.verify_current_line_content(t, "(arg1, arg2?: number) => 19;");
+        f.go_to_marker(t, "18");
+        f.verify_current_line_content(t, "(() => 21);");
+        f.go_to_marker(t, "19");
+        f.verify_current_line_content(t, "((arg) => 22);");
+        f.go_to_marker(t, "20");
+        f.verify_current_line_content(t, "((arg = 1) => 23);");
+        f.go_to_marker(t, "21");
+        f.verify_current_line_content(t, "((arg?) => 24);");
+        f.go_to_marker(t, "22");
+        f.verify_current_line_content(t, "((arg: number) => 25);");
+        f.go_to_marker(t, "23");
+        f.verify_current_line_content(t, "((arg: number = 0) => 26);");
+        f.go_to_marker(t, "24");
+        f.verify_current_line_content(t, "((arg?: number) => 27);");
+        f.go_to_marker(t, "25");
+        f.verify_current_line_content(t, "((...arg: number[]) => 28);");
+        f.go_to_marker(t, "26");
+        f.verify_current_line_content(t, "(((((arg) => { return 32; }))));");
+        f.go_to_marker(t, "27");
+        f.verify_current_line_content(t, "false ? () => 41 : null;");
+        f.go_to_marker(t, "28");
+        f.verify_current_line_content(t, "false ? (arg) => 42 : null;");
+        f.go_to_marker(t, "29");
+        f.verify_current_line_content(t, "false ? (arg = 1) => 43 : null;");
+        f.go_to_marker(t, "30");
+        f.verify_current_line_content(t, "false ? (arg?) => 44 : null;");
+        f.go_to_marker(t, "31");
+        f.verify_current_line_content(t, "false ? (arg: number) => 45 : null;");
+        f.go_to_marker(t, "32");
+        f.verify_current_line_content(t, "false ? (arg?: number) => 46 : null;");
+        f.go_to_marker(t, "33");
+        f.verify_current_line_content(t, "false ? (arg?: number = 0) => 47 : null;");
+        f.go_to_marker(t, "34");
+        f.verify_current_line_content(t, "false ? (...arg: number[]) => 48 : null;");
+        f.go_to_marker(t, "35");
+        f.verify_current_line_content(t, "false ? (() => 51) : null;");
+        f.go_to_marker(t, "36");
+        f.verify_current_line_content(t, "false ? ((arg) => 52) : null;");
+        f.go_to_marker(t, "37");
+        f.verify_current_line_content(t, "false ? ((arg = 1) => 53) : null;");
+        f.go_to_marker(t, "38");
+        f.verify_current_line_content(t, "false ? ((arg?) => 54) : null;");
+        f.go_to_marker(t, "39");
+        f.verify_current_line_content(t, "false ? ((arg: number) => 55) : null;");
+        f.go_to_marker(t, "40");
+        f.verify_current_line_content(t, "false ? ((arg?: number) => 56) : null;");
+        f.go_to_marker(t, "41");
+        f.verify_current_line_content(t, "false ? ((arg?: number = 0) => 57) : null;");
+        f.go_to_marker(t, "42");
+        f.verify_current_line_content(t, "false ? ((...arg: number[]) => 58) : null;");
+        f.go_to_marker(t, "43");
+        f.verify_current_line_content(t, "false ? null : () => 61;");
+        f.go_to_marker(t, "44");
+        f.verify_current_line_content(t, "false ? null : (arg) => 62;");
+        f.go_to_marker(t, "45");
+        f.verify_current_line_content(t, "false ? null : (arg = 1) => 63;");
+        f.go_to_marker(t, "46");
+        f.verify_current_line_content(t, "false ? null : (arg?) => 64;");
+        f.go_to_marker(t, "47");
+        f.verify_current_line_content(t, "false ? null : (arg: number) => 65;");
+        f.go_to_marker(t, "48");
+        f.verify_current_line_content(t, "false ? null : (arg?: number) => 66;");
+        f.go_to_marker(t, "49");
+        f.verify_current_line_content(t, "false ? null : (arg?: number = 0) => 67;");
+        f.go_to_marker(t, "50");
+        f.verify_current_line_content(t, "false ? null : (...arg: number[]) => 68;");
+        f.go_to_marker(t, "51");
+        f.verify_current_line_content(t, "((a?) => { return a; }) ? (b?) => { return b; } : (c?) => { return c; };");
+        f.go_to_marker(t, "52");
+        f.verify_current_line_content(t, "((a?) => { return a; }) ? (b) => (c) => 81 : (c) => (d) => 82;");
+        f.go_to_marker(t, "53");
+        f.verify_current_line_content(t, "((arg) => 90) instanceof Function;");
+        f.go_to_marker(t, "54");
+        f.verify_current_line_content(t, "((arg = 1) => 91) instanceof Function;");
+        f.go_to_marker(t, "55");
+        f.verify_current_line_content(t, "((arg?) => 92) instanceof Function;");
+        f.go_to_marker(t, "56");
+        f.verify_current_line_content(t, "((arg: number) => 93) instanceof Function;");
+        f.go_to_marker(t, "57");
+        f.verify_current_line_content(t, "((arg: number = 1) => 94) instanceof Function;");
+        f.go_to_marker(t, "58");
+        f.verify_current_line_content(t, "((arg?: number) => 95) instanceof Function;");
+        f.go_to_marker(t, "59");
+        f.verify_current_line_content(t, "((...arg: number[]) => 96) instanceof Function;");
+        f.go_to_marker(t, "60");
+        f.verify_current_line_content(t, "'' + ((arg) => 100);");
+        f.go_to_marker(t, "61");
+        f.verify_current_line_content(t, "((arg) => 0) + '' + ((arg) => 101);");
+        f.go_to_marker(t, "62");
+        f.verify_current_line_content(t, "((arg = 1) => 0) + '' + ((arg = 2) => 102);");
+        f.go_to_marker(t, "63");
+        f.verify_current_line_content(t, "((arg?) => 0) + '' + ((arg?) => 103);");
+        f.go_to_marker(t, "64");
+        f.verify_current_line_content(t, "((arg: number) => 0) + '' + ((arg: number) => 104);");
+        f.go_to_marker(t, "65");
+        f.verify_current_line_content(t, "((arg: number = 1) => 0) + '' + ((arg: number = 2) => 105);");
+        f.go_to_marker(t, "66");
+        f.verify_current_line_content(t, "((arg?: number) => 0) + '' + ((arg?: number) => 106);");
+        f.go_to_marker(t, "67");
+        f.verify_current_line_content(t, "((...arg: number[]) => 0) + '' + ((...arg: number[]) => 107);");
+        f.go_to_marker(t, "68");
+        f.verify_current_line_content(t, "((arg1, arg2?) => 0) + '' + ((arg1, arg2?) => 108);");
+        f.go_to_marker(t, "69");
+        f.verify_current_line_content(t, "((arg1, ...arg2: number[]) => 0) + '' + ((arg1, ...arg2: number[]) => 108);");
+        f.go_to_marker(t, "70");
+        f.verify_current_line_content(t, "function foo(...arg: any[]) { }");
+        f.go_to_marker(t, "71");
+        f.verify_current_line_content(t, "foo(");
+        f.go_to_marker(t, "72");
+        f.verify_current_line_content(t, "    (a) => 110,");
+        f.go_to_marker(t, "73");
+        f.verify_current_line_content(t, "    ((a) => 111),");
+        f.go_to_marker(t, "74");
+        f.verify_current_line_content(t, "    (a) => {");
+        f.go_to_marker(t, "75");
+        f.verify_current_line_content(t, "        return 112;");
+        f.go_to_marker(t, "76");
+        f.verify_current_line_content(t, "    },");
+        f.go_to_marker(t, "77");
+        f.verify_current_line_content(t, "    (a?) => 113,");
+        f.go_to_marker(t, "78");
+        f.verify_current_line_content(t, "    (a, b?) => 114,");
+        f.go_to_marker(t, "79");
+        f.verify_current_line_content(t, "    (a: number) => 115,");
+        f.go_to_marker(t, "80");
+        f.verify_current_line_content(t, "    (a: number = 0) => 116,");
+        f.go_to_marker(t, "81");
+        f.verify_current_line_content(t, "    (a = 0) => 117,");
+        f.go_to_marker(t, "82");
+        f.verify_current_line_content(t, "    (a: number = 0) => 118,");
+        f.go_to_marker(t, "83");
+        f.verify_current_line_content(t, "    (a?, b?: number) => 118,");
+        f.go_to_marker(t, "84");
+        f.verify_current_line_content(t, "    (...a: number[]) => 119,");
+        f.go_to_marker(t, "85");
+        f.verify_current_line_content(t, "    (a, b = 0, ...c: number[]) => 120,");
+        f.go_to_marker(t, "86");
+        f.verify_current_line_content(t, "    (a) => (b) => (c) => 121,");
+        f.go_to_marker(t, "87");
+        f.verify_current_line_content(t, "    false ? (a) => 0 : (b) => 122");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2164,19 +1786,12 @@ use crate::tests::prelude::*;
 // formattingForIn_test.go:10
 pub fn test_formatting_for_in(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "/**/for (var i    in[]   )  {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "");
-            f.verify_current_line_content(t, "for (var i in []) { }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "/**/for (var i    in[]   )  {}";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "");
+        f.verify_current_line_content(t, "for (var i in []) { }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2187,35 +1802,28 @@ use crate::tests::prelude::*;
 // formattingForLoopSemicolons_test.go:11
 pub fn test_formatting_for_loop_semicolons(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/for (;;) { }
+    let content: &str = r"/*1*/for (;;) { }
 /*2*/for (var x;x<0;x++) { }
 /*3*/for (var x ;x<0 ;x++) { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "for (; ;) { }");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "for (var x; x < 0; x++) { }");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "for (var x; x < 0; x++) { }");
-            let mut opts444 = f.get_options();
-            opts444.format_code_settings.insert_space_after_semicolon_in_for_statements = Tristate::False;
-            f.configure(t, opts444);
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "for (;;) { }");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "for (var x;x < 0;x++) { }");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "for (var x;x < 0;x++) { }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "for (; ;) { }");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "for (var x; x < 0; x++) { }");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "for (var x; x < 0; x++) { }");
+        let mut opts444 = f.get_options();
+        opts444.format_code_settings.insert_space_after_semicolon_in_for_statements = Tristate::False;
+        f.configure(t, opts444);
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "for (;;) { }");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "for (var x;x < 0;x++) { }");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "for (var x;x < 0;x++) { }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2226,19 +1834,12 @@ use crate::tests::prelude::*;
 // formattingForOfKeyword_test.go:10
 pub fn test_formatting_for_of_keyword(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "/**/for ([]of[]) { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "");
-            f.verify_current_line_content(t, "for ([] of []) { }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "/**/for ([]of[]) { }";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "");
+        f.verify_current_line_content(t, "for ([] of []) { }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2249,20 +1850,13 @@ use crate::tests::prelude::*;
 // formattingGlobalAugmentation1_test.go:10
 pub fn test_formatting_global_augmentation1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/declare          global                      {
+    let content: &str = r"/*1*/declare          global                      {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "declare global {");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "declare global {");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2273,22 +1867,15 @@ use crate::tests::prelude::*;
 // formattingGlobalAugmentation2_test.go:10
 pub fn test_formatting_global_augmentation2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"declare module "A" {
+    let content: &str = r#"declare module "A" {
 /*1*/                  global                {
     }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "    global {");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "    global {");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2299,17 +1886,10 @@ use crate::tests::prelude::*;
 // formattingHexLiteral_test.go:10
 pub fn test_formatting_hex_literal(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "var x =  0x1,y;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "var x =  0x1,y;";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2320,24 +1900,17 @@ use crate::tests::prelude::*;
 // formattingIfInElseBlock_test.go:10
 pub fn test_formatting_if_in_else_block(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"if (true) {
+    let content: &str = r"if (true) {
 }
 else {
     if (true) {
         /*1*/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, "}");
-            f.verify_current_line_content(t, "    }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert(t, "}");
+        f.verify_current_line_content(t, "    }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2348,8 +1921,7 @@ use crate::tests::prelude::*;
 // formattingIllegalImportClause_test.go:10
 pub fn test_formatting_illegal_import_clause(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"var expect = require('expect.js');
+    let content: &str = r"var expect = require('expect.js');
 import React   from 'react'/*1*/;
 import { mount } from 'enzyme';
 require('../setup');
@@ -2365,17 +1937,11 @@ describe('<Failed />', () => {
   it('redirects to order summary', () => {
   });
 });";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "import React from 'react';");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "import React from 'react';");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2386,25 +1952,18 @@ use crate::tests::prelude::*;
 // formattingInComment_test.go:10
 pub fn test_formatting_in_comment(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class A {
+    let content: &str = r"class A {
 foo(              ); // /*1*/
 }
 function foo() {       var x;       } // /*2*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, ";");
-            f.verify_current_line_content(t, "foo(              ); // ;");
-            f.go_to_marker(t, "2");
-            f.insert(t, "}");
-            f.verify_current_line_content(t, "function foo() {       var x;       } // }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert(t, ";");
+        f.verify_current_line_content(t, "foo(              ); // ;");
+        f.go_to_marker(t, "2");
+        f.insert(t, "}");
+        f.verify_current_line_content(t, "function foo() {       var x;       } // }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2415,8 +1974,7 @@ use crate::tests::prelude::*;
 // formattingInDestructuring1_test.go:10
 pub fn test_formatting_in_destructuring1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface let { }
+    let content: &str = r"interface let { }
 /*1*/var x: let         [];
 
 function foo() {
@@ -2426,23 +1984,17 @@ function foo() {
 /*4*/    for (let[x] = [];x < 1;) {
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "var x: let[];");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    let [x] = [];");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "    const [x] = [];");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "    for (let [x] = []; x < 1;) {");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "var x: let[];");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    let [x] = [];");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "    const [x] = [];");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "    for (let [x] = []; x < 1;) {");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2453,21 +2005,14 @@ use crate::tests::prelude::*;
 // formattingInDestructuring2_test.go:10
 pub fn test_formatting_in_destructuring2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"/*1*/function   drawText(    { text = "", location: [x, y]=           [0, 0], bold = false }) {
+    let content: &str = r#"/*1*/function   drawText(    { text = "", location: [x, y]=           [0, 0], bold = false }) {
     // Draw text  
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, r#"function drawText({ text = "", location: [x, y] = [0, 0], bold = false }) {"#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, r#"function drawText({ text = "", location: [x, y] = [0, 0], bold = false }) {"#);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2478,31 +2023,24 @@ use crate::tests::prelude::*;
 // formattingInDestructuring3_test.go:10
 pub fn test_formatting_in_destructuring3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/const {
+    let content: &str = r"/*1*/const {
 /*2*/    a,
 /*3*/    b,
 /*4*/} = {a: 1, b: 2};
 /*5*/const {a: c} = {a: 1, b: 2};";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "const {");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    a,");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "    b,");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "} = { a: 1, b: 2 };");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "const { a: c } = { a: 1, b: 2 };");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "const {");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    a,");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "    b,");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "} = { a: 1, b: 2 };");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "const { a: c } = { a: 1, b: 2 };");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2513,28 +2051,21 @@ use crate::tests::prelude::*;
 // formattingInDestructuring4_test.go:11
 pub fn test_formatting_in_destructuring4(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "/*1*/const { \n/*2*/    a,\n/*3*/    b,\n/*4*/} = { a: 1, b: 2 };";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let mut opts198 = f.get_options();
-            opts198.format_code_settings.insert_space_after_opening_and_before_closing_nonempty_braces = Tristate::False;
-            f.configure(t, opts198);
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "const {");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    a,");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "    b,");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "} = {a: 1, b: 2};");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "/*1*/const { \n/*2*/    a,\n/*3*/    b,\n/*4*/} = { a: 1, b: 2 };";
+    fourslash::run_generated_test(t, content, |f, t| {
+        let mut opts198 = f.get_options();
+        opts198.format_code_settings.insert_space_after_opening_and_before_closing_nonempty_braces = Tristate::False;
+        f.configure(t, opts198);
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "const {");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    a,");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "    b,");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "} = {a: 1, b: 2};");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2545,26 +2076,19 @@ use crate::tests::prelude::*;
 // formattingInDestructuring5_test.go:10
 pub fn test_formatting_in_destructuring5(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"let a, b;
+    let content: &str = r"let a, b;
 /*1*/if (false)[a, b] = [1, 2];
 /*2*/if (true)        [a, b] = [1, 2];
 /*3*/var a = [1, 2, 3].map(num => num) [0];";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "if (false) [a, b] = [1, 2];");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "if (true) [a, b] = [1, 2];");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "var a = [1, 2, 3].map(num => num)[0];");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "if (false) [a, b] = [1, 2];");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "if (true) [a, b] = [1, 2];");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "var a = [1, 2, 3].map(num => num)[0];");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2575,8 +2099,7 @@ use crate::tests::prelude::*;
 // formattingInExpressionsInTsx_test.go:10
 pub fn test_formatting_in_expressions_in_tsx(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: test.tsx
+    let content: &str = r#"// @Filename: test.tsx
 import * as React from "react";
 <div
     autoComplete={(function () {
@@ -2584,17 +2107,11 @@ return true/*1*/
     })() }
     >
 </div>"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, ";");
-            f.verify_current_line_content(t, "        return true;");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert(t, ";");
+        f.verify_current_line_content(t, "        return true;");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2605,25 +2122,18 @@ use crate::tests::prelude::*;
 // formattingInMultilineComments_test.go:10
 pub fn test_formatting_in_multiline_comments(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"var x = function() {
+    let content: &str = r"var x = function() {
     if (true) {
     /*1*/} else {/*2*/
 }
 
 // newline at the end of the file";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "2");
-            f.insert_line(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "    } else {");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "2");
+        f.insert_line(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "    } else {");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2634,8 +2144,7 @@ use crate::tests::prelude::*;
 // formattingJsxTexts1_test.go:10
 pub fn test_formatting_jsx_texts1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"//@Filename: file.tsx
+    let content: &str = r"//@Filename: file.tsx
 <option>
     homu   ;      homu
     homu;homu
@@ -2691,11 +2200,9 @@ pub fn test_formatting_jsx_texts1(t: &T) {
 
     (    homu   )    homu
 </option>;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"<option>
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"<option>
     homu   ;      homu
     homu;homu
     homu   :    homu
@@ -2750,11 +2257,7 @@ pub fn test_formatting_jsx_texts1(t: &T) {
 
     (    homu   )    homu
 </option>;");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2765,8 +2268,7 @@ use crate::tests::prelude::*;
 // formattingJsxTexts2_test.go:10
 pub fn test_formatting_jsx_texts2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"//@Filename: file.tsx
+    let content: &str = r"//@Filename: file.tsx
 const a = (
     <div>
   foo
@@ -2803,11 +2305,9 @@ const f =
   {     foobar  }
   bar
           </div>";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"const a = (
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"const a = (
     <div>
         foo
     </div>
@@ -2843,11 +2343,7 @@ const f =
         {foobar}
         bar
     </div>");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2858,8 +2354,7 @@ use crate::tests::prelude::*;
 // formattingJsxTexts3_test.go:10
 pub fn test_formatting_jsx_texts3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"//@Filename: file.tsx
+    let content: &str = r#"//@Filename: file.tsx
 function foo() {
 const bar = "Oh no";
 
@@ -2867,22 +2362,16 @@ return (
 <div>"{bar}"</div>
 )
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r#"function foo() {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r#"function foo() {
     const bar = "Oh no";
 
     return (
         <div>"{bar}"</div>
     )
 }"#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2893,27 +2382,20 @@ use crate::tests::prelude::*;
 // formattingJsxTexts4_test.go:10
 pub fn test_formatting_jsx_texts4(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"//@Filename: file.tsx
+    let content: &str = r#"//@Filename: file.tsx
 function foo() {
 const a = <ns: foobar   x : test1   x :test2="string"  x:test3={true?1:0}  />;
 
 return a;
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r#"function foo() {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r#"function foo() {
     const a = <ns:foobar x:test1 x:test2="string" x:test3={true ? 1 : 0} />;
 
     return a;
 }"#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2924,19 +2406,12 @@ use crate::tests::prelude::*;
 // formattingKeywordAsIdentifier_test.go:10
 pub fn test_formatting_keyword_as_identifier(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "declare var module/*1*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, ";");
-            f.verify_current_line_content(t, "declare var module;");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "declare var module/*1*/";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert(t, ";");
+        f.verify_current_line_content(t, "declare var module;");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2947,23 +2422,16 @@ use crate::tests::prelude::*;
 // formattingMappedType_test.go:10
 pub fn test_formatting_mapped_type(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*generic*/type t  < T  > =   {
+    let content: &str = r"/*generic*/type t  < T  > =   {
 /*map*/   [   P   in   keyof    T  ]   :   T  [  P  ]
 };";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "generic");
-            f.verify_current_line_content(t, "type t<T> = {");
-            f.go_to_marker(t, "map");
-            f.verify_current_line_content(t, "    [P in keyof T]: T[P]");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "generic");
+        f.verify_current_line_content(t, "type t<T> = {");
+        f.go_to_marker(t, "map");
+        f.verify_current_line_content(t, "    [P in keyof T]: T[P]");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2974,8 +2442,7 @@ use crate::tests::prelude::*;
 // formattingMultilineCommentsWithTabs1_test.go:10
 pub fn test_formatting_multiline_comments_with_tabs1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"var f = function (j) {
+    let content: &str = r"var f = function (j) {
 
 	switch (j) {
 		case 1:
@@ -2990,25 +2457,19 @@ pub fn test_formatting_multiline_comments_with_tabs1(t: &T) {
 		break;
 	}
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "            /* when current checkbox has focus, Firefox has changed check state already");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "            on SPACE bar press only");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "            IE does not have issue, use the CSS class");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "            input:focus[type=checkbox] (z-index = 31290)");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "            to determine whether checkbox has focus or not");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "            /* when current checkbox has focus, Firefox has changed check state already");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "            on SPACE bar press only");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "            IE does not have issue, use the CSS class");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "            input:focus[type=checkbox] (z-index = 31290)");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "            to determine whether checkbox has focus or not");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3019,25 +2480,18 @@ use crate::tests::prelude::*;
 // formattingMultilineTemplateLiterals_test.go:10
 pub fn test_formatting_multiline_template_literals(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/new Error(`Failed to expand glob: ${projectSpec.filesGlob}
+    let content: &str = r"/*1*/new Error(`Failed to expand glob: ${projectSpec.filesGlob}
 /*2*/                at projectPath : ${projectFile}
 /*3*/                with error: ${ex.message}`)";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "new Error(`Failed to expand glob: ${projectSpec.filesGlob}");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "                at projectPath : ${projectFile}");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "                with error: ${ex.message}`)");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "new Error(`Failed to expand glob: ${projectSpec.filesGlob}");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "                at projectPath : ${projectFile}");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "                with error: ${ex.message}`)");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3048,37 +2502,30 @@ use crate::tests::prelude::*;
 // formattingNestedScopes_test.go:10
 pub fn test_formatting_nested_scopes(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"/*1*/        namespace      My.App      {
+    let content: &str = r#"/*1*/        namespace      My.App      {
 /*2*/export      var appModule =      angular.module("app", [
 /*3*/            ]).config([() =>            {
 /*4*/                        configureStates
 /*5*/($stateProvider);
 /*6*/}]).run(My.App.setup);
 /*7*/      }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "namespace My.App {");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, r#"    export var appModule = angular.module("app", ["#);
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "    ]).config([() => {");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "        configureStates");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "            ($stateProvider);");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "    }]).run(My.App.setup);");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "}");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "namespace My.App {");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, r#"    export var appModule = angular.module("app", ["#);
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "    ]).config([() => {");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "        configureStates");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "            ($stateProvider);");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "    }]).run(My.App.setup);");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "}");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3089,31 +2536,24 @@ use crate::tests::prelude::*;
 // formattingNonNullAssertionOperator_test.go:10
 pub fn test_formatting_non_null_assertion_operator(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/ 'bar' ! ;
+    let content: &str = r"/*1*/ 'bar' ! ;
 /*2*/ ( 'bar' ) ! ;
 /*3*/ 'bar' [ 1 ] ! ;
 /*4*/ var  bar  =  'bar' . foo ! ;
 /*5*/ var  foo  =  bar ! ;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "'bar'!;");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "('bar')!;");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "'bar'[1]!;");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "var bar = 'bar'.foo!;");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "var foo = bar!;");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "'bar'!;");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "('bar')!;");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "'bar'[1]!;");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "var bar = 'bar'.foo!;");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "var foo = bar!;");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3124,21 +2564,14 @@ use crate::tests::prelude::*;
 // formattingObjectLiteral_test.go:10
 pub fn test_formatting_object_literal(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"var clear = {
+    let content: &str = r#"var clear = {
 "a": 1/**/
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "");
-            f.verify_current_line_content(t, r#"    "a": 1"#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "");
+        f.verify_current_line_content(t, r#"    "a": 1"#);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3149,8 +2582,7 @@ use crate::tests::prelude::*;
 // formattingObjectLiteralOpenCurlyNewline_test.go:11
 pub fn test_formatting_object_literal_open_curly_newline(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"
+    let content: &str = r"
 var clear =
 {
     outerKey:
@@ -3161,11 +2593,9 @@ var clear =
     }
 };
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"
 var clear =
 {
     outerKey:
@@ -3176,11 +2606,11 @@ var clear =
     }
 };
 ");
-            let mut opts444 = f.get_options();
-            opts444.format_code_settings.indent_multi_line_object_literal_beginning_on_blank_line = Tristate::True;
-            f.configure(t, opts444);
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"
+        let mut opts444 = f.get_options();
+        opts444.format_code_settings.indent_multi_line_object_literal_beginning_on_blank_line = Tristate::True;
+        f.configure(t, opts444);
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"
 var clear =
     {
         outerKey:
@@ -3191,11 +2621,7 @@ var clear =
             }
     };
 ");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3206,8 +2632,7 @@ use crate::tests::prelude::*;
 // formattingObjectLiteralOpenCurlyNewlineAssignment_test.go:11
 pub fn test_formatting_object_literal_open_curly_newline_assignment(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"
+    let content: &str = r"
 var obj = {};
 obj =
 {
@@ -3219,11 +2644,9 @@ var obj2 = obj ||
     prop: 0
 }
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"
 var obj = {};
 obj =
 {
@@ -3235,11 +2658,11 @@ var obj2 = obj ||
     prop: 0
 }
 ");
-            let mut opts400 = f.get_options();
-            opts400.format_code_settings.indent_multi_line_object_literal_beginning_on_blank_line = Tristate::True;
-            f.configure(t, opts400);
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"
+        let mut opts400 = f.get_options();
+        opts400.format_code_settings.indent_multi_line_object_literal_beginning_on_blank_line = Tristate::True;
+        f.configure(t, opts400);
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"
 var obj = {};
 obj =
     {
@@ -3251,11 +2674,7 @@ var obj2 = obj ||
         prop: 0
     }
 ");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3266,42 +2685,35 @@ use crate::tests::prelude::*;
 // formattingObjectLiteralOpenCurlyNewlineTyping_test.go:10
 pub fn test_formatting_object_literal_open_curly_newline_typing(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"
+    let content: &str = r"
 var varName =/**/
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.insert(t, r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.insert(t, r"
 {");
-            f.verify_current_file_content(t, r"
+        f.verify_current_file_content(t, r"
 var varName =
     {
 ");
-            f.insert(t, r"
+        f.insert(t, r"
 a: 1");
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"
 var varName =
 {
     a: 1
 ");
-            f.insert(t, r"
+        f.insert(t, r"
 };");
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"
 var varName =
 {
     a: 1
 };
 ");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3312,8 +2724,7 @@ use crate::tests::prelude::*;
 // formattingObjectLiteralOpenCurlySingleLine_test.go:10
 pub fn test_formatting_object_literal_open_curly_single_line(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"
+    let content: &str = r"
 let obj1 =
 { x: 10 };
 
@@ -3321,11 +2732,9 @@ let obj2 =
     // leading trivia
 { y: 10 };
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"
 let obj1 =
     { x: 10 };
 
@@ -3333,11 +2742,7 @@ let obj2 =
     // leading trivia
     { y: 10 };
 ");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3348,19 +2753,12 @@ use crate::tests::prelude::*;
 // formattingOfChainedLambda_test.go:10
 pub fn test_formatting_of_chained_lambda(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "var fn = (x: string) => ()=> alert(x)/**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.insert(t, ";");
-            f.verify_current_line_content(t, "var fn = (x: string) => () => alert(x);");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "var fn = (x: string) => ()=> alert(x)/**/";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.insert(t, ";");
+        f.verify_current_line_content(t, "var fn = (x: string) => () => alert(x);");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3371,24 +2769,17 @@ use crate::tests::prelude::*;
 // formattingOfExportDefault_test.go:10
 pub fn test_formatting_of_export_default(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace Foo {
+    let content: &str = r"namespace Foo {
 /*1*/    export        default        class        Test { }
 }
 /*2*/export        default        function        bar() { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "    export default class Test { }");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "export default function bar() { }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "    export default class Test { }");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "export default function bar() { }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3399,8 +2790,7 @@ use crate::tests::prelude::*;
 // formattingOfMultilineBlockConstructs_test.go:10
 pub fn test_formatting_of_multiline_block_constructs(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace InternalModule/*1*/
+    let content: &str = r"namespace InternalModule/*1*/
 {
 }
 interface MyInterface/*2*/
@@ -3436,43 +2826,37 @@ function foo()/*8*/
 });
 var x :/*12*/
 {};/*13*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "namespace InternalModule {");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "interface MyInterface {");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "enum E {");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "class MyClass {");
-            f.go_to_marker(t, "cons");
-            f.verify_current_line_content(t, "    constructor() { }");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "    public MyFunction() {");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "    public get Getter() {");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "    public set Setter(x) {");
-            f.go_to_marker(t, "8");
-            f.verify_current_line_content(t, "function foo() {");
-            f.go_to_marker(t, "9");
-            f.verify_current_line_content(t, "    { }");
-            f.go_to_marker(t, "10");
-            f.verify_current_line_content(t, "(function() {");
-            f.go_to_marker(t, "11");
-            f.verify_current_line_content(t, "(() => {");
-            f.go_to_marker(t, "12");
-            f.verify_current_line_content(t, "var x:");
-            f.go_to_marker(t, "13");
-            f.verify_current_line_content(t, "    {};");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "namespace InternalModule {");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "interface MyInterface {");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "enum E {");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "class MyClass {");
+        f.go_to_marker(t, "cons");
+        f.verify_current_line_content(t, "    constructor() { }");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "    public MyFunction() {");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "    public get Getter() {");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "    public set Setter(x) {");
+        f.go_to_marker(t, "8");
+        f.verify_current_line_content(t, "function foo() {");
+        f.go_to_marker(t, "9");
+        f.verify_current_line_content(t, "    { }");
+        f.go_to_marker(t, "10");
+        f.verify_current_line_content(t, "(function() {");
+        f.go_to_marker(t, "11");
+        f.verify_current_line_content(t, "(() => {");
+        f.go_to_marker(t, "12");
+        f.verify_current_line_content(t, "var x:");
+        f.go_to_marker(t, "13");
+        f.verify_current_line_content(t, "    {};");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3483,8 +2867,7 @@ use crate::tests::prelude::*;
 // formattingOnChainedCallbacksAndPropertyAccesses_test.go:10
 pub fn test_formatting_on_chained_callbacks_and_property_accesses(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"var x = 1;
+    let content: &str = r"var x = 1;
 x
 /*1*/.toFixed
 x
@@ -3497,31 +2880,25 @@ x
 /*6*/.toFixed
 /*7*/.toString()
 /*8*/.length;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "    .toFixed");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    .toFixed()");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "    .toFixed()");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "    .length");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "    .toString();");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "    .toFixed");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "    .toString()");
-            f.go_to_marker(t, "8");
-            f.verify_current_line_content(t, "    .length;");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "    .toFixed");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    .toFixed()");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "    .toFixed()");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "    .length");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "    .toString();");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "    .toFixed");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "    .toString()");
+        f.go_to_marker(t, "8");
+        f.verify_current_line_content(t, "    .length;");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3532,8 +2909,7 @@ use crate::tests::prelude::*;
 // formattingOnClasses_test.go:10
 pub fn test_formatting_on_classes(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"/*1*/         class                    a                  {
+    let content: &str = r#"/*1*/         class                    a                  {
 /*2*/                                                        constructor       (       n   :                 number    )             ;
 /*3*/                                                        constructor       (       s   :                 string    )             ;
 /*4*/                                                        constructor       (       ns   :                 any    )                            {
@@ -3615,149 +2991,143 @@ pub fn test_formatting_on_classes(t: &T) {
 /*65*/                                                                         private                pv4  :    number =
 /*66*/                                                                         {};
 /*END*/}"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "class a {");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    constructor(n: number);");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "    constructor(s: string);");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "    constructor(ns: any) {");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "    public pgF() { }");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "    public pv;");
-            f.go_to_marker(t, "8");
-            f.verify_current_line_content(t, "    public get d() {");
-            f.go_to_marker(t, "9");
-            f.verify_current_line_content(t, "        return 30;");
-            f.go_to_marker(t, "10");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "11");
-            f.verify_current_line_content(t, "    public set d(number) {");
-            f.go_to_marker(t, "12");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "13");
-            f.verify_current_line_content(t, "    public static get p2() {");
-            f.go_to_marker(t, "14");
-            f.verify_current_line_content(t, "        return { x: 30, y: 40 };");
-            f.go_to_marker(t, "15");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "16");
-            f.verify_current_line_content(t, "    private static d2() {");
-            f.go_to_marker(t, "17");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "18");
-            f.verify_current_line_content(t, "    private static get p3() {");
-            f.go_to_marker(t, "19");
-            f.verify_current_line_content(t, r#"        return "string";"#);
-            f.go_to_marker(t, "20");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "21");
-            f.verify_current_line_content(t, "    private pv3;");
-            f.go_to_marker(t, "22");
-            f.verify_current_line_content(t, "    private foo(n: number): string;");
-            f.go_to_marker(t, "23");
-            f.verify_current_line_content(t, "    private foo(s: string): string;");
-            f.go_to_marker(t, "24");
-            f.verify_current_line_content(t, "    private foo(ns: any) {");
-            f.go_to_marker(t, "25");
-            f.verify_current_line_content(t, "        return ns.toString();");
-            f.go_to_marker(t, "26");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "27");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "28");
-            f.verify_current_line_content(t, "class b extends a {");
-            f.go_to_marker(t, "29");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "30");
-            f.verify_current_line_content(t, "class m1b {");
-            f.go_to_marker(t, "31");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "32");
-            f.verify_current_line_content(t, "interface m1ib {");
-            f.go_to_marker(t, "33");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "34");
-            f.verify_current_line_content(t, "class c extends m1b {");
-            f.go_to_marker(t, "35");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "36");
-            f.verify_current_line_content(t, "class ib2 implements m1ib {");
-            f.go_to_marker(t, "37");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "38");
-            f.verify_current_line_content(t, "declare class aAmbient {");
-            f.go_to_marker(t, "39");
-            f.verify_current_line_content(t, "    constructor(n: number);");
-            f.go_to_marker(t, "40");
-            f.verify_current_line_content(t, "    constructor(s: string);");
-            f.go_to_marker(t, "41");
-            f.verify_current_line_content(t, "    public pgF(): void;");
-            f.go_to_marker(t, "42");
-            f.verify_current_line_content(t, "    public pv;");
-            f.go_to_marker(t, "43");
-            f.verify_current_line_content(t, "    public d: number;");
-            f.go_to_marker(t, "44");
-            f.verify_current_line_content(t, "    static p2: { x: number; y: number; };");
-            f.go_to_marker(t, "45");
-            f.verify_current_line_content(t, "    static d2();");
-            f.go_to_marker(t, "46");
-            f.verify_current_line_content(t, "    static p3;");
-            f.go_to_marker(t, "47");
-            f.verify_current_line_content(t, "    private pv3;");
-            f.go_to_marker(t, "48");
-            f.verify_current_line_content(t, "    private foo(s);");
-            f.go_to_marker(t, "49");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "50");
-            f.verify_current_line_content(t, "class d {");
-            f.go_to_marker(t, "51");
-            f.verify_current_line_content(t, "    private foo(n: number): string;");
-            f.go_to_marker(t, "52");
-            f.verify_current_line_content(t, "    private foo(s: string): string;");
-            f.go_to_marker(t, "53");
-            f.verify_current_line_content(t, "    private foo(ns: any) {");
-            f.go_to_marker(t, "54");
-            f.verify_current_line_content(t, "        return ns.toString();");
-            f.go_to_marker(t, "55");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "56");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "57");
-            f.verify_current_line_content(t, "class e {");
-            f.go_to_marker(t, "58");
-            f.verify_current_line_content(t, "    private foo(s: string): string;");
-            f.go_to_marker(t, "59");
-            f.verify_current_line_content(t, "    private foo(n: number): string;");
-            f.go_to_marker(t, "60");
-            f.verify_current_line_content(t, "    private foo(ns: any) {");
-            f.go_to_marker(t, "61");
-            f.verify_current_line_content(t, "        return ns.toString();");
-            f.go_to_marker(t, "62");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "63");
-            f.verify_current_line_content(t, "    protected bar() { }");
-            f.go_to_marker(t, "64");
-            f.verify_current_line_content(t, "    protected static bar2() { }");
-            f.go_to_marker(t, "65");
-            f.verify_current_line_content(t, "    private pv4: number =");
-            f.go_to_marker(t, "66");
-            f.verify_current_line_content(t, "        {};");
-            f.go_to_marker(t, "END");
-            f.verify_current_line_content(t, "}");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "class a {");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    constructor(n: number);");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "    constructor(s: string);");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "    constructor(ns: any) {");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "    public pgF() { }");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "    public pv;");
+        f.go_to_marker(t, "8");
+        f.verify_current_line_content(t, "    public get d() {");
+        f.go_to_marker(t, "9");
+        f.verify_current_line_content(t, "        return 30;");
+        f.go_to_marker(t, "10");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "11");
+        f.verify_current_line_content(t, "    public set d(number) {");
+        f.go_to_marker(t, "12");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "13");
+        f.verify_current_line_content(t, "    public static get p2() {");
+        f.go_to_marker(t, "14");
+        f.verify_current_line_content(t, "        return { x: 30, y: 40 };");
+        f.go_to_marker(t, "15");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "16");
+        f.verify_current_line_content(t, "    private static d2() {");
+        f.go_to_marker(t, "17");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "18");
+        f.verify_current_line_content(t, "    private static get p3() {");
+        f.go_to_marker(t, "19");
+        f.verify_current_line_content(t, r#"        return "string";"#);
+        f.go_to_marker(t, "20");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "21");
+        f.verify_current_line_content(t, "    private pv3;");
+        f.go_to_marker(t, "22");
+        f.verify_current_line_content(t, "    private foo(n: number): string;");
+        f.go_to_marker(t, "23");
+        f.verify_current_line_content(t, "    private foo(s: string): string;");
+        f.go_to_marker(t, "24");
+        f.verify_current_line_content(t, "    private foo(ns: any) {");
+        f.go_to_marker(t, "25");
+        f.verify_current_line_content(t, "        return ns.toString();");
+        f.go_to_marker(t, "26");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "27");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "28");
+        f.verify_current_line_content(t, "class b extends a {");
+        f.go_to_marker(t, "29");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "30");
+        f.verify_current_line_content(t, "class m1b {");
+        f.go_to_marker(t, "31");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "32");
+        f.verify_current_line_content(t, "interface m1ib {");
+        f.go_to_marker(t, "33");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "34");
+        f.verify_current_line_content(t, "class c extends m1b {");
+        f.go_to_marker(t, "35");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "36");
+        f.verify_current_line_content(t, "class ib2 implements m1ib {");
+        f.go_to_marker(t, "37");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "38");
+        f.verify_current_line_content(t, "declare class aAmbient {");
+        f.go_to_marker(t, "39");
+        f.verify_current_line_content(t, "    constructor(n: number);");
+        f.go_to_marker(t, "40");
+        f.verify_current_line_content(t, "    constructor(s: string);");
+        f.go_to_marker(t, "41");
+        f.verify_current_line_content(t, "    public pgF(): void;");
+        f.go_to_marker(t, "42");
+        f.verify_current_line_content(t, "    public pv;");
+        f.go_to_marker(t, "43");
+        f.verify_current_line_content(t, "    public d: number;");
+        f.go_to_marker(t, "44");
+        f.verify_current_line_content(t, "    static p2: { x: number; y: number; };");
+        f.go_to_marker(t, "45");
+        f.verify_current_line_content(t, "    static d2();");
+        f.go_to_marker(t, "46");
+        f.verify_current_line_content(t, "    static p3;");
+        f.go_to_marker(t, "47");
+        f.verify_current_line_content(t, "    private pv3;");
+        f.go_to_marker(t, "48");
+        f.verify_current_line_content(t, "    private foo(s);");
+        f.go_to_marker(t, "49");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "50");
+        f.verify_current_line_content(t, "class d {");
+        f.go_to_marker(t, "51");
+        f.verify_current_line_content(t, "    private foo(n: number): string;");
+        f.go_to_marker(t, "52");
+        f.verify_current_line_content(t, "    private foo(s: string): string;");
+        f.go_to_marker(t, "53");
+        f.verify_current_line_content(t, "    private foo(ns: any) {");
+        f.go_to_marker(t, "54");
+        f.verify_current_line_content(t, "        return ns.toString();");
+        f.go_to_marker(t, "55");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "56");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "57");
+        f.verify_current_line_content(t, "class e {");
+        f.go_to_marker(t, "58");
+        f.verify_current_line_content(t, "    private foo(s: string): string;");
+        f.go_to_marker(t, "59");
+        f.verify_current_line_content(t, "    private foo(n: number): string;");
+        f.go_to_marker(t, "60");
+        f.verify_current_line_content(t, "    private foo(ns: any) {");
+        f.go_to_marker(t, "61");
+        f.verify_current_line_content(t, "        return ns.toString();");
+        f.go_to_marker(t, "62");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "63");
+        f.verify_current_line_content(t, "    protected bar() { }");
+        f.go_to_marker(t, "64");
+        f.verify_current_line_content(t, "    protected static bar2() { }");
+        f.go_to_marker(t, "65");
+        f.verify_current_line_content(t, "    private pv4: number =");
+        f.go_to_marker(t, "66");
+        f.verify_current_line_content(t, "        {};");
+        f.go_to_marker(t, "END");
+        f.verify_current_line_content(t, "}");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3768,21 +3138,14 @@ use crate::tests::prelude::*;
 // formattingOnCloseBrace_test.go:10
 pub fn test_formatting_on_close_brace(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class foo    {
+    let content: &str = r"class foo    {
     /**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.insert(t, "}");
-            f.go_to_bof(t);
-            f.verify_current_line_content(t, "class foo {");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.insert(t, "}");
+        f.go_to_bof(t);
+        f.verify_current_line_content(t, "class foo {");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3793,8 +3156,7 @@ use crate::tests::prelude::*;
 // formattingOnClosingBracket_test.go:11
 pub fn test_formatting_on_closing_bracket(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"function f( ) {/*1*/
+    let content: &str = r"function f( ) {/*1*/
 var     x = 3;/*2*/
     var z = 2   ;/*3*/
     a  = z  ++ - 2 *  x ;/*4*/
@@ -3826,72 +3188,66 @@ a++;/*19*/
         break;/*25*/
     }/*26*/
 }/*27*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let mut opts874 = f.get_options();
-            opts874.format_code_settings.insert_space_after_semicolon_in_for_statements = Tristate::True;
-            f.configure(t, opts874);
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "function f() {");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    var x = 3;");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "    var z = 2;");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "    a = z++ - 2 * x;");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "    for (; ;) {");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "        a += (g + g) * a % t;");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "        b--;");
-            f.go_to_marker(t, "8");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "9");
-            f.verify_current_line_content(t, "    switch (a) {");
-            f.go_to_marker(t, "10");
-            f.verify_current_line_content(t, "        case 1: {");
-            f.go_to_marker(t, "11");
-            f.verify_current_line_content(t, "            a++;");
-            f.go_to_marker(t, "12");
-            f.verify_current_line_content(t, "            b--;");
-            f.go_to_marker(t, "13");
-            f.verify_current_line_content(t, "            if (a === a)");
-            f.go_to_marker(t, "14");
-            f.verify_current_line_content(t, "                return;");
-            f.go_to_marker(t, "15");
-            f.verify_current_line_content(t, "            else {");
-            f.go_to_marker(t, "16");
-            f.verify_current_line_content(t, "                for (a in b)");
-            f.go_to_marker(t, "17");
-            f.verify_current_line_content(t, "                    if (a != a) {");
-            f.go_to_marker(t, "18");
-            f.verify_current_line_content(t, "                        for (a in b) {");
-            f.go_to_marker(t, "19");
-            f.verify_current_line_content(t, "                            a++;");
-            f.go_to_marker(t, "20");
-            f.verify_current_line_content(t, "                        }");
-            f.go_to_marker(t, "21");
-            f.verify_current_line_content(t, "                    }");
-            f.go_to_marker(t, "22");
-            f.verify_current_line_content(t, "            }");
-            f.go_to_marker(t, "23");
-            f.verify_current_line_content(t, "        }");
-            f.go_to_marker(t, "24");
-            f.verify_current_line_content(t, "        default:");
-            f.go_to_marker(t, "25");
-            f.verify_current_line_content(t, "            break;");
-            f.go_to_marker(t, "26");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "27");
-            f.verify_current_line_content(t, "}");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        let mut opts874 = f.get_options();
+        opts874.format_code_settings.insert_space_after_semicolon_in_for_statements = Tristate::True;
+        f.configure(t, opts874);
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "function f() {");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    var x = 3;");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "    var z = 2;");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "    a = z++ - 2 * x;");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "    for (; ;) {");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "        a += (g + g) * a % t;");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "        b--;");
+        f.go_to_marker(t, "8");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "9");
+        f.verify_current_line_content(t, "    switch (a) {");
+        f.go_to_marker(t, "10");
+        f.verify_current_line_content(t, "        case 1: {");
+        f.go_to_marker(t, "11");
+        f.verify_current_line_content(t, "            a++;");
+        f.go_to_marker(t, "12");
+        f.verify_current_line_content(t, "            b--;");
+        f.go_to_marker(t, "13");
+        f.verify_current_line_content(t, "            if (a === a)");
+        f.go_to_marker(t, "14");
+        f.verify_current_line_content(t, "                return;");
+        f.go_to_marker(t, "15");
+        f.verify_current_line_content(t, "            else {");
+        f.go_to_marker(t, "16");
+        f.verify_current_line_content(t, "                for (a in b)");
+        f.go_to_marker(t, "17");
+        f.verify_current_line_content(t, "                    if (a != a) {");
+        f.go_to_marker(t, "18");
+        f.verify_current_line_content(t, "                        for (a in b) {");
+        f.go_to_marker(t, "19");
+        f.verify_current_line_content(t, "                            a++;");
+        f.go_to_marker(t, "20");
+        f.verify_current_line_content(t, "                        }");
+        f.go_to_marker(t, "21");
+        f.verify_current_line_content(t, "                    }");
+        f.go_to_marker(t, "22");
+        f.verify_current_line_content(t, "            }");
+        f.go_to_marker(t, "23");
+        f.verify_current_line_content(t, "        }");
+        f.go_to_marker(t, "24");
+        f.verify_current_line_content(t, "        default:");
+        f.go_to_marker(t, "25");
+        f.verify_current_line_content(t, "            break;");
+        f.go_to_marker(t, "26");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "27");
+        f.verify_current_line_content(t, "}");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3902,25 +3258,18 @@ use crate::tests::prelude::*;
 // formattingOnCommaOperator_test.go:10
 pub fn test_formatting_on_comma_operator(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"var v1 = ((1, 2, 3), 4, 5, (6, 7));/*1*/
+    let content: &str = r"var v1 = ((1, 2, 3), 4, 5, (6, 7));/*1*/
 function f1() {
     var a = 1;
     return a, v1, a;/*2*/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "var v1 = ((1, 2, 3), 4, 5, (6, 7));");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    return a, v1, a;");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "var v1 = ((1, 2, 3), 4, 5, (6, 7));");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    return a, v1, a;");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3931,22 +3280,15 @@ use crate::tests::prelude::*;
 // formattingOnConstructorSignature_test.go:10
 pub fn test_formatting_on_constructor_signature(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/interface Gourai { new   () {} }
+    let content: &str = r"/*1*/interface Gourai { new   () {} }
 /*2*/type Stylet = { new   () {} }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "interface Gourai { new() { } }");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "type Stylet = { new() { } }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "interface Gourai { new() { } }");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "type Stylet = { new() { } }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3957,31 +3299,24 @@ use crate::tests::prelude::*;
 // formattingOnDoWhileNoSemicolon_test.go:10
 pub fn test_formatting_on_do_while_no_semicolon(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*2*/do {
+    let content: &str = r"/*2*/do {
 /*3*/    for (var i = 0; i < 10; i++)
 /*4*/        i -= 2
 /*5*/        }/*1*/while (1 !== 1)";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert(t, r"
 ");
-            f.verify_current_line_content(t, "while (1 !== 1)");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "do {");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "    for (var i = 0; i < 10; i++)");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "        i -= 2");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "}");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+        f.verify_current_line_content(t, "while (1 !== 1)");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "do {");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "    for (var i = 0; i < 10; i++)");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "        i -= 2");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "}");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3992,25 +3327,18 @@ use crate::tests::prelude::*;
 // formattingOnDocumentReadyFunction_test.go:10
 pub fn test_formatting_on_document_ready_function(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/$    (   document   )   .  ready  (   function   (   )   {
+    let content: &str = r"/*1*/$    (   document   )   .  ready  (   function   (   )   {
 /*2*/    alert    (           'i am ready'  )   ;
 /*3*/           }                 );";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "$(document).ready(function() {");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    alert('i am ready');");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "});");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "$(document).ready(function() {");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    alert('i am ready');");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "});");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4021,8 +3349,7 @@ use crate::tests::prelude::*;
 // formattingOnEmptyInterfaceLiteral_test.go:10
 pub fn test_formatting_on_empty_interface_literal(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/    function    foo  (  x  :    {    }    )    {    }
+    let content: &str = r"/*1*/    function    foo  (  x  :    {    }    )    {    }
 
 /*2*/foo    (  {     }   )    ;
 
@@ -4032,27 +3359,21 @@ pub fn test_formatting_on_empty_interface_literal(t: &T) {
 /*4*/                x   :    {     }   ;
 /*5*/       y  :       (         )    =>    {     }   ;
 /*6*/                                                    }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "function foo(x: {}) { }");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "foo({});");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "interface bar {");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "    x: {};");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "    y: () => {};");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "}");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "function foo(x: {}) { }");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "foo({});");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "interface bar {");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "    x: {};");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "    y: () => {};");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "}");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4063,24 +3384,17 @@ use crate::tests::prelude::*;
 // formattingOnEnter_test.go:10
 pub fn test_formatting_on_enter(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class foo { }
+    let content: &str = r"class foo { }
 class bar {/**/ }
 // new line here";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.insert_line(t, "");
-            f.verify_current_file_content(t, r"class foo { }
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.insert_line(t, "");
+        f.verify_current_file_content(t, r"class foo { }
 class bar {
 }
 // new line here");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4091,25 +3405,18 @@ use crate::tests::prelude::*;
 // formattingOnEnterInComments_test.go:10
 pub fn test_formatting_on_enter_in_comments(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace me {
+    let content: &str = r"namespace me {
     class A {
         /*
          */*1*/
     /*2*/}
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert_line(t, "");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert_line(t, "");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4120,21 +3427,14 @@ use crate::tests::prelude::*;
 // formattingOnEnterInStrings_test.go:10
 pub fn test_formatting_on_enter_in_strings(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"var x = /*1*/"unclosed string literal\/*2*/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "2");
-            f.insert_line(t, "");
-            f.insert_line(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, r#"var x = "unclosed string literal\"#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = r#"var x = /*1*/"unclosed string literal\/*2*/"#;
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "2");
+        f.insert_line(t, "");
+        f.insert_line(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, r#"var x = "unclosed string literal\"#);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4145,19 +3445,12 @@ use crate::tests::prelude::*;
 // formattingOnInterfaces_test.go:10
 pub fn test_formatting_on_interfaces(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "/*1*/interface Blah \n{\n}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "interface Blah {");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "/*1*/interface Blah \n{\n}";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "interface Blah {");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4168,8 +3461,7 @@ use crate::tests::prelude::*;
 // formattingOnInvalidCodes_test.go:10
 pub fn test_formatting_on_invalid_codes(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/var a;var c          , b;var  $d
+    let content: &str = r"/*1*/var a;var c          , b;var  $d
 /*2*/var $e
 /*3*/var f
 /*4*/a++;b++;
@@ -4263,185 +3555,179 @@ pub fn test_formatting_on_invalid_codes(t: &T) {
 /*83*/$( document ).ready(function(){
 /*84*/alert('hello');
 /*85*/    } ) ;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "var a; var c, b; var $d");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "var $e");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "var f");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "a++; b++;");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "function f() {");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "    for (i = 0; i < 10; i++) {");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "        k = abc + 123 ^ d;");
-            f.go_to_marker(t, "8");
-            f.verify_current_line_content(t, "        a = XYZ[m(a[b[c][d]])];");
-            f.go_to_marker(t, "9");
-            f.verify_current_line_content(t, "        break;");
-            f.go_to_marker(t, "10");
-            f.verify_current_line_content(t, "        switch (variable) {");
-            f.go_to_marker(t, "11");
-            f.verify_current_line_content(t, "            case 1: abc += 425;");
-            f.go_to_marker(t, "12");
-            f.verify_current_line_content(t, "                break;");
-            f.go_to_marker(t, "13");
-            f.verify_current_line_content(t, "            case 404: a[x-- / 2] %= 3;");
-            f.go_to_marker(t, "14");
-            f.verify_current_line_content(t, "                break;");
-            f.go_to_marker(t, "15");
-            f.verify_current_line_content(t, "            case vari: v[--x] *= ++y * (m + n / k[z]);");
-            f.go_to_marker(t, "16");
-            f.verify_current_line_content(t, "                for (a in b) {");
-            f.go_to_marker(t, "17");
-            f.verify_current_line_content(t, "                    for (a = 0; a < 10; ++a) {");
-            f.go_to_marker(t, "18");
-            f.verify_current_line_content(t, "                        a++; --a;");
-            f.go_to_marker(t, "19");
-            f.verify_current_line_content(t, "                        if (a == b) {");
-            f.go_to_marker(t, "20");
-            f.verify_current_line_content(t, "                            a++; b--;");
-            f.go_to_marker(t, "21");
-            f.verify_current_line_content(t, "                        }");
-            f.go_to_marker(t, "22");
-            f.verify_current_line_content(t, "                        else");
-            f.go_to_marker(t, "23");
-            f.verify_current_line_content(t, "                            if (a == c) {");
-            f.go_to_marker(t, "24");
-            f.verify_current_line_content(t, "                                ++a;");
-            f.go_to_marker(t, "25");
-            f.verify_current_line_content(t, "                                (--c) += d;");
-            f.go_to_marker(t, "26");
-            f.verify_current_line_content(t, "                                $c = $a + --$b;");
-            f.go_to_marker(t, "27");
-            f.verify_current_line_content(t, "                            }");
-            f.go_to_marker(t, "28");
-            f.verify_current_line_content(t, "                        if (a == b)");
-            f.go_to_marker(t, "29");
-            f.verify_current_line_content(t, "                            if (a != b) {");
-            f.go_to_marker(t, "30");
-            f.verify_current_line_content(t, "                                if (a !== b)");
-            f.go_to_marker(t, "31");
-            f.verify_current_line_content(t, "                                    if (a === b)");
-            f.go_to_marker(t, "32");
-            f.verify_current_line_content(t, "                                        --a;");
-            f.go_to_marker(t, "33");
-            f.verify_current_line_content(t, "                                    else");
-            f.go_to_marker(t, "34");
-            f.verify_current_line_content(t, "                                        --a;");
-            f.go_to_marker(t, "35");
-            f.verify_current_line_content(t, "                                else {");
-            f.go_to_marker(t, "36");
-            f.verify_current_line_content(t, "                                    a--; ++b;");
-            f.go_to_marker(t, "37");
-            f.verify_current_line_content(t, "                                    a++");
-            f.go_to_marker(t, "38");
-            f.verify_current_line_content(t, "                                }");
-            f.go_to_marker(t, "39");
-            f.verify_current_line_content(t, "                            }");
-            f.go_to_marker(t, "40");
-            f.verify_current_line_content(t, "                    }");
-            f.go_to_marker(t, "41");
-            f.verify_current_line_content(t, "                    for (x in y) {");
-            f.go_to_marker(t, "42");
-            f.verify_current_line_content(t, "                        m -= m;");
-            f.go_to_marker(t, "43");
-            f.verify_current_line_content(t, "                        k = 1 + 2 + 3 + 4;");
-            f.go_to_marker(t, "44");
-            f.verify_current_line_content(t, "                    }");
-            f.go_to_marker(t, "45");
-            f.verify_current_line_content(t, "                }");
-            f.go_to_marker(t, "46");
-            f.verify_current_line_content(t, "                break;");
-            f.go_to_marker(t, "47");
-            f.verify_current_line_content(t, "        }");
-            f.go_to_marker(t, "48");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "49");
-            f.verify_current_line_content(t, "    var a = { b: function() { } };");
-            f.go_to_marker(t, "50");
-            f.verify_current_line_content(t, "    return { a: 1, b: 2 }");
-            f.go_to_marker(t, "51");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "52");
-            f.verify_current_line_content(t, "var z = 1;");
-            f.go_to_marker(t, "53");
-            f.verify_current_line_content(t, "for (i = 0; i < 10; i++)");
-            f.go_to_marker(t, "54");
-            f.verify_current_line_content(t, "    for (j = 0; j < 10; j++)");
-            f.go_to_marker(t, "55");
-            f.verify_current_line_content(t, "        for (k = 0; k < 10; ++k) {");
-            f.go_to_marker(t, "56");
-            f.verify_current_line_content(t, "            z++;");
-            f.go_to_marker(t, "57");
-            f.verify_current_line_content(t, "        }");
-            f.go_to_marker(t, "58");
-            f.verify_current_line_content(t, "for (k = 0; k < 10; k += 2) {");
-            f.go_to_marker(t, "59");
-            f.verify_current_line_content(t, "    z++;");
-            f.go_to_marker(t, "60");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "61");
-            f.verify_current_line_content(t, "$(document).ready();");
-            f.go_to_marker(t, "62");
-            f.verify_current_line_content(t, "function pageLoad() {");
-            f.go_to_marker(t, "63");
-            f.verify_current_line_content(t, "    $('#TextBox1').unbind();");
-            f.go_to_marker(t, "64");
-            f.verify_current_line_content(t, "    $('#TextBox1').datepicker();");
-            f.go_to_marker(t, "65");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "66");
-            f.verify_current_line_content(t, "function pageLoad() {");
-            f.go_to_marker(t, "67");
-            f.verify_current_line_content(t, "    var webclass = [");
-            f.go_to_marker(t, "68");
-            f.verify_current_line_content(t, "        {");
-            f.go_to_marker(t, "69");
-            f.verify_current_line_content(t, "            'student':");
-            f.go_to_marker(t, "70");
-            f.verify_current_line_content(t, "                { 'id': '1', 'name': 'Linda Jones', 'legacySkill': 'Access, VB 5.0' }");
-            f.go_to_marker(t, "71");
-            f.verify_current_line_content(t, "        },");
-            f.go_to_marker(t, "72");
-            f.verify_current_line_content(t, "        {");
-            f.go_to_marker(t, "73");
-            f.verify_current_line_content(t, "            'student':");
-            f.go_to_marker(t, "74");
-            f.verify_current_line_content(t, "                { 'id': '2', 'name': 'Adam Davidson', 'legacySkill': 'Cobol,MainFrame' }");
-            f.go_to_marker(t, "75");
-            f.verify_current_line_content(t, "        },");
-            f.go_to_marker(t, "76");
-            f.verify_current_line_content(t, "        {");
-            f.go_to_marker(t, "77");
-            f.verify_current_line_content(t, "            'student':");
-            f.go_to_marker(t, "78");
-            f.verify_current_line_content(t, "                { 'id': '3', 'name': 'Charles Boyer', 'legacySkill': 'HTML, XML' }");
-            f.go_to_marker(t, "79");
-            f.verify_current_line_content(t, "        }");
-            f.go_to_marker(t, "80");
-            f.verify_current_line_content(t, "    ];");
-            f.go_to_marker(t, "81");
-            f.verify_current_line_content(t, "    $create(Sys.UI.DataView, { data: webclass }, null, null, $get('SList'));");
-            f.go_to_marker(t, "82");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "83");
-            f.verify_current_line_content(t, "$(document).ready(function() {");
-            f.go_to_marker(t, "84");
-            f.verify_current_line_content(t, "    alert('hello');");
-            f.go_to_marker(t, "85");
-            f.verify_current_line_content(t, "});");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "var a; var c, b; var $d");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "var $e");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "var f");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "a++; b++;");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "function f() {");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "    for (i = 0; i < 10; i++) {");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "        k = abc + 123 ^ d;");
+        f.go_to_marker(t, "8");
+        f.verify_current_line_content(t, "        a = XYZ[m(a[b[c][d]])];");
+        f.go_to_marker(t, "9");
+        f.verify_current_line_content(t, "        break;");
+        f.go_to_marker(t, "10");
+        f.verify_current_line_content(t, "        switch (variable) {");
+        f.go_to_marker(t, "11");
+        f.verify_current_line_content(t, "            case 1: abc += 425;");
+        f.go_to_marker(t, "12");
+        f.verify_current_line_content(t, "                break;");
+        f.go_to_marker(t, "13");
+        f.verify_current_line_content(t, "            case 404: a[x-- / 2] %= 3;");
+        f.go_to_marker(t, "14");
+        f.verify_current_line_content(t, "                break;");
+        f.go_to_marker(t, "15");
+        f.verify_current_line_content(t, "            case vari: v[--x] *= ++y * (m + n / k[z]);");
+        f.go_to_marker(t, "16");
+        f.verify_current_line_content(t, "                for (a in b) {");
+        f.go_to_marker(t, "17");
+        f.verify_current_line_content(t, "                    for (a = 0; a < 10; ++a) {");
+        f.go_to_marker(t, "18");
+        f.verify_current_line_content(t, "                        a++; --a;");
+        f.go_to_marker(t, "19");
+        f.verify_current_line_content(t, "                        if (a == b) {");
+        f.go_to_marker(t, "20");
+        f.verify_current_line_content(t, "                            a++; b--;");
+        f.go_to_marker(t, "21");
+        f.verify_current_line_content(t, "                        }");
+        f.go_to_marker(t, "22");
+        f.verify_current_line_content(t, "                        else");
+        f.go_to_marker(t, "23");
+        f.verify_current_line_content(t, "                            if (a == c) {");
+        f.go_to_marker(t, "24");
+        f.verify_current_line_content(t, "                                ++a;");
+        f.go_to_marker(t, "25");
+        f.verify_current_line_content(t, "                                (--c) += d;");
+        f.go_to_marker(t, "26");
+        f.verify_current_line_content(t, "                                $c = $a + --$b;");
+        f.go_to_marker(t, "27");
+        f.verify_current_line_content(t, "                            }");
+        f.go_to_marker(t, "28");
+        f.verify_current_line_content(t, "                        if (a == b)");
+        f.go_to_marker(t, "29");
+        f.verify_current_line_content(t, "                            if (a != b) {");
+        f.go_to_marker(t, "30");
+        f.verify_current_line_content(t, "                                if (a !== b)");
+        f.go_to_marker(t, "31");
+        f.verify_current_line_content(t, "                                    if (a === b)");
+        f.go_to_marker(t, "32");
+        f.verify_current_line_content(t, "                                        --a;");
+        f.go_to_marker(t, "33");
+        f.verify_current_line_content(t, "                                    else");
+        f.go_to_marker(t, "34");
+        f.verify_current_line_content(t, "                                        --a;");
+        f.go_to_marker(t, "35");
+        f.verify_current_line_content(t, "                                else {");
+        f.go_to_marker(t, "36");
+        f.verify_current_line_content(t, "                                    a--; ++b;");
+        f.go_to_marker(t, "37");
+        f.verify_current_line_content(t, "                                    a++");
+        f.go_to_marker(t, "38");
+        f.verify_current_line_content(t, "                                }");
+        f.go_to_marker(t, "39");
+        f.verify_current_line_content(t, "                            }");
+        f.go_to_marker(t, "40");
+        f.verify_current_line_content(t, "                    }");
+        f.go_to_marker(t, "41");
+        f.verify_current_line_content(t, "                    for (x in y) {");
+        f.go_to_marker(t, "42");
+        f.verify_current_line_content(t, "                        m -= m;");
+        f.go_to_marker(t, "43");
+        f.verify_current_line_content(t, "                        k = 1 + 2 + 3 + 4;");
+        f.go_to_marker(t, "44");
+        f.verify_current_line_content(t, "                    }");
+        f.go_to_marker(t, "45");
+        f.verify_current_line_content(t, "                }");
+        f.go_to_marker(t, "46");
+        f.verify_current_line_content(t, "                break;");
+        f.go_to_marker(t, "47");
+        f.verify_current_line_content(t, "        }");
+        f.go_to_marker(t, "48");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "49");
+        f.verify_current_line_content(t, "    var a = { b: function() { } };");
+        f.go_to_marker(t, "50");
+        f.verify_current_line_content(t, "    return { a: 1, b: 2 }");
+        f.go_to_marker(t, "51");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "52");
+        f.verify_current_line_content(t, "var z = 1;");
+        f.go_to_marker(t, "53");
+        f.verify_current_line_content(t, "for (i = 0; i < 10; i++)");
+        f.go_to_marker(t, "54");
+        f.verify_current_line_content(t, "    for (j = 0; j < 10; j++)");
+        f.go_to_marker(t, "55");
+        f.verify_current_line_content(t, "        for (k = 0; k < 10; ++k) {");
+        f.go_to_marker(t, "56");
+        f.verify_current_line_content(t, "            z++;");
+        f.go_to_marker(t, "57");
+        f.verify_current_line_content(t, "        }");
+        f.go_to_marker(t, "58");
+        f.verify_current_line_content(t, "for (k = 0; k < 10; k += 2) {");
+        f.go_to_marker(t, "59");
+        f.verify_current_line_content(t, "    z++;");
+        f.go_to_marker(t, "60");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "61");
+        f.verify_current_line_content(t, "$(document).ready();");
+        f.go_to_marker(t, "62");
+        f.verify_current_line_content(t, "function pageLoad() {");
+        f.go_to_marker(t, "63");
+        f.verify_current_line_content(t, "    $('#TextBox1').unbind();");
+        f.go_to_marker(t, "64");
+        f.verify_current_line_content(t, "    $('#TextBox1').datepicker();");
+        f.go_to_marker(t, "65");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "66");
+        f.verify_current_line_content(t, "function pageLoad() {");
+        f.go_to_marker(t, "67");
+        f.verify_current_line_content(t, "    var webclass = [");
+        f.go_to_marker(t, "68");
+        f.verify_current_line_content(t, "        {");
+        f.go_to_marker(t, "69");
+        f.verify_current_line_content(t, "            'student':");
+        f.go_to_marker(t, "70");
+        f.verify_current_line_content(t, "                { 'id': '1', 'name': 'Linda Jones', 'legacySkill': 'Access, VB 5.0' }");
+        f.go_to_marker(t, "71");
+        f.verify_current_line_content(t, "        },");
+        f.go_to_marker(t, "72");
+        f.verify_current_line_content(t, "        {");
+        f.go_to_marker(t, "73");
+        f.verify_current_line_content(t, "            'student':");
+        f.go_to_marker(t, "74");
+        f.verify_current_line_content(t, "                { 'id': '2', 'name': 'Adam Davidson', 'legacySkill': 'Cobol,MainFrame' }");
+        f.go_to_marker(t, "75");
+        f.verify_current_line_content(t, "        },");
+        f.go_to_marker(t, "76");
+        f.verify_current_line_content(t, "        {");
+        f.go_to_marker(t, "77");
+        f.verify_current_line_content(t, "            'student':");
+        f.go_to_marker(t, "78");
+        f.verify_current_line_content(t, "                { 'id': '3', 'name': 'Charles Boyer', 'legacySkill': 'HTML, XML' }");
+        f.go_to_marker(t, "79");
+        f.verify_current_line_content(t, "        }");
+        f.go_to_marker(t, "80");
+        f.verify_current_line_content(t, "    ];");
+        f.go_to_marker(t, "81");
+        f.verify_current_line_content(t, "    $create(Sys.UI.DataView, { data: webclass }, null, null, $get('SList'));");
+        f.go_to_marker(t, "82");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "83");
+        f.verify_current_line_content(t, "$(document).ready(function() {");
+        f.go_to_marker(t, "84");
+        f.verify_current_line_content(t, "    alert('hello');");
+        f.go_to_marker(t, "85");
+        f.verify_current_line_content(t, "});");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4452,25 +3738,18 @@ use crate::tests::prelude::*;
 // formattingOnModuleIndentation_test.go:10
 pub fn test_formatting_on_module_indentation(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"  namespace     Foo    {
+    let content: &str = r"  namespace     Foo    {
     export    namespace    A  .   B  .   C     {      }/**/
                }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_bof(t);
-            f.verify_current_line_content(t, "namespace Foo {");
-            f.go_to_marker(t, "");
-            f.verify_current_line_content(t, "    export namespace A.B.C { }");
-            f.go_to_eof(t);
-            f.verify_current_line_content(t, "}");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_bof(t);
+        f.verify_current_line_content(t, "namespace Foo {");
+        f.go_to_marker(t, "");
+        f.verify_current_line_content(t, "    export namespace A.B.C { }");
+        f.go_to_eof(t);
+        f.verify_current_line_content(t, "}");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4481,37 +3760,30 @@ use crate::tests::prelude::*;
 // formattingOnNestedDoWhileByEnter_test.go:10
 pub fn test_formatting_on_nested_do_while_by_enter(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*2*/do{
+    let content: &str = r"/*2*/do{
 /*3*/do/*1*/{
 /*4*/do{
 /*5*/}while(a!==b)
 /*6*/}while(a!==b)
 /*7*/}while(a!==b)";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert(t, r"
 ");
-            f.verify_current_line_content(t, "    {");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "do{");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "    do");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "do{");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "}while(a!==b)");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "}while(a!==b)");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "}while(a!==b)");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+        f.verify_current_line_content(t, "    {");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "do{");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "    do");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "do{");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "}while(a!==b)");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "}while(a!==b)");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "}while(a!==b)");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4522,27 +3794,20 @@ use crate::tests::prelude::*;
 // formattingOnNestedStatements_test.go:10
 pub fn test_formatting_on_nested_statements(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"{
+    let content: &str = r"{
 /*1*/{
 /*3*/test
 }/*2*/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_selection(t, "1", "2");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "    {");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "        test");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_selection(t, "1", "2");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "    {");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "        test");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4553,8 +3818,7 @@ use crate::tests::prelude::*;
 // formattingOnObjectLiteral_test.go:10
 pub fn test_formatting_on_object_literal(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"var x = /*1*/{foo:/*2*/ 1,
+    let content: &str = r#"var x = /*1*/{foo:/*2*/ 1,
 bar: "tt",/*3*/
 boo: /*4*/1 + 5}/*5*/;
 
@@ -4581,69 +3845,63 @@ var x2 = {/*20*/
 
 var x={    };/*26*/
 var y = {};/*27*/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "var x = {");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    foo: 1,");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, r#"    bar: "tt","#);
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "    boo: 1 + 5");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "};");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "var x2 = {");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "    foo: 1,");
-            f.go_to_marker(t, "8");
-            f.verify_current_line_content(t, r#"    bar: "tt", boo: 1 + 5"#);
-            f.go_to_marker(t, "9");
-            f.verify_current_line_content(t, "};");
-            f.go_to_marker(t, "10");
-            f.verify_current_line_content(t, "function Foo() {");
-            f.go_to_marker(t, "11");
-            f.verify_current_line_content(t, "    var typeICalc = {");
-            f.go_to_marker(t, "12");
-            f.verify_current_line_content(t, "        clear: {");
-            f.go_to_marker(t, "13");
-            f.verify_current_line_content(t, r#"            "()": [1, 2, 3]"#);
-            f.go_to_marker(t, "14");
-            f.verify_current_line_content(t, "        }");
-            f.go_to_marker(t, "15");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "16");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "17");
-            f.verify_current_line_content(t, r#"// Rule for object literal members for the "value" of the memebr to follow the indent"#);
-            f.go_to_marker(t, "18");
-            f.verify_current_line_content(t, "// of the member, i.e. the relative position of the value is maintained when the member");
-            f.go_to_marker(t, "19");
-            f.verify_current_line_content(t, "// is indented.");
-            f.go_to_marker(t, "20");
-            f.verify_current_line_content(t, "var x2 = {");
-            f.go_to_marker(t, "21");
-            f.verify_current_line_content(t, "    foo:");
-            f.go_to_marker(t, "22");
-            f.verify_current_line_content(t, "        3,");
-            f.go_to_marker(t, "23");
-            f.verify_current_line_content(t, "    'bar':");
-            f.go_to_marker(t, "24");
-            f.verify_current_line_content(t, "        { a: 1, b: 2 }");
-            f.go_to_marker(t, "25");
-            f.verify_current_line_content(t, "};");
-            f.go_to_marker(t, "26");
-            f.verify_current_line_content(t, "var x = {};");
-            f.go_to_marker(t, "27");
-            f.verify_current_line_content(t, "var y = {};");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "var x = {");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    foo: 1,");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, r#"    bar: "tt","#);
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "    boo: 1 + 5");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "};");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "var x2 = {");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "    foo: 1,");
+        f.go_to_marker(t, "8");
+        f.verify_current_line_content(t, r#"    bar: "tt", boo: 1 + 5"#);
+        f.go_to_marker(t, "9");
+        f.verify_current_line_content(t, "};");
+        f.go_to_marker(t, "10");
+        f.verify_current_line_content(t, "function Foo() {");
+        f.go_to_marker(t, "11");
+        f.verify_current_line_content(t, "    var typeICalc = {");
+        f.go_to_marker(t, "12");
+        f.verify_current_line_content(t, "        clear: {");
+        f.go_to_marker(t, "13");
+        f.verify_current_line_content(t, r#"            "()": [1, 2, 3]"#);
+        f.go_to_marker(t, "14");
+        f.verify_current_line_content(t, "        }");
+        f.go_to_marker(t, "15");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "16");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "17");
+        f.verify_current_line_content(t, r#"// Rule for object literal members for the "value" of the memebr to follow the indent"#);
+        f.go_to_marker(t, "18");
+        f.verify_current_line_content(t, "// of the member, i.e. the relative position of the value is maintained when the member");
+        f.go_to_marker(t, "19");
+        f.verify_current_line_content(t, "// is indented.");
+        f.go_to_marker(t, "20");
+        f.verify_current_line_content(t, "var x2 = {");
+        f.go_to_marker(t, "21");
+        f.verify_current_line_content(t, "    foo:");
+        f.go_to_marker(t, "22");
+        f.verify_current_line_content(t, "        3,");
+        f.go_to_marker(t, "23");
+        f.verify_current_line_content(t, "    'bar':");
+        f.go_to_marker(t, "24");
+        f.verify_current_line_content(t, "        { a: 1, b: 2 }");
+        f.go_to_marker(t, "25");
+        f.verify_current_line_content(t, "};");
+        f.go_to_marker(t, "26");
+        f.verify_current_line_content(t, "var x = {};");
+        f.go_to_marker(t, "27");
+        f.verify_current_line_content(t, "var y = {};");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4654,22 +3912,15 @@ use crate::tests::prelude::*;
 // formattingOnOpenBraceOfFunctions_test.go:10
 pub fn test_formatting_on_open_brace_of_functions(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/**/function T2_y()
+    let content: &str = r"/**/function T2_y()
 {
 Plugin.T1.t1_x();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "");
-            f.verify_current_line_content(t, "function T2_y() {");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "");
+        f.verify_current_line_content(t, "function T2_y() {");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4680,19 +3931,12 @@ use crate::tests::prelude::*;
 // formattingOnSemiColon_test.go:10
 pub fn test_formatting_on_semi_colon(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "var  a=b+c^d-e*++f";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_eof(t);
-            f.insert(t, ";");
-            f.verify_current_file_content(t, "var a = b + c ^ d - e * ++f;");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "var  a=b+c^d-e*++f";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_eof(t);
+        f.insert(t, ";");
+        f.verify_current_file_content(t, "var a = b + c ^ d - e * ++f;");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4703,22 +3947,15 @@ use crate::tests::prelude::*;
 // formattingOnSingleLineBlocks_test.go:10
 pub fn test_formatting_on_single_line_blocks(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class C
+    let content: &str = r"class C
 {}
 if (true)
 {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r"class C { }
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r"class C { }
 if (true) { }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4729,8 +3966,7 @@ use crate::tests::prelude::*;
 // formattingOnStatementsWithNoSemicolon_test.go:10
 pub fn test_formatting_on_statements_with_no_semicolon(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/do
+    let content: &str = r"/*1*/do
      { var a/*2*/
 /*3*/}   while (1)
 /*4*/function f() {
@@ -4787,125 +4023,119 @@ pub fn test_formatting_on_statements_with_no_semicolon(t: &T) {
          while (0)/*66*/
             while (0)/*67*/
          while (0)/*68*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "do {");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    var a");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "} while (1)");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "function f() {");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "    var s = 1");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "switch (t) {");
-            f.go_to_marker(t, "8");
-            f.verify_current_line_content(t, "    case 1:");
-            f.go_to_marker(t, "9");
-            f.verify_current_line_content(t, "        {");
-            f.go_to_marker(t, "10");
-            f.verify_current_line_content(t, "            test");
-            f.go_to_marker(t, "11");
-            f.verify_current_line_content(t, "        }");
-            f.go_to_marker(t, "12");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "13");
-            f.verify_current_line_content(t, "do { do { do { } while (a !== b) } while (a !== b) } while (a !== b)");
-            f.go_to_marker(t, "14");
-            f.verify_current_line_content(t, "do {");
-            f.go_to_marker(t, "15");
-            f.verify_current_line_content(t, "    do {");
-            f.go_to_marker(t, "16");
-            f.verify_current_line_content(t, "        do {");
-            f.go_to_marker(t, "17");
-            f.verify_current_line_content(t, "        } while (a !== b)");
-            f.go_to_marker(t, "18");
-            f.verify_current_line_content(t, "    } while (a !== b)");
-            f.go_to_marker(t, "19");
-            f.verify_current_line_content(t, "} while (a !== b)");
-            f.go_to_marker(t, "20");
-            f.verify_current_line_content(t, "for (var i = 0; i < 10; i++) {");
-            f.go_to_marker(t, "21");
-            f.verify_current_line_content(t, "    for (var j = 0; j < 10; j++) {");
-            f.go_to_marker(t, "22");
-            f.verify_current_line_content(t, "        j -= i");
-            f.go_to_marker(t, "23");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "24");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "25");
-            f.verify_current_line_content(t, "function foo() {");
-            f.go_to_marker(t, "26");
-            f.verify_current_line_content(t, "    try {");
-            f.go_to_marker(t, "27");
-            f.verify_current_line_content(t, "        x += 2");
-            f.go_to_marker(t, "28");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "29");
-            f.verify_current_line_content(t, "    catch (e) {");
-            f.go_to_marker(t, "30");
-            f.verify_current_line_content(t, "        x += 2");
-            f.go_to_marker(t, "31");
-            f.verify_current_line_content(t, "    } finally {");
-            f.go_to_marker(t, "32");
-            f.verify_current_line_content(t, "        x += 2");
-            f.go_to_marker(t, "33");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "34");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "35");
-            f.verify_current_line_content(t, "do { var a } while (1)");
-            f.go_to_marker(t, "49");
-            f.verify_current_line_content(t, "foo(function(file) {");
-            f.go_to_marker(t, "50");
-            f.verify_current_line_content(t, "    return 0");
-            f.go_to_marker(t, "51");
-            f.verify_current_line_content(t, "}).then(function(doc) {");
-            f.go_to_marker(t, "52");
-            f.verify_current_line_content(t, "    return 1");
-            f.go_to_marker(t, "53");
-            f.verify_current_line_content(t, "});");
-            f.go_to_marker(t, "54");
-            f.verify_current_line_content(t, "if (1)");
-            f.go_to_marker(t, "55");
-            f.verify_current_line_content(t, "    if (1)");
-            f.go_to_marker(t, "56");
-            f.verify_current_line_content(t, "        x++");
-            f.go_to_marker(t, "57");
-            f.verify_current_line_content(t, "    else");
-            f.go_to_marker(t, "58");
-            f.verify_current_line_content(t, "        if (1)");
-            f.go_to_marker(t, "59");
-            f.verify_current_line_content(t, "            x += 2");
-            f.go_to_marker(t, "60");
-            f.verify_current_line_content(t, "        else");
-            f.go_to_marker(t, "61");
-            f.verify_current_line_content(t, "            x += 2");
-            f.go_to_marker(t, "62");
-            f.verify_current_line_content(t, "                ;");
-            f.go_to_marker(t, "63");
-            f.verify_current_line_content(t, "do do do do");
-            f.go_to_marker(t, "64");
-            f.verify_current_line_content(t, "    test;");
-            f.go_to_marker(t, "65");
-            f.verify_current_line_content(t, "while (0)");
-            f.go_to_marker(t, "66");
-            f.verify_current_line_content(t, "while (0)");
-            f.go_to_marker(t, "67");
-            f.verify_current_line_content(t, "while (0)");
-            f.go_to_marker(t, "68");
-            f.verify_current_line_content(t, "while (0)");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "do {");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    var a");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "} while (1)");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "function f() {");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "    var s = 1");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "switch (t) {");
+        f.go_to_marker(t, "8");
+        f.verify_current_line_content(t, "    case 1:");
+        f.go_to_marker(t, "9");
+        f.verify_current_line_content(t, "        {");
+        f.go_to_marker(t, "10");
+        f.verify_current_line_content(t, "            test");
+        f.go_to_marker(t, "11");
+        f.verify_current_line_content(t, "        }");
+        f.go_to_marker(t, "12");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "13");
+        f.verify_current_line_content(t, "do { do { do { } while (a !== b) } while (a !== b) } while (a !== b)");
+        f.go_to_marker(t, "14");
+        f.verify_current_line_content(t, "do {");
+        f.go_to_marker(t, "15");
+        f.verify_current_line_content(t, "    do {");
+        f.go_to_marker(t, "16");
+        f.verify_current_line_content(t, "        do {");
+        f.go_to_marker(t, "17");
+        f.verify_current_line_content(t, "        } while (a !== b)");
+        f.go_to_marker(t, "18");
+        f.verify_current_line_content(t, "    } while (a !== b)");
+        f.go_to_marker(t, "19");
+        f.verify_current_line_content(t, "} while (a !== b)");
+        f.go_to_marker(t, "20");
+        f.verify_current_line_content(t, "for (var i = 0; i < 10; i++) {");
+        f.go_to_marker(t, "21");
+        f.verify_current_line_content(t, "    for (var j = 0; j < 10; j++) {");
+        f.go_to_marker(t, "22");
+        f.verify_current_line_content(t, "        j -= i");
+        f.go_to_marker(t, "23");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "24");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "25");
+        f.verify_current_line_content(t, "function foo() {");
+        f.go_to_marker(t, "26");
+        f.verify_current_line_content(t, "    try {");
+        f.go_to_marker(t, "27");
+        f.verify_current_line_content(t, "        x += 2");
+        f.go_to_marker(t, "28");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "29");
+        f.verify_current_line_content(t, "    catch (e) {");
+        f.go_to_marker(t, "30");
+        f.verify_current_line_content(t, "        x += 2");
+        f.go_to_marker(t, "31");
+        f.verify_current_line_content(t, "    } finally {");
+        f.go_to_marker(t, "32");
+        f.verify_current_line_content(t, "        x += 2");
+        f.go_to_marker(t, "33");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "34");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "35");
+        f.verify_current_line_content(t, "do { var a } while (1)");
+        f.go_to_marker(t, "49");
+        f.verify_current_line_content(t, "foo(function(file) {");
+        f.go_to_marker(t, "50");
+        f.verify_current_line_content(t, "    return 0");
+        f.go_to_marker(t, "51");
+        f.verify_current_line_content(t, "}).then(function(doc) {");
+        f.go_to_marker(t, "52");
+        f.verify_current_line_content(t, "    return 1");
+        f.go_to_marker(t, "53");
+        f.verify_current_line_content(t, "});");
+        f.go_to_marker(t, "54");
+        f.verify_current_line_content(t, "if (1)");
+        f.go_to_marker(t, "55");
+        f.verify_current_line_content(t, "    if (1)");
+        f.go_to_marker(t, "56");
+        f.verify_current_line_content(t, "        x++");
+        f.go_to_marker(t, "57");
+        f.verify_current_line_content(t, "    else");
+        f.go_to_marker(t, "58");
+        f.verify_current_line_content(t, "        if (1)");
+        f.go_to_marker(t, "59");
+        f.verify_current_line_content(t, "            x += 2");
+        f.go_to_marker(t, "60");
+        f.verify_current_line_content(t, "        else");
+        f.go_to_marker(t, "61");
+        f.verify_current_line_content(t, "            x += 2");
+        f.go_to_marker(t, "62");
+        f.verify_current_line_content(t, "                ;");
+        f.go_to_marker(t, "63");
+        f.verify_current_line_content(t, "do do do do");
+        f.go_to_marker(t, "64");
+        f.verify_current_line_content(t, "    test;");
+        f.go_to_marker(t, "65");
+        f.verify_current_line_content(t, "while (0)");
+        f.go_to_marker(t, "66");
+        f.verify_current_line_content(t, "while (0)");
+        f.go_to_marker(t, "67");
+        f.verify_current_line_content(t, "while (0)");
+        f.go_to_marker(t, "68");
+        f.verify_current_line_content(t, "while (0)");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4916,8 +4146,7 @@ use crate::tests::prelude::*;
 // formattingOnTabAfterCloseCurly_test.go:10
 pub fn test_formatting_on_tab_after_close_curly(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace Tools {/*1*/
+    let content: &str = r"namespace Tools {/*1*/
     export enum NodeType {/*2*/
         Error,/*3*/
         Comment,/*4*/
@@ -4927,33 +4156,27 @@ pub fn test_formatting_on_tab_after_close_curly(t: &T) {
         Blah=1, Bleah=2/*7*/
     }/*8*/
 }/*9*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "namespace Tools {");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    export enum NodeType {");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "        Error,");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "        Comment,");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "    export enum foob {");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "        Blah = 1, Bleah = 2");
-            f.go_to_marker(t, "8");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "9");
-            f.verify_current_line_content(t, "}");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "namespace Tools {");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    export enum NodeType {");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "        Error,");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "        Comment,");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "    export enum foob {");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "        Blah = 1, Bleah = 2");
+        f.go_to_marker(t, "8");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "9");
+        f.verify_current_line_content(t, "}");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4964,8 +4187,7 @@ use crate::tests::prelude::*;
 // formattingOnVariety_test.go:10
 pub fn test_formatting_on_variety(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"function f(a,b,c,d){/*1*/
+    let content: &str = r"function f(a,b,c,d){/*1*/
 for(var i=0;i<10;i++){/*2*/
 var a=0;/*3*/
 var b=a+a+a*a%a/2-1;/*4*/
@@ -4982,47 +4204,41 @@ return e^f;/*10*/
 
 for (var i = 0   ; i < this.foo(); i++) {/*15*/
 }/*16*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "function f(a, b, c, d) {");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    for (var i = 0; i < 10; i++) {");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "        var a = 0;");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "        var b = a + a + a * a % a / 2 - 1;");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "        b += a;");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "        ++b;");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "        f(a, b, c, d);");
-            f.go_to_marker(t, "8");
-            f.verify_current_line_content(t, "        if (1 === 1) {");
-            f.go_to_marker(t, "9");
-            f.verify_current_line_content(t, "            var m = function(e, f) {");
-            f.go_to_marker(t, "10");
-            f.verify_current_line_content(t, "                return e ^ f;");
-            f.go_to_marker(t, "11");
-            f.verify_current_line_content(t, "            }");
-            f.go_to_marker(t, "12");
-            f.verify_current_line_content(t, "        }");
-            f.go_to_marker(t, "13");
-            f.verify_current_line_content(t, "    }");
-            f.go_to_marker(t, "14");
-            f.verify_current_line_content(t, "}");
-            f.go_to_marker(t, "15");
-            f.verify_current_line_content(t, "for (var i = 0; i < this.foo(); i++) {");
-            f.go_to_marker(t, "16");
-            f.verify_current_line_content(t, "}");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "function f(a, b, c, d) {");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    for (var i = 0; i < 10; i++) {");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "        var a = 0;");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "        var b = a + a + a * a % a / 2 - 1;");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "        b += a;");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "        ++b;");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "        f(a, b, c, d);");
+        f.go_to_marker(t, "8");
+        f.verify_current_line_content(t, "        if (1 === 1) {");
+        f.go_to_marker(t, "9");
+        f.verify_current_line_content(t, "            var m = function(e, f) {");
+        f.go_to_marker(t, "10");
+        f.verify_current_line_content(t, "                return e ^ f;");
+        f.go_to_marker(t, "11");
+        f.verify_current_line_content(t, "            }");
+        f.go_to_marker(t, "12");
+        f.verify_current_line_content(t, "        }");
+        f.go_to_marker(t, "13");
+        f.verify_current_line_content(t, "    }");
+        f.go_to_marker(t, "14");
+        f.verify_current_line_content(t, "}");
+        f.go_to_marker(t, "15");
+        f.verify_current_line_content(t, "for (var i = 0; i < this.foo(); i++) {");
+        f.go_to_marker(t, "16");
+        f.verify_current_line_content(t, "}");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5033,21 +4249,14 @@ use crate::tests::prelude::*;
 // formattingOverrideKeyword_test.go:10
 pub fn test_formatting_override_keyword(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class MyClass {
+    let content: &str = r"class MyClass {
   override     myMethod() { };/*1*/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "    override myMethod() { };");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "    override myMethod() { };");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5058,24 +4267,17 @@ use crate::tests::prelude::*;
 // formattingQMark_test.go:10
 pub fn test_formatting_q_mark(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface A {
+    let content: &str = r"interface A {
 /*1*/    foo?     ();
 /*2*/    foo?             <T>();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "    foo?();");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    foo?<T>();");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "    foo?();");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    foo?<T>();");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5086,24 +4288,17 @@ use crate::tests::prelude::*;
 // formattingReadonly_test.go:10
 pub fn test_formatting_readonly(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class C {
+    let content: &str = r"class C {
   readonly    property1: {};/*1*/
   public readonly   property2: {};/*2*/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "    readonly property1: {};");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    public readonly property2: {};");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "    readonly property1: {};");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    public readonly property2: {};");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5114,19 +4309,12 @@ use crate::tests::prelude::*;
 // formattingRegexes_test.go:10
 pub fn test_formatting_regexes(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "removeAllButLast(sortedTypes, undefinedType, /keepNullableType**/ true)/*1*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, ";");
-            f.verify_current_line_content(t, "removeAllButLast(sortedTypes, undefinedType, /keepNullableType**/ true);");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "removeAllButLast(sortedTypes, undefinedType, /keepNullableType**/ true)/*1*/";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert(t, ";");
+        f.verify_current_line_content(t, "removeAllButLast(sortedTypes, undefinedType, /keepNullableType**/ true);");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5137,8 +4325,7 @@ use crate::tests::prelude::*;
 // formattingReplaceTabsWithSpaces_test.go:10
 pub fn test_formatting_replace_tabs_with_spaces(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace Foo {
+    let content: &str = r"namespace Foo {
 /*1*/				class Test { }
 /*2*/			class Test { }
 /*3*/class Test { }
@@ -5147,29 +4334,23 @@ pub fn test_formatting_replace_tabs_with_spaces(t: &T) {
 /*6*/    class Test { }
 /*7*/     class Test { }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "    class Test { }");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "    class Test { }");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "    class Test { }");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "    class Test { }");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "    class Test { }");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "    class Test { }");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "    class Test { }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "    class Test { }");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "    class Test { }");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "    class Test { }");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "    class Test { }");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "    class Test { }");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "    class Test { }");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "    class Test { }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5180,35 +4361,28 @@ use crate::tests::prelude::*;
 // formattingSingleLineWithNewLineOptionSet_test.go:11
 pub fn test_formatting_single_line_with_new_line_option_set(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/namespace Default{}
+    let content: &str = r"/*1*/namespace Default{}
 /*2*/function foo(){}
 /*3*/if (true){}
 /*4*/function boo() {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let mut opts211 = f.get_options();
-            opts211.format_code_settings.place_open_brace_on_new_line_for_functions = Tristate::True;
-            f.configure(t, opts211);
-            let mut opts279 = f.get_options();
-            opts279.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::True;
-            f.configure(t, opts279);
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "namespace Default { }");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "function foo() { }");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "if (true) { }");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "function boo()");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        let mut opts211 = f.get_options();
+        opts211.format_code_settings.place_open_brace_on_new_line_for_functions = Tristate::True;
+        f.configure(t, opts211);
+        let mut opts279 = f.get_options();
+        opts279.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::True;
+        f.configure(t, opts279);
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "namespace Default { }");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "function foo() { }");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "if (true) { }");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "function boo()");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5219,8 +4393,7 @@ use crate::tests::prelude::*;
 // formattingSkippedTokens_test.go:10
 pub fn test_formatting_skipped_tokens(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/foo(): Bar { }
+    let content: &str = r"/*1*/foo(): Bar { }
 /*2*/function Foo      () #   { }
 /*3*/4+:5
  namespace M {
@@ -5228,25 +4401,19 @@ function a(
 /*4*/    : T) { }
 }
 /*5*/var x       =";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "foo(): Bar { }");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "function Foo() #   { }");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "4 +: 5");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "    : T) { }");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "var x =");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "foo(): Bar { }");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "function Foo() #   { }");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "4 +: 5");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "    : T) { }");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "var x =");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5257,23 +4424,16 @@ use crate::tests::prelude::*;
 // formattingSpaceAfterCommaBeforeOpenParen_test.go:10
 pub fn test_formatting_space_after_comma_before_open_paren(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"foo(a,(b))/*1*/
+    let content: &str = r"foo(a,(b))/*1*/
 foo(a,(<b>c).d)/*2*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, ";");
-            f.verify_current_line_content(t, "foo(a, (b));");
-            f.go_to_marker(t, "2");
-            f.insert(t, ";");
-            f.verify_current_line_content(t, "foo(a, (<b>c).d);");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert(t, ";");
+        f.verify_current_line_content(t, "foo(a, (b));");
+        f.go_to_marker(t, "2");
+        f.insert(t, ";");
+        f.verify_current_line_content(t, "foo(a, (<b>c).d);");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5284,49 +4444,42 @@ use crate::tests::prelude::*;
 // formattingSpaceBeforeCloseParen_test.go:11
 pub fn test_formatting_space_before_close_paren(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        #[expect(clippy::literal_string_with_formatting_args, reason = "These braces are TypeScript fixture syntax, not Rust format placeholders.")]
-        let content: &str = r"/*1*/({});
+    #[expect(clippy::literal_string_with_formatting_args, reason = "These braces are TypeScript fixture syntax, not Rust format placeholders.")]
+    let content: &str = r"/*1*/({});
 /*2*/(  {});
 /*3*/({foo:42});
 /*4*/(  {foo:42}  );
 /*5*/var bar = (function (a) { });";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let mut opts235 = f.get_options();
-            opts235.format_code_settings.insert_space_after_opening_and_before_closing_nonempty_parenthesis = Tristate::True;
-            f.configure(t, opts235);
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "( {} );");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "( {} );");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "( { foo: 42 } );");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "( { foo: 42 } );");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "var bar = ( function( a ) { } );");
-            let mut opts674 = f.get_options();
-            opts674.format_code_settings.insert_space_after_opening_and_before_closing_nonempty_parenthesis = Tristate::False;
-            f.configure(t, opts674);
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "({});");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "({});");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "({ foo: 42 });");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "({ foo: 42 });");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "var bar = (function(a) { });");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        let mut opts235 = f.get_options();
+        opts235.format_code_settings.insert_space_after_opening_and_before_closing_nonempty_parenthesis = Tristate::True;
+        f.configure(t, opts235);
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "( {} );");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "( {} );");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "( { foo: 42 } );");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "( { foo: 42 } );");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "var bar = ( function( a ) { } );");
+        let mut opts674 = f.get_options();
+        opts674.format_code_settings.insert_space_after_opening_and_before_closing_nonempty_parenthesis = Tristate::False;
+        f.configure(t, opts674);
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "({});");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "({});");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "({ foo: 42 });");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "({ foo: 42 });");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "var bar = (function(a) { });");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5337,43 +4490,36 @@ use crate::tests::prelude::*;
 // formattingSpaceBeforeFunctionParen_test.go:11
 pub fn test_formatting_space_before_function_paren(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/function foo() { }
+    let content: &str = r"/*1*/function foo() { }
 /*2*/function boo  () { }
 /*3*/var bar = function foo() { };
 /*4*/var foo = { bar() { } };
 /*5*/function tmpl <T> () { }
 /*6*/var f = function*() { };
 /*7*/function* g () { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let mut opts333 = f.get_options();
-            opts333.format_code_settings.insert_space_before_function_parenthesis = Tristate::True;
-            f.configure(t, opts333);
-            let mut opts414 = f.get_options();
-            opts414.format_code_settings.insert_space_after_function_keyword_for_anonymous_functions = Tristate::False;
-            f.configure(t, opts414);
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "function foo () { }");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "function boo () { }");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "var bar = function foo () { };");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "var foo = { bar () { } };");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "function tmpl<T> () { }");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "var f = function*() { };");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "function* g () { }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        let mut opts333 = f.get_options();
+        opts333.format_code_settings.insert_space_before_function_parenthesis = Tristate::True;
+        f.configure(t, opts333);
+        let mut opts414 = f.get_options();
+        opts414.format_code_settings.insert_space_after_function_keyword_for_anonymous_functions = Tristate::False;
+        f.configure(t, opts414);
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "function foo () { }");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "function boo () { }");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "var bar = function foo () { };");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "var foo = { bar () { } };");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "function tmpl<T> () { }");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "var f = function*() { };");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "function* g () { }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5384,22 +4530,15 @@ use crate::tests::prelude::*;
 // formattingSpaceBetweenOptionalChaining_test.go:10
 pub fn test_formatting_space_between_optional_chaining(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/a    ?.    b   ?.   c   .   d;
+    let content: &str = r"/*1*/a    ?.    b   ?.   c   .   d;
 /*2*/o    .  m()   ?.   length;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "a?.b?.c.d;");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "o.m()?.length;");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "a?.b?.c.d;");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "o.m()?.length;");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5410,28 +4549,21 @@ use crate::tests::prelude::*;
 // formattingSpaceBetweenParent_test.go:11
 pub fn test_formatting_space_between_parent(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/foo(() => 1);
+    let content: &str = r"/*1*/foo(() => 1);
 /*2*/foo(1);
 /*3*/if((true)){}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            let mut opts180 = f.get_options();
-            opts180.format_code_settings.insert_space_after_opening_and_before_closing_nonempty_parenthesis = Tristate::True;
-            f.configure(t, opts180);
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "foo( () => 1 );");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "foo( 1 );");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "if ( ( true ) ) { }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        let mut opts180 = f.get_options();
+        opts180.format_code_settings.insert_space_after_opening_and_before_closing_nonempty_parenthesis = Tristate::True;
+        f.configure(t, opts180);
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "foo( () => 1 );");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "foo( 1 );");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "if ( ( true ) ) { }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5442,26 +4574,19 @@ use crate::tests::prelude::*;
 // formattingSpacesAfterConstructor_test.go:11
 pub fn test_formatting_spaces_after_constructor(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/class test { constructor                   () { } }
+    let content: &str = r"/*1*/class test { constructor                   () { } }
 /*2*/class test { constructor                   () { } }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "class test { constructor() { } }");
-            let mut opts319 = f.get_options();
-            opts319.format_code_settings.insert_space_after_constructor = Tristate::True;
-            f.configure(t, opts319);
-            f.format_document(t, "");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "class test { constructor () { } }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "class test { constructor() { } }");
+        let mut opts319 = f.get_options();
+        opts319.format_code_settings.insert_space_after_constructor = Tristate::True;
+        f.configure(t, opts319);
+        f.format_document(t, "");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "class test { constructor () { } }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5472,23 +4597,16 @@ use crate::tests::prelude::*;
 // formattingTemplates_test.go:10
 pub fn test_formatting_templates(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"String.call `${123}`/*1*/
+    let content: &str = r"String.call `${123}`/*1*/
 String.call `${123} ${456}`/*2*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, ";");
-            f.verify_current_line_content(t, "String.call`${123}`;");
-            f.go_to_marker(t, "2");
-            f.insert(t, ";");
-            f.verify_current_line_content(t, "String.call`${123} ${456}`;");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert(t, ";");
+        f.verify_current_line_content(t, "String.call`${123}`;");
+        f.go_to_marker(t, "2");
+        f.insert(t, ";");
+        f.verify_current_line_content(t, "String.call`${123} ${456}`;");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5499,22 +4617,15 @@ use crate::tests::prelude::*;
 // formattingTemplatesWithNewline_test.go:10
 pub fn test_formatting_templates_with_newline(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"`${1}`;
+    let content: &str = r"`${1}`;
 `
 `;/**/1";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.insert(t, r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.insert(t, r"
 ");
-            f.verify_current_line_content(t, "1");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+        f.verify_current_line_content(t, "1");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5525,8 +4636,7 @@ use crate::tests::prelude::*;
 // formattingTypeInfer_test.go:10
 pub fn test_formatting_type_infer(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"
+    let content: &str = r"
 /*L1*/type C<T> = T extends Array<infer U> ? U : never;
 
 /*L2*/  type   C  <  T  >   =   T   extends   Array   <   infer     U  >  ?   U   :   never  ; 
@@ -5543,31 +4653,25 @@ pub fn test_formatting_type_infer(t: &T) {
 
 /*L8*/  type   Bar  <  T  >   =   T   extends   {   a  :   (x  :  infer  U  ) =>   void  ,   b  :   (x  :   infer   U  )   =>   void   }    ?   U   :   never  ;
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "L1");
-            f.verify_current_line_content(t, "type C<T> = T extends Array<infer U> ? U : never;");
-            f.go_to_marker(t, "L2");
-            f.verify_current_line_content(t, "type C<T> = T extends Array<infer U> ? U : never;");
-            f.go_to_marker(t, "L3");
-            f.verify_current_line_content(t, "type C<T> = T extends Array<infer U> ? U : T;");
-            f.go_to_marker(t, "L4");
-            f.verify_current_line_content(t, "type C<T> = T extends Array<infer U> ? U : T;");
-            f.go_to_marker(t, "L5");
-            f.verify_current_line_content(t, "type Foo<T> = T extends { a: infer U, b: infer U } ? U : never;");
-            f.go_to_marker(t, "L6");
-            f.verify_current_line_content(t, "type Foo<T> = T extends { a: infer U, b: infer U } ? U : never;");
-            f.go_to_marker(t, "L7");
-            f.verify_current_line_content(t, "type Bar<T> = T extends { a: (x: infer U) => void, b: (x: infer U) => void } ? U : never;");
-            f.go_to_marker(t, "L8");
-            f.verify_current_line_content(t, "type Bar<T> = T extends { a: (x: infer U) => void, b: (x: infer U) => void } ? U : never;");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "L1");
+        f.verify_current_line_content(t, "type C<T> = T extends Array<infer U> ? U : never;");
+        f.go_to_marker(t, "L2");
+        f.verify_current_line_content(t, "type C<T> = T extends Array<infer U> ? U : never;");
+        f.go_to_marker(t, "L3");
+        f.verify_current_line_content(t, "type C<T> = T extends Array<infer U> ? U : T;");
+        f.go_to_marker(t, "L4");
+        f.verify_current_line_content(t, "type C<T> = T extends Array<infer U> ? U : T;");
+        f.go_to_marker(t, "L5");
+        f.verify_current_line_content(t, "type Foo<T> = T extends { a: infer U, b: infer U } ? U : never;");
+        f.go_to_marker(t, "L6");
+        f.verify_current_line_content(t, "type Foo<T> = T extends { a: infer U, b: infer U } ? U : never;");
+        f.go_to_marker(t, "L7");
+        f.verify_current_line_content(t, "type Bar<T> = T extends { a: (x: infer U) => void, b: (x: infer U) => void } ? U : never;");
+        f.go_to_marker(t, "L8");
+        f.verify_current_line_content(t, "type Bar<T> = T extends { a: (x: infer U) => void, b: (x: infer U) => void } ? U : never;");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5578,35 +4682,28 @@ use crate::tests::prelude::*;
 // formattingVoid_test.go:10
 pub fn test_formatting_void(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*1*/  var x: () =>           void    ;
+    let content: &str = r"/*1*/  var x: () =>           void    ;
 /*2*/  var y:     void    ;
 /*3*/  function test(a:void,b:string){}
 /*4*/  var a, b, c, d;
 /*5*/  void    a    ;
 /*6*/  void        (0);
 /*7*/  b=void(c=1,d=2);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "var x: () => void;");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "var y: void;");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "function test(a: void, b: string) { }");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "void a;");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "void (0);");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "b = void (c = 1, d = 2);");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "var x: () => void;");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "var y: void;");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "function test(a: void, b: string) { }");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "void a;");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "void (0);");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "b = void (c = 1, d = 2);");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5617,21 +4714,14 @@ use crate::tests::prelude::*;
 // formattingWithMultilineComments_test.go:10
 pub fn test_formatting_with_multiline_comments(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"f(/*
+    let content: &str = r"f(/*
 /*2*/         */() => { /*1*/ });";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert_line(t, "");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "         */() => {");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert_line(t, "");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "         */() => {");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5642,8 +4732,7 @@ use crate::tests::prelude::*;
 // formattingofSingleLineBlockConstructs_test.go:10
 pub fn test_formattingof_single_line_block_constructs(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace InternalModule/*1*/{}
+    let content: &str = r"namespace InternalModule/*1*/{}
 interface MyInterface/*2*/{}
 enum E/*3*/{}
 class MyClass/*4*/{
@@ -5655,39 +4744,33 @@ function foo()/*8*/{{}}
 (function()/*10*/{});
 (() =>/*11*/{});
 var x :/*12*/{};";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "namespace InternalModule { }");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "interface MyInterface { }");
-            f.go_to_marker(t, "3");
-            f.verify_current_line_content(t, "enum E { }");
-            f.go_to_marker(t, "4");
-            f.verify_current_line_content(t, "class MyClass {");
-            f.go_to_marker(t, "cons");
-            f.verify_current_line_content(t, "    constructor() { }");
-            f.go_to_marker(t, "5");
-            f.verify_current_line_content(t, "    public MyFunction() { return 0; }");
-            f.go_to_marker(t, "6");
-            f.verify_current_line_content(t, "    public get Getter() { }");
-            f.go_to_marker(t, "7");
-            f.verify_current_line_content(t, "    public set Setter(x) { }");
-            f.go_to_marker(t, "8");
-            f.verify_current_line_content(t, "function foo() { { } }");
-            f.go_to_marker(t, "10");
-            f.verify_current_line_content(t, "(function() { });");
-            f.go_to_marker(t, "11");
-            f.verify_current_line_content(t, "(() => { });");
-            f.go_to_marker(t, "12");
-            f.verify_current_line_content(t, "var x: {};");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "namespace InternalModule { }");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "interface MyInterface { }");
+        f.go_to_marker(t, "3");
+        f.verify_current_line_content(t, "enum E { }");
+        f.go_to_marker(t, "4");
+        f.verify_current_line_content(t, "class MyClass {");
+        f.go_to_marker(t, "cons");
+        f.verify_current_line_content(t, "    constructor() { }");
+        f.go_to_marker(t, "5");
+        f.verify_current_line_content(t, "    public MyFunction() { return 0; }");
+        f.go_to_marker(t, "6");
+        f.verify_current_line_content(t, "    public get Getter() { }");
+        f.go_to_marker(t, "7");
+        f.verify_current_line_content(t, "    public set Setter(x) { }");
+        f.go_to_marker(t, "8");
+        f.verify_current_line_content(t, "function foo() { { } }");
+        f.go_to_marker(t, "10");
+        f.verify_current_line_content(t, "(function() { });");
+        f.go_to_marker(t, "11");
+        f.verify_current_line_content(t, "(() => { });");
+        f.go_to_marker(t, "12");
+        f.verify_current_line_content(t, "var x: {};");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5698,23 +4781,16 @@ use crate::tests::prelude::*;
 // forwardReference_test.go:11
 pub fn test_forward_reference(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"function f() {
+    let content: &str = r"function f() {
     var x = new t();
     x./**/
 }
 class t {
     public n: number;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("n".to_string())]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("n".to_string())]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5725,20 +4801,13 @@ use crate::tests::prelude::*;
 // functionFormatting_test.go:10
 pub fn test_function_formatting(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"var foo = foo(function () {
+    let content: &str = r"var foo = foo(function () {
     /**/function foo  ()  {}}    );";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "");
-            f.verify_current_line_content(t, "    function foo() { }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "");
+        f.verify_current_line_content(t, "    function foo() { }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5749,8 +4818,7 @@ use crate::tests::prelude::*;
 // functionIndentation_test.go:10
 pub fn test_function_indentation(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"namespace M {
+    let content: &str = r#"namespace M {
 export =
 C;
 class C {
@@ -5788,11 +4856,9 @@ var t,
 u = 1,
 v;
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r#"namespace M {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r#"namespace M {
     export =
         C;
     class C {
@@ -5830,11 +4896,7 @@ v;
         u = 1,
         v;
 }"#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5845,8 +4907,7 @@ use crate::tests::prelude::*;
 // functionOverloadCount_test.go:10
 pub fn test_function_overload_count(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"class C1 {
+    let content: &str = r#"class C1 {
     public attr(): string;
     public attr(i: number): string;
     public attr(i: number, x: boolean): string;
@@ -5856,16 +4917,10 @@ pub fn test_function_overload_count(t: &T) {
 }
 var i = new C1;
 i.attr(/*1*/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 3, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 3, ..Default::default() });
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5876,8 +4931,7 @@ use crate::tests::prelude::*;
 // functionProperty_test.go:12
 pub fn test_function_property(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"var a = {
+    let content: &str = r"var a = {
     x(a: number) { }
 };
 
@@ -5897,25 +4951,19 @@ c./*completionC*/;
 a./*quickInfoA*/x;
 b./*quickInfoB*/x;
 c./*quickInfoC*/x;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "signatureA");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "x(a: number): void".to_string(), ..Default::default() });
-            f.go_to_marker(t, "signatureB");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "x(a: number): void".to_string(), ..Default::default() });
-            f.go_to_marker(t, "signatureC");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "x(a: number): void".to_string(), ..Default::default() });
-            f.verify_completions(t, Any::String("completionA".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), detail: Some("(method) x(a: number): void".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::StringSlice(vec!["completionB".to_string(), "completionC".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), detail: Some("(property) x: (a: number) => void".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-            f.verify_quick_info_at(t, "quickInfoA", "(method) x(a: number): void", "");
-            f.verify_quick_info_at(t, "quickInfoB", "(property) x: (a: number) => void", "");
-            f.verify_quick_info_at(t, "quickInfoC", "(property) x: (a: number) => void", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "signatureA");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "x(a: number): void".to_string(), ..Default::default() });
+        f.go_to_marker(t, "signatureB");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "x(a: number): void".to_string(), ..Default::default() });
+        f.go_to_marker(t, "signatureC");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "x(a: number): void".to_string(), ..Default::default() });
+        f.verify_completions(t, Any::String("completionA".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), detail: Some("(method) x(a: number): void".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::StringSlice(vec!["completionB".to_string(), "completionC".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), detail: Some("(property) x: (a: number) => void".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
+        f.verify_quick_info_at(t, "quickInfoA", "(method) x(a: number): void", "");
+        f.verify_quick_info_at(t, "quickInfoB", "(property) x: (a: number) => void", "");
+        f.verify_quick_info_at(t, "quickInfoC", "(property) x: (a: number) => void", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5926,19 +4974,12 @@ use crate::tests::prelude::*;
 // functionTypeFormatting_test.go:10
 pub fn test_function_type_formatting(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "var x: () =>           string/**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.insert(t, ";");
-            f.verify_current_line_content(t, "var x: () => string;");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "var x: () =>           string/**/";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.insert(t, ";");
+        f.verify_current_line_content(t, "var x: () => string;");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5949,19 +4990,12 @@ use crate::tests::prelude::*;
 // functionTypePredicateFormatting_test.go:10
 pub fn test_function_type_predicate_formatting(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "/**/function bar(a: A):     a        is       B    {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.format_document(t, "");
-            f.verify_current_line_content(t, "function bar(a: A): a is B { }");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "/**/function bar(a: A):     a        is       B    {}";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.format_document(t, "");
+        f.verify_current_line_content(t, "function bar(a: A): a is B { }");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5972,8 +5006,7 @@ use crate::tests::prelude::*;
 // functionTypes_test.go:11
 pub fn test_function_types(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 // @strict: false
 var f: Function;
 function g() { }
@@ -5994,17 +5027,11 @@ z.i./*4*/call(null)
 C.j./*5*/length === 1;
 typeof C.k./*6*/caller === 'function';
 l./*7*/prototype = Object.prototype;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_errors(t);
-            f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string(), "3".to_string(), "4".to_string(), "5".to_string(), "6".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_FUNCTION_MEMBERS_WITH_PROTOTYPE.clone()), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("7".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_function_members_plus(&[Any::String("prototype".to_string())])), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_no_errors(t);
+        f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string(), "3".to_string(), "4".to_string(), "5".to_string(), "6".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_FUNCTION_MEMBERS_WITH_PROTOTYPE.clone()), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("7".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_function_members_plus(&[Any::String("prototype".to_string())])), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6015,23 +5042,16 @@ use crate::tests::prelude::*;
 // funduleWithRecursiveReference_test.go:10
 pub fn test_fundule_with_recursive_reference(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace M {
+    let content: &str = r"namespace M {
     export function C() {}
     export namespace C {
     export var /**/C = M.C
   }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "", "var M.C.C: typeof M.C", "");
-            f.verify_no_errors(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "", "var M.C.C: typeof M.C", "");
+        f.verify_no_errors(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6042,22 +5062,15 @@ use crate::tests::prelude::*;
 // generatorDeclarationFormatting_test.go:10
 pub fn test_generator_declaration_formatting(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"function    *g() { }/*1*/
+    let content: &str = r"function    *g() { }/*1*/
 var v = function    *() { };/*2*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "1");
-            f.verify_current_line_content(t, "function* g() { }");
-            f.go_to_marker(t, "2");
-            f.verify_current_line_content(t, "var v = function*() { };");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "1");
+        f.verify_current_line_content(t, "function* g() { }");
+        f.go_to_marker(t, "2");
+        f.verify_current_line_content(t, "var v = function*() { };");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6068,22 +5081,15 @@ use crate::tests::prelude::*;
 // genericArityEnforcementAfterEdit_test.go:10
 pub fn test_generic_arity_enforcement_after_edit(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface G<T, U> { }
+    let content: &str = r"interface G<T, U> { }
 /**/
 var v4: G<G<any>, any>;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_number_of_errors_in_current_file(t, 1);
-            f.go_to_marker(t, "");
-            f.insert(t, " ");
-            f.verify_number_of_errors_in_current_file(t, 1);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_number_of_errors_in_current_file(t, 1);
+        f.go_to_marker(t, "");
+        f.insert(t, " ");
+        f.verify_number_of_errors_in_current_file(t, 1);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6094,8 +5100,7 @@ use crate::tests::prelude::*;
 // genericAssignmentCompat_test.go:10
 pub fn test_generic_assignment_compat(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface Int<T> {
+    let content: &str = r"interface Int<T> {
 
     val<U>(f: (t: T) => U): Int<U>;
 
@@ -6104,16 +5109,10 @@ pub fn test_generic_assignment_compat(t: &T) {
 declare var v1: Int<string>;
 
 var /*1*/v2/*2*/: Int<number> = v1;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_error_exists_between_markers(t, "1", "2");
-            f.verify_number_of_errors_in_current_file(t, 1);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_error_exists_between_markers(t, "1", "2");
+        f.verify_number_of_errors_in_current_file(t, 1);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6124,17 +5123,10 @@ use crate::tests::prelude::*;
 // genericCallSignaturesInNonGenericTypes1_test.go:10
 pub fn test_generic_call_signatures_in_non_generic_types1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "interface WrappedObject<T> { }\ninterface WrappedArray<T> { }\ninterface Underscore {\n    <T>(list: T[]): WrappedArray<T>;\n    <T>(obj: T): WrappedObject<T>;\n}\nvar _: Underscore;\nvar a: number[];\nvar /**/b = _(a); ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "", "var b: WrappedArray<number>", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "interface WrappedObject<T> { }\ninterface WrappedArray<T> { }\ninterface Underscore {\n    <T>(list: T[]): WrappedArray<T>;\n    <T>(obj: T): WrappedObject<T>;\n}\nvar _: Underscore;\nvar a: number[];\nvar /**/b = _(a); ";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "", "var b: WrappedArray<number>", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6145,23 +5137,16 @@ use crate::tests::prelude::*;
 // genericCallSignaturesInNonGenericTypes2_test.go:10
 pub fn test_generic_call_signatures_in_non_generic_types2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface WrappedArray<T> { }
+    let content: &str = r"interface WrappedArray<T> { }
 interface Underscore {
     <T>(list: T[]): WrappedArray<T>;
 }
 var _: Underscore;
 var a: number[];
 var /**/b = _(a);  // WrappedArray<any>, should be WrappedArray<number>";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "", "var b: WrappedArray<number>", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "", "var b: WrappedArray<number>", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6172,8 +5157,7 @@ use crate::tests::prelude::*;
 // genericCallsWithOptionalParams1_test.go:10
 pub fn test_generic_calls_with_optional_params1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"class Collection<T> {
+    let content: &str = r#"class Collection<T> {
     public add(x: T) { }
 }
 interface Utils {
@@ -6183,16 +5167,10 @@ var c = new Collection<string>();
 var utils: Utils;
 var /*1*/r = utils.fold(c, (s, t) => t, "");
 var /*2*/r2 = utils.fold(c, (s, t) => t);"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "var r: string", "");
-            f.verify_quick_info_at(t, "2", "var r2: string", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "var r: string", "");
+        f.verify_quick_info_at(t, "2", "var r2: string", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6203,20 +5181,13 @@ use crate::tests::prelude::*;
 // genericCloduleCompletionList_test.go:11
 pub fn test_generic_clodule_completion_list(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class D<T> { x: number }
+    let content: &str = r"class D<T> { x: number }
 namespace D { export function f() { } }
 var d: D<number>;
 d./**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("x".to_string())]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("x".to_string())]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6227,21 +5198,14 @@ use crate::tests::prelude::*;
 // genericCombinatorWithConstraints1_test.go:10
 pub fn test_generic_combinator_with_constraints1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"function apply<T, U extends Date>(source: T[], selector: (x: T) => U) {
+    let content: &str = r"function apply<T, U extends Date>(source: T[], selector: (x: T) => U) {
     var /*1*/xs = source.map(selector); // any[]
     var /*2*/xs2 = source.map((x: T, a, b): U => { return null }); // any[] 
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "(local var) xs: U[]", "");
-            f.verify_quick_info_at(t, "2", "(local var) xs2: U[]", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "(local var) xs: U[]", "");
+        f.verify_quick_info_at(t, "2", "(local var) xs2: U[]", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6252,8 +5216,7 @@ use crate::tests::prelude::*;
 // genericCombinators1_test.go:10
 pub fn test_generic_combinators1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface Collection<T> {
+    let content: &str = r"interface Collection<T> {
     length: number;
     add(x: T): void;
     remove(x: T): boolean;
@@ -6290,37 +5253,31 @@ var /*20*/r6b = _.map<Collection<number>, number>(c3, rf2);
 var /*21*/r7a = _.map<A, A>(c4, (/*7*/x: A) => { return x.foo() });
 var /*22*/r7b = _.map<A, A>(c4, rf3);
 var /*23*/r8a = _.map</*error1*/B/*error2*/, string>(c5, (/*8*/x) => { return x.foo() });";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "(parameter) x: number", "");
-            f.verify_quick_info_at(t, "2", "(parameter) x: Collection<number>", "");
-            f.verify_quick_info_at(t, "3", "(parameter) x: A", "");
-            f.verify_quick_info_at(t, "4", "(parameter) x: B<any>", "");
-            f.verify_quick_info_at(t, "5", "(parameter) x: number", "");
-            f.verify_quick_info_at(t, "6", "var c3: Collection<Collection<number>>", "");
-            f.verify_quick_info_at(t, "7", "(parameter) x: A", "");
-            f.verify_quick_info_at(t, "8", "(parameter) x: any", "");
-            f.verify_quick_info_at(t, "9", "var r1a: Collection<string>", "");
-            f.verify_quick_info_at(t, "10", "var r1b: Collection<string>", "");
-            f.verify_quick_info_at(t, "11", "var r2a: Collection<number>", "");
-            f.verify_quick_info_at(t, "12", "var r2b: Collection<number>", "");
-            f.verify_quick_info_at(t, "13", "var r3a: Collection<A>", "");
-            f.verify_quick_info_at(t, "14", "var r3b: Collection<A>", "");
-            f.verify_quick_info_at(t, "15", "var r4a: Collection<any>", "");
-            f.verify_quick_info_at(t, "17", "var r5a: Collection<string>", "");
-            f.verify_quick_info_at(t, "18", "var r5b: Collection<string>", "");
-            f.verify_quick_info_at(t, "19", "var r6a: Collection<number>", "");
-            f.verify_quick_info_at(t, "20", "var r6b: Collection<number>", "");
-            f.verify_quick_info_at(t, "21", "var r7a: Collection<A>", "");
-            f.verify_quick_info_at(t, "22", "var r7b: Collection<A>", "");
-            f.verify_quick_info_at(t, "23", "var r8a: Collection<string>", "");
-            f.verify_error_exists_between_markers(t, "error1", "error2");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "(parameter) x: number", "");
+        f.verify_quick_info_at(t, "2", "(parameter) x: Collection<number>", "");
+        f.verify_quick_info_at(t, "3", "(parameter) x: A", "");
+        f.verify_quick_info_at(t, "4", "(parameter) x: B<any>", "");
+        f.verify_quick_info_at(t, "5", "(parameter) x: number", "");
+        f.verify_quick_info_at(t, "6", "var c3: Collection<Collection<number>>", "");
+        f.verify_quick_info_at(t, "7", "(parameter) x: A", "");
+        f.verify_quick_info_at(t, "8", "(parameter) x: any", "");
+        f.verify_quick_info_at(t, "9", "var r1a: Collection<string>", "");
+        f.verify_quick_info_at(t, "10", "var r1b: Collection<string>", "");
+        f.verify_quick_info_at(t, "11", "var r2a: Collection<number>", "");
+        f.verify_quick_info_at(t, "12", "var r2b: Collection<number>", "");
+        f.verify_quick_info_at(t, "13", "var r3a: Collection<A>", "");
+        f.verify_quick_info_at(t, "14", "var r3b: Collection<A>", "");
+        f.verify_quick_info_at(t, "15", "var r4a: Collection<any>", "");
+        f.verify_quick_info_at(t, "17", "var r5a: Collection<string>", "");
+        f.verify_quick_info_at(t, "18", "var r5b: Collection<string>", "");
+        f.verify_quick_info_at(t, "19", "var r6a: Collection<number>", "");
+        f.verify_quick_info_at(t, "20", "var r6b: Collection<number>", "");
+        f.verify_quick_info_at(t, "21", "var r7a: Collection<A>", "");
+        f.verify_quick_info_at(t, "22", "var r7b: Collection<A>", "");
+        f.verify_quick_info_at(t, "23", "var r8a: Collection<string>", "");
+        f.verify_error_exists_between_markers(t, "error1", "error2");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -6331,8 +5288,7 @@ use crate::tests::prelude::*;
 // genericCombinators3_test.go:10
 pub fn test_generic_combinators3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"interface Collection<T, U> {
+    let content: &str = r#"interface Collection<T, U> {
 }
 
 interface Combinators {
@@ -6345,18 +5301,12 @@ var c2: Collection<number, string>;
 var _: Combinators;
 
 var /*9*/r1a  = _.ma/*1c*/p(c2, (/*1a*/x,/*1b*/y) => { return x + "" });  // check quick info of map here"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1a", "(parameter) x: number", "");
-            f.verify_quick_info_at(t, "1b", "(parameter) y: string", "");
-            f.verify_quick_info_at(t, "1c", "(method) Combinators.map<number, string, string>(c: Collection<number, string>, f: (x: number, y: string) => string): Collection<number, string> (+1 overload)", "");
-            f.verify_quick_info_at(t, "9", "var r1a: Collection<number, string>", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1a", "(parameter) x: number", "");
+        f.verify_quick_info_at(t, "1b", "(parameter) y: string", "");
+        f.verify_quick_info_at(t, "1c", "(method) Combinators.map<number, string, string>(c: Collection<number, string>, f: (x: number, y: string) => string): Collection<number, string> (+1 overload)", "");
+        f.verify_quick_info_at(t, "9", "var r1a: Collection<number, string>", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }

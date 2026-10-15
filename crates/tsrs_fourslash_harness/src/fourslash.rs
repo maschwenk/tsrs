@@ -229,6 +229,18 @@ pub fn new_fourslash(t: &T, capabilities: Option<lsproto::ClientCapabilities>, c
     new_fourslash_impl(t, content, Some(FourslashOptions { capabilities, ..Default::default() }), &test_path)
 }
 
+/// Runs the common shape of a generated fourslash test. Keeping the two Go-defer panic boundaries here avoids
+/// compiling their identical closure scaffolding into every generated test body.
+pub fn run_generated_test(t: &T, content: &str, body: fn(&mut FourslashTest, &T)) {
+    let test_result = crate::go::run(|| {
+        let (mut f, done) = new_fourslash(t, None, content);
+        let body_result = crate::go::run(|| body(&mut f, t));
+        done(&mut f, t);
+        crate::go::resume(body_result);
+    });
+    crate::testutil::recover_and_fail(t, "Panic on fourslash test", test_result);
+}
+
 // fourslash.go:165
 #[derive(Clone, Debug, Default)]
 pub struct FourslashOptions {

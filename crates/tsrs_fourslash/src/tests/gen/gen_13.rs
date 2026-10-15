@@ -6,8 +6,7 @@ use crate::tests::prelude::*;
 // genericDerivedTypeAcrossModuleBoundary1_test.go:10
 pub fn test_generic_derived_type_across_module_boundary1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace M {
+    let content: &str = r"namespace M {
    export class C1 { }
    export class C2<T> { }
 }
@@ -19,16 +18,10 @@ namespace N {
 var n = new N.D1();
 var /*1*/n2 = new N.D2<number>();
 var /*2*/n3 = new N.D2();";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "var n2: N.D2<number>", "");
-            f.verify_quick_info_at(t, "2", "var n3: N.D2<unknown>", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "var n2: N.D2<number>", "");
+        f.verify_quick_info_at(t, "2", "var n3: N.D2<unknown>", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -39,27 +32,20 @@ use crate::tests::prelude::*;
 // genericFunctionReturnType_test.go:10
 pub fn test_generic_function_return_type(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"function foo<T, U>(x: T, y: U): (a: U) => T {
+    let content: &str = r#"function foo<T, U>(x: T, y: U): (a: U) => T {
     var z = y;
     return (z) => x;
 }
 var /*2*/r = foo(/*1*/1, "");
 var /*4*/r2 = r(/*3*/"");"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo(x: number, y: string): (a: string) => number".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "2", "var r: (a: string) => number", "");
-            f.go_to_marker(t, "3");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "r(a: string): number".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "4", "var r2: number", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo(x: number, y: string): (a: string) => number".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "2", "var r: (a: string) => number", "");
+        f.go_to_marker(t, "3");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "r(a: string): number".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "4", "var r2: number", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -70,8 +56,7 @@ use crate::tests::prelude::*;
 // genericFunctionReturnType2_test.go:10
 pub fn test_generic_function_return_type2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class C<T> {
+    let content: &str = r"class C<T> {
     constructor(x: T) { }
     foo(x: T) {
         return (a: T) => x;
@@ -80,20 +65,14 @@ pub fn test_generic_function_return_type2(t: &T) {
 var x = new C(1);
 var /*2*/r = x.foo(/*1*/3);
 var /*4*/r2 = r(/*3*/4);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo(x: number): (a: number) => number".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "2", "var r: (a: number) => number", "");
-            f.go_to_marker(t, "3");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "r(a: number): number".to_string(), ..Default::default() });
-            f.verify_quick_info_at(t, "4", "var r2: number", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo(x: number): (a: number) => number".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "2", "var r: (a: number) => number", "");
+        f.go_to_marker(t, "3");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "r(a: number): number".to_string(), ..Default::default() });
+        f.verify_quick_info_at(t, "4", "var r2: number", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -104,19 +83,12 @@ use crate::tests::prelude::*;
 // genericFunctionSignatureHelp1_test.go:10
 pub fn test_generic_function_signature_help1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"function f<T>(a: T): T { return null; }
+    let content: &str = r"function f<T>(a: T): T { return null; }
 f(/**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "f(a: unknown): unknown".to_string(), ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "f(a: unknown): unknown".to_string(), ..Default::default() });
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -127,19 +99,12 @@ use crate::tests::prelude::*;
 // genericFunctionSignatureHelp2_test.go:10
 pub fn test_generic_function_signature_help2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"var f = <T>(a: T) => a;
+    let content: &str = r"var f = <T>(a: T) => a;
 f(/**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "f(a: unknown): unknown".to_string(), ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "f(a: unknown): unknown".to_string(), ..Default::default() });
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -150,8 +115,7 @@ use crate::tests::prelude::*;
 // genericFunctionSignatureHelp3_test.go:10
 pub fn test_generic_function_signature_help3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"function foo1<T>(x: number, callback: (y1: T) => number) { }
+    let content: &str = r"function foo1<T>(x: number, callback: (y1: T) => number) { }
 function foo2<T>(x: number, callback: (y2: T) => number) { }
 function foo3<T>(x: number, callback: (y3: T) => number) { }
 function foo4<T>(x: number, callback: (y4: T) => number) { }
@@ -166,29 +130,23 @@ foo4<string>(1,/*4*/     // signature help shows y as string
 foo5<string>(1, (/*5*/   // signature help shows y as T
 foo6(1, </*6*/           // signature help shows y as {}
 foo7(1, <string>(/*7*/   // signature help shows y as T";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo1(x: number, callback: (y1: unknown) => number): void".to_string(), ..Default::default() });
-            f.go_to_marker(t, "2");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo2(x: number, callback: (y2: unknown) => number): void".to_string(), ..Default::default() });
-            f.go_to_marker(t, "3");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "callback(y3: unknown): number".to_string(), ..Default::default() });
-            f.go_to_marker(t, "4");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo4(x: number, callback: (y4: string) => number): void".to_string(), ..Default::default() });
-            f.go_to_marker(t, "5");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "callback(y5: string): number".to_string(), ..Default::default() });
-            f.go_to_marker(t, "6");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo6(x: number, callback: (y6: unknown) => number): void".to_string(), ..Default::default() });
-            f.insert(t, "string>(null,null);");
-            f.go_to_marker(t, "7");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo7(x: number, callback: (y7: unknown) => number): void".to_string(), ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo1(x: number, callback: (y1: unknown) => number): void".to_string(), ..Default::default() });
+        f.go_to_marker(t, "2");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo2(x: number, callback: (y2: unknown) => number): void".to_string(), ..Default::default() });
+        f.go_to_marker(t, "3");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "callback(y3: unknown): number".to_string(), ..Default::default() });
+        f.go_to_marker(t, "4");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo4(x: number, callback: (y4: string) => number): void".to_string(), ..Default::default() });
+        f.go_to_marker(t, "5");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "callback(y5: string): number".to_string(), ..Default::default() });
+        f.go_to_marker(t, "6");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo6(x: number, callback: (y6: unknown) => number): void".to_string(), ..Default::default() });
+        f.insert(t, "string>(null,null);");
+        f.go_to_marker(t, "7");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo7(x: number, callback: (y7: unknown) => number): void".to_string(), ..Default::default() });
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -199,8 +157,7 @@ use crate::tests::prelude::*;
 // genericFunctionSignatureHelp3MultiFile_test.go:10
 pub fn test_generic_function_signature_help3_multi_file(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: genericFunctionSignatureHelp_0.ts
+    let content: &str = r"// @Filename: genericFunctionSignatureHelp_0.ts
 function foo1<T>(x: number, callback: (y1: T) => number) { }
 // @Filename: genericFunctionSignatureHelp_1.ts
 function foo2<T>(x: number, callback: (y2: T) => number) { }
@@ -222,29 +179,23 @@ foo4<string>(1,/*4*/     // signature help shows y as string
 foo5<string>(1, (/*5*/   // signature help shows y as T
 foo6(1, </*6*/           // signature help shows y as {}
 foo7(1, <string>(/*7*/   // signature help shows y as T";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo1(x: number, callback: (y1: unknown) => number): void".to_string(), ..Default::default() });
-            f.go_to_marker(t, "2");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo2(x: number, callback: (y2: unknown) => number): void".to_string(), ..Default::default() });
-            f.go_to_marker(t, "3");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "callback(y3: unknown): number".to_string(), ..Default::default() });
-            f.go_to_marker(t, "4");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo4(x: number, callback: (y4: string) => number): void".to_string(), ..Default::default() });
-            f.go_to_marker(t, "5");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "callback(y5: string): number".to_string(), ..Default::default() });
-            f.go_to_marker(t, "6");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo6(x: number, callback: (y6: unknown) => number): void".to_string(), ..Default::default() });
-            f.insert(t, "string>(null,null);");
-            f.go_to_marker(t, "7");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo7(x: number, callback: (y7: unknown) => number): void".to_string(), ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo1(x: number, callback: (y1: unknown) => number): void".to_string(), ..Default::default() });
+        f.go_to_marker(t, "2");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo2(x: number, callback: (y2: unknown) => number): void".to_string(), ..Default::default() });
+        f.go_to_marker(t, "3");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "callback(y3: unknown): number".to_string(), ..Default::default() });
+        f.go_to_marker(t, "4");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo4(x: number, callback: (y4: string) => number): void".to_string(), ..Default::default() });
+        f.go_to_marker(t, "5");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "callback(y5: string): number".to_string(), ..Default::default() });
+        f.go_to_marker(t, "6");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo6(x: number, callback: (y6: unknown) => number): void".to_string(), ..Default::default() });
+        f.insert(t, "string>(null,null);");
+        f.go_to_marker(t, "7");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo7(x: number, callback: (y7: unknown) => number): void".to_string(), ..Default::default() });
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -255,20 +206,13 @@ use crate::tests::prelude::*;
 // genericFunctionWithGenericParams1_test.go:10
 pub fn test_generic_function_with_generic_params1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"var obj = function f<T>(a: T) {
+    let content: &str = r"var obj = function f<T>(a: T) {
     var x/**/x: T;
     return a;
 };";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "", "(local var) xx: T", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "", "(local var) xx: T", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -279,8 +223,7 @@ use crate::tests::prelude::*;
 // genericInterfacePropertyInference1_test.go:10
 pub fn test_generic_interface_property_inference1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @strict: false
+    let content: &str = r"// @strict: false
 interface I {
     x: number;
 }
@@ -367,96 +310,90 @@ var f5_/*e6*/r12 = f5.ofIG4;
 var f5_/*e7*/r14 = f5.ofIG6;
 var f5_/*e8*/r18 = f5.ofC2;
 var f5_/*e9*/r20 = f5.ofC4;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_errors(t);
-            f.verify_quick_info_at(t, "a1", "var f_r1: number", "");
-            f.verify_quick_info_at(t, "a2", "var f_r2: string", "");
-            f.verify_quick_info_at(t, "a3", "var f_r3: any", "");
-            f.verify_quick_info_at(t, "a4", "var f_r5: Foo<number>", "");
-            f.verify_quick_info_at(t, "a5", "var f_r8: I", "");
-            f.verify_quick_info_at(t, "a6", r"var f_r12: {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_no_errors(t);
+        f.verify_quick_info_at(t, "a1", "var f_r1: number", "");
+        f.verify_quick_info_at(t, "a2", "var f_r2: string", "");
+        f.verify_quick_info_at(t, "a3", "var f_r3: any", "");
+        f.verify_quick_info_at(t, "a4", "var f_r5: Foo<number>", "");
+        f.verify_quick_info_at(t, "a5", "var f_r8: I", "");
+        f.verify_quick_info_at(t, "a6", r"var f_r12: {
     x: number;
 }", "");
-            f.verify_quick_info_at(t, "a7", r"var f_r14: {
+        f.verify_quick_info_at(t, "a7", r"var f_r14: {
     x: any;
 }", "");
-            f.verify_quick_info_at(t, "a8", "var f_r18: C<number>", "");
-            f.verify_quick_info_at(t, "a9", r"var f_r20: C<{
+        f.verify_quick_info_at(t, "a8", "var f_r18: C<number>", "");
+        f.verify_quick_info_at(t, "a9", r"var f_r20: C<{
     x: any;
 }>", "");
-            f.verify_quick_info_at(t, "b1", "var f2_r1: number", "");
-            f.verify_quick_info_at(t, "b2", "var f2_r2: string", "");
-            f.verify_quick_info_at(t, "b3", "var f2_r3: number", "");
-            f.verify_quick_info_at(t, "b4", "var f2_r5: Foo<number>", "");
-            f.verify_quick_info_at(t, "b5", "var f2_r8: I", "");
-            f.verify_quick_info_at(t, "b6", r"var f2_r12: {
+        f.verify_quick_info_at(t, "b1", "var f2_r1: number", "");
+        f.verify_quick_info_at(t, "b2", "var f2_r2: string", "");
+        f.verify_quick_info_at(t, "b3", "var f2_r3: number", "");
+        f.verify_quick_info_at(t, "b4", "var f2_r5: Foo<number>", "");
+        f.verify_quick_info_at(t, "b5", "var f2_r8: I", "");
+        f.verify_quick_info_at(t, "b6", r"var f2_r12: {
     x: number;
 }", "");
-            f.verify_quick_info_at(t, "b7", r"var f2_r14: {
+        f.verify_quick_info_at(t, "b7", r"var f2_r14: {
     x: number;
 }", "");
-            f.verify_quick_info_at(t, "b8", "var f2_r18: C<number>", "");
-            f.verify_quick_info_at(t, "b9", r"var f2_r20: C<{
+        f.verify_quick_info_at(t, "b8", "var f2_r18: C<number>", "");
+        f.verify_quick_info_at(t, "b9", r"var f2_r20: C<{
     x: number;
 }>", "");
-            f.verify_quick_info_at(t, "c1", "var f3_r1: number", "");
-            f.verify_quick_info_at(t, "c2", "var f3_r2: string", "");
-            f.verify_quick_info_at(t, "c3", "var f3_r3: I", "");
-            f.verify_quick_info_at(t, "c4", "var f3_r5: Foo<number>", "");
-            f.verify_quick_info_at(t, "c5", "var f3_r8: I", "");
-            f.verify_quick_info_at(t, "c6", r"var f3_r12: {
+        f.verify_quick_info_at(t, "c1", "var f3_r1: number", "");
+        f.verify_quick_info_at(t, "c2", "var f3_r2: string", "");
+        f.verify_quick_info_at(t, "c3", "var f3_r3: I", "");
+        f.verify_quick_info_at(t, "c4", "var f3_r5: Foo<number>", "");
+        f.verify_quick_info_at(t, "c5", "var f3_r8: I", "");
+        f.verify_quick_info_at(t, "c6", r"var f3_r12: {
     x: number;
 }", "");
-            f.verify_quick_info_at(t, "c7", r"var f3_r14: {
+        f.verify_quick_info_at(t, "c7", r"var f3_r14: {
     x: I;
 }", "");
-            f.verify_quick_info_at(t, "c8", "var f3_r18: C<number>", "");
-            f.verify_quick_info_at(t, "c9", r"var f3_r20: C<{
+        f.verify_quick_info_at(t, "c8", "var f3_r18: C<number>", "");
+        f.verify_quick_info_at(t, "c9", r"var f3_r20: C<{
     x: I;
 }>", "");
-            f.verify_quick_info_at(t, "d1", "var f4_r1: number", "");
-            f.verify_quick_info_at(t, "d2", "var f4_r2: string", "");
-            f.verify_quick_info_at(t, "d3", r"var f4_r3: {
+        f.verify_quick_info_at(t, "d1", "var f4_r1: number", "");
+        f.verify_quick_info_at(t, "d2", "var f4_r2: string", "");
+        f.verify_quick_info_at(t, "d3", r"var f4_r3: {
     x: number;
 }", "");
-            f.verify_quick_info_at(t, "d4", "var f4_r5: Foo<number>", "");
-            f.verify_quick_info_at(t, "d5", "var f4_r8: I", "");
-            f.verify_quick_info_at(t, "d6", r"var f4_r12: {
+        f.verify_quick_info_at(t, "d4", "var f4_r5: Foo<number>", "");
+        f.verify_quick_info_at(t, "d5", "var f4_r8: I", "");
+        f.verify_quick_info_at(t, "d6", r"var f4_r12: {
     x: number;
 }", "");
-            f.verify_quick_info_at(t, "d7", r"var f4_r14: {
+        f.verify_quick_info_at(t, "d7", r"var f4_r14: {
     x: {
         x: number;
     };
 }", "");
-            f.verify_quick_info_at(t, "d8", "var f4_r18: C<number>", "");
-            f.verify_quick_info_at(t, "d9", r"var f4_r20: C<{
+        f.verify_quick_info_at(t, "d8", "var f4_r18: C<number>", "");
+        f.verify_quick_info_at(t, "d9", r"var f4_r20: C<{
     x: {
         x: number;
     };
 }>", "");
-            f.verify_quick_info_at(t, "e1", "var f5_r1: number", "");
-            f.verify_quick_info_at(t, "e2", "var f5_r2: string", "");
-            f.verify_quick_info_at(t, "e3", "var f5_r3: Foo<number>", "");
-            f.verify_quick_info_at(t, "e4", "var f5_r5: Foo<number>", "");
-            f.verify_quick_info_at(t, "e5", "var f5_r8: I", "");
-            f.verify_quick_info_at(t, "e6", r"var f5_r12: {
+        f.verify_quick_info_at(t, "e1", "var f5_r1: number", "");
+        f.verify_quick_info_at(t, "e2", "var f5_r2: string", "");
+        f.verify_quick_info_at(t, "e3", "var f5_r3: Foo<number>", "");
+        f.verify_quick_info_at(t, "e4", "var f5_r5: Foo<number>", "");
+        f.verify_quick_info_at(t, "e5", "var f5_r8: I", "");
+        f.verify_quick_info_at(t, "e6", r"var f5_r12: {
     x: number;
 }", "");
-            f.verify_quick_info_at(t, "e7", r"var f5_r14: {
+        f.verify_quick_info_at(t, "e7", r"var f5_r14: {
     x: Foo<number>;
 }", "");
-            f.verify_quick_info_at(t, "e8", "var f5_r18: C<number>", "");
-            f.verify_quick_info_at(t, "e9", r"var f5_r20: C<{
+        f.verify_quick_info_at(t, "e8", "var f5_r18: C<number>", "");
+        f.verify_quick_info_at(t, "e9", r"var f5_r20: C<{
     x: Foo<number>;
 }>", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -467,8 +404,7 @@ use crate::tests::prelude::*;
 // genericInterfacePropertyInference2_test.go:10
 pub fn test_generic_interface_property_inference2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @strict: false
+    let content: &str = r"// @strict: false
 interface I {
     x: number;
 }
@@ -531,58 +467,52 @@ var f5_/*e2*/r7 = f5.ofFooFooNum;
 var f5_/*e3*/r9 = f5.ofIG;
 var f5_/*e5*/r13 = f5.ofIG5;
 var f5_/*e7*/r17 = f5.ofC1;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_errors(t);
-            f.verify_quick_info_at(t, "a1", "var f_r4: Foo<any>", "");
-            f.verify_quick_info_at(t, "a2", "var f_r7: Foo<Foo<number>>", "");
-            f.verify_quick_info_at(t, "a3", "var f_r9: IG<any>", "");
-            f.verify_quick_info_at(t, "a5", r"var f_r13: {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_no_errors(t);
+        f.verify_quick_info_at(t, "a1", "var f_r4: Foo<any>", "");
+        f.verify_quick_info_at(t, "a2", "var f_r7: Foo<Foo<number>>", "");
+        f.verify_quick_info_at(t, "a3", "var f_r9: IG<any>", "");
+        f.verify_quick_info_at(t, "a5", r"var f_r13: {
     x: Foo<any>;
 }", "");
-            f.verify_quick_info_at(t, "a7", "var f_r17: C<any>", "");
-            f.verify_quick_info_at(t, "b1", "var f2_r4: Foo<number>", "");
-            f.verify_quick_info_at(t, "b2", "var f2_r7: Foo<Foo<number>>", "");
-            f.verify_quick_info_at(t, "b3", "var f2_r9: IG<number>", "");
-            f.verify_quick_info_at(t, "b5", r"var f2_r13: {
+        f.verify_quick_info_at(t, "a7", "var f_r17: C<any>", "");
+        f.verify_quick_info_at(t, "b1", "var f2_r4: Foo<number>", "");
+        f.verify_quick_info_at(t, "b2", "var f2_r7: Foo<Foo<number>>", "");
+        f.verify_quick_info_at(t, "b3", "var f2_r9: IG<number>", "");
+        f.verify_quick_info_at(t, "b5", r"var f2_r13: {
     x: Foo<number>;
 }", "");
-            f.verify_quick_info_at(t, "b7", "var f2_r17: C<number>", "");
-            f.verify_quick_info_at(t, "c1", "var f3_r4: Foo<I>", "");
-            f.verify_quick_info_at(t, "c2", "var f3_r7: Foo<Foo<number>>", "");
-            f.verify_quick_info_at(t, "c3", "var f3_r9: IG<I>", "");
-            f.verify_quick_info_at(t, "c5", r"var f3_r13: {
+        f.verify_quick_info_at(t, "b7", "var f2_r17: C<number>", "");
+        f.verify_quick_info_at(t, "c1", "var f3_r4: Foo<I>", "");
+        f.verify_quick_info_at(t, "c2", "var f3_r7: Foo<Foo<number>>", "");
+        f.verify_quick_info_at(t, "c3", "var f3_r9: IG<I>", "");
+        f.verify_quick_info_at(t, "c5", r"var f3_r13: {
     x: Foo<I>;
 }", "");
-            f.verify_quick_info_at(t, "c7", "var f3_r17: C<I>", "");
-            f.verify_quick_info_at(t, "d1", r"var f4_r4: Foo<{
+        f.verify_quick_info_at(t, "c7", "var f3_r17: C<I>", "");
+        f.verify_quick_info_at(t, "d1", r"var f4_r4: Foo<{
     x: number;
 }>", "");
-            f.verify_quick_info_at(t, "d2", "var f4_r7: Foo<Foo<number>>", "");
-            f.verify_quick_info_at(t, "d3", r"var f4_r9: IG<{
+        f.verify_quick_info_at(t, "d2", "var f4_r7: Foo<Foo<number>>", "");
+        f.verify_quick_info_at(t, "d3", r"var f4_r9: IG<{
     x: number;
 }>", "");
-            f.verify_quick_info_at(t, "d5", r"var f4_r13: {
+        f.verify_quick_info_at(t, "d5", r"var f4_r13: {
     x: Foo<{
         x: number;
     }>;
 }", "");
-            f.verify_quick_info_at(t, "d7", r"var f4_r17: C<{
+        f.verify_quick_info_at(t, "d7", r"var f4_r17: C<{
     x: number;
 }>", "");
-            f.verify_quick_info_at(t, "e1", "var f5_r4: Foo<Foo<number>>", "");
-            f.verify_quick_info_at(t, "e2", "var f5_r7: Foo<Foo<number>>", "");
-            f.verify_quick_info_at(t, "e3", "var f5_r9: IG<Foo<number>>", "");
-            f.verify_quick_info_at(t, "e5", r"var f5_r13: {
+        f.verify_quick_info_at(t, "e1", "var f5_r4: Foo<Foo<number>>", "");
+        f.verify_quick_info_at(t, "e2", "var f5_r7: Foo<Foo<number>>", "");
+        f.verify_quick_info_at(t, "e3", "var f5_r9: IG<Foo<number>>", "");
+        f.verify_quick_info_at(t, "e5", r"var f5_r13: {
     x: Foo<Foo<number>>;
 }", "");
-            f.verify_quick_info_at(t, "e7", "var f5_r17: C<Foo<number>>", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+        f.verify_quick_info_at(t, "e7", "var f5_r17: C<Foo<number>>", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -593,8 +523,7 @@ use crate::tests::prelude::*;
 // genericInterfaceWithInheritanceEdit1_test.go:10
 pub fn test_generic_interface_with_inheritance_edit1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface ChainedObject<T> {
+    let content: &str = r"interface ChainedObject<T> {
     values(): ChainedArray<any>;
     pairs(): ChainedArray<any[]>;
     extend(...sources: any[]): ChainedObject<T>;
@@ -606,18 +535,12 @@ interface ChainedArray<T> extends ChainedObject<Array<T>> {
     extend(...sources: any[]): ChainedArray<T>;
 }
  /*1*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_errors(t);
-            f.go_to_marker(t, "1");
-            f.insert(t, " ");
-            f.verify_no_errors(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_no_errors(t);
+        f.go_to_marker(t, "1");
+        f.insert(t, " ");
+        f.verify_no_errors(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -628,8 +551,7 @@ use crate::tests::prelude::*;
 // genericInterfacesWithConstraints1_test.go:10
 pub fn test_generic_interfaces_with_constraints1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface A { a: string; }
+    let content: &str = r"interface A { a: string; }
 interface B extends A { b: string; }
 interface C extends B { c: string; }
 interface G<T, U extends B> {
@@ -639,19 +561,13 @@ interface G<T, U extends B> {
 var v/*1*/1: G<A, C>;               // Ok
 var v/*2*/2: G<{ a: string }, C>;   // Ok, equivalent to G<A, C>
 var v/*3*/3: G<G<A, B>, C>;         // Ok";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "var v1: G<A, C>", "");
-            f.verify_quick_info_at(t, "2", r"var v2: G<{
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "var v1: G<A, C>", "");
+        f.verify_quick_info_at(t, "2", r"var v2: G<{
     a: string;
 }, C>", "");
-            f.verify_quick_info_at(t, "3", "var v3: G<G<A, B>, C>", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+        f.verify_quick_info_at(t, "3", "var v3: G<G<A, B>, C>", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -662,8 +578,7 @@ use crate::tests::prelude::*;
 // genericMapTyping1_test.go:10
 pub fn test_generic_map_typing1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @strict: false
+    let content: &str = r"// @strict: false
 interface Iterator_<T, U> {
     (value: T, index: any, list: any): U;
 }
@@ -683,24 +598,18 @@ var aaa: any[];
 var b/*4*/bb = _.map(aaa, xx => xx.length); // should be any[]
 var c/*5*/cc = _(aaa).map(xx => xx.length);  // Should not error, should be any[]
 var d/*6*/dd = aaa.map(xx => xx.length);     // should not error, should be any[]";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_errors(t);
-            f.verify_quick_info_at(t, "1", "var bb: number[]", "");
-            f.verify_quick_info_at(t, "2", "var cc: number[]", "");
-            f.verify_quick_info_at(t, "3", "var dd: number[]", "");
-            f.verify_quick_info_at(t, "4", "var bbb: any[]", "");
-            f.verify_quick_info_at(t, "5", "var ccc: any[]", "");
-            f.verify_quick_info_at(t, "6", "var ddd: any[]", "");
-            f.verify_quick_info_at(t, "7", "(parameter) xx: string", "");
-            f.verify_quick_info_at(t, "8", "(parameter) xx: string", "");
-            f.verify_quick_info_at(t, "9", "(parameter) xx: string", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_no_errors(t);
+        f.verify_quick_info_at(t, "1", "var bb: number[]", "");
+        f.verify_quick_info_at(t, "2", "var cc: number[]", "");
+        f.verify_quick_info_at(t, "3", "var dd: number[]", "");
+        f.verify_quick_info_at(t, "4", "var bbb: any[]", "");
+        f.verify_quick_info_at(t, "5", "var ccc: any[]", "");
+        f.verify_quick_info_at(t, "6", "var ddd: any[]", "");
+        f.verify_quick_info_at(t, "7", "(parameter) xx: string", "");
+        f.verify_quick_info_at(t, "8", "(parameter) xx: string", "");
+        f.verify_quick_info_at(t, "9", "(parameter) xx: string", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -711,30 +620,23 @@ use crate::tests::prelude::*;
 // genericMethodParam_test.go:10
 pub fn test_generic_method_param(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class C<T> {
+    let content: &str = r"class C<T> {
     /*1*/
 }
 /*2*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_errors(t);
-            f.go_to_marker(t, "1");
-            f.insert_line(t, "constructor(){}");
-            f.insert_line(t, "foo(a: T) {");
-            f.insert_line(t, "    return a;");
-            f.insert_line(t, "}");
-            f.verify_no_errors(t);
-            f.go_to_marker(t, "2");
-            f.insert_line(t, "var x = new C<number>();");
-            f.insert_line(t, "var y: number = x.foo(5);");
-            f.verify_no_errors(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_no_errors(t);
+        f.go_to_marker(t, "1");
+        f.insert_line(t, "constructor(){}");
+        f.insert_line(t, "foo(a: T) {");
+        f.insert_line(t, "    return a;");
+        f.insert_line(t, "}");
+        f.verify_no_errors(t);
+        f.go_to_marker(t, "2");
+        f.insert_line(t, "var x = new C<number>();");
+        f.insert_line(t, "var y: number = x.foo(5);");
+        f.verify_no_errors(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -745,8 +647,7 @@ use crate::tests::prelude::*;
 // genericObjectBaseType_test.go:10
 pub fn test_generic_object_base_type(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @strict: false
+    let content: &str = r#"// @strict: false
 class C<T> {
     constructor(){}
     foo(a: T) {
@@ -756,16 +657,10 @@ class C<T> {
 var x = new C<string>();
 var y: string = x.foo("hi");
 /*1*/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.verify_no_errors(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.verify_no_errors(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -776,8 +671,7 @@ use crate::tests::prelude::*;
 // genericParameterHelp_test.go:10
 pub fn test_generic_parameter_help(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface IFoo { }
+    let content: &str = r"interface IFoo { }
 
 function testFunction<T extends IFoo, U, M extends IFoo>(a: T, b: U, c: M): M {
     return null;
@@ -789,24 +683,18 @@ testFunction<any, /*2*/
 testFunction<any, any, any>(/*3*/
 testFunction<any, any,/*4*/ any>(null, null, null);
 testFunction<, ,/*5*/>(null, null, null);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "testFunction<T extends IFoo, U, M extends IFoo>(a: T, b: U, c: M): M".to_string(), parameter_count: 3, parameter_name: "T".to_string(), parameter_span: "T extends IFoo".to_string(), ..Default::default() });
-            f.go_to_marker(t, "2");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "U".to_string(), parameter_span: "U".to_string(), ..Default::default() });
-            f.go_to_marker(t, "3");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "a".to_string(), parameter_span: "a: any".to_string(), ..Default::default() });
-            f.go_to_marker(t, "4");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "M".to_string(), parameter_span: "M extends IFoo".to_string(), ..Default::default() });
-            f.go_to_marker(t, "5");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "M".to_string(), parameter_span: "M extends IFoo".to_string(), ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "testFunction<T extends IFoo, U, M extends IFoo>(a: T, b: U, c: M): M".to_string(), parameter_count: 3, parameter_name: "T".to_string(), parameter_span: "T extends IFoo".to_string(), ..Default::default() });
+        f.go_to_marker(t, "2");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "U".to_string(), parameter_span: "U".to_string(), ..Default::default() });
+        f.go_to_marker(t, "3");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "a".to_string(), parameter_span: "a: any".to_string(), ..Default::default() });
+        f.go_to_marker(t, "4");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "M".to_string(), parameter_span: "M extends IFoo".to_string(), ..Default::default() });
+        f.go_to_marker(t, "5");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "M".to_string(), parameter_span: "M extends IFoo".to_string(), ..Default::default() });
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -817,8 +705,7 @@ use crate::tests::prelude::*;
 // genericParameterHelpConstructorCalls_test.go:10
 pub fn test_generic_parameter_help_constructor_calls(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface IFoo { }
+    let content: &str = r"interface IFoo { }
 
 class testClass<T extends IFoo, U, M extends IFoo> {
     constructor(a:T, b:U, c:M){ }
@@ -830,24 +717,18 @@ new testClass<IFoo, /*constructor2*/
 new testClass</*constructor3*/>(null, null, null)
 new testClass<,,/*constructor4*/>(null, null, null)
 new testClass<IFoo,/*constructor5*/IFoo,IFoo>(null, null, null)";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "constructor1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "testClass<T extends IFoo, U, M extends IFoo>(a: T, b: U, c: M): testClass<T, U, M>".to_string(), parameter_name: "T".to_string(), parameter_span: "T extends IFoo".to_string(), ..Default::default() });
-            f.go_to_marker(t, "constructor2");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "U".to_string(), parameter_span: "U".to_string(), ..Default::default() });
-            f.go_to_marker(t, "constructor3");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "T".to_string(), parameter_span: "T extends IFoo".to_string(), ..Default::default() });
-            f.go_to_marker(t, "constructor4");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "M".to_string(), parameter_span: "M extends IFoo".to_string(), ..Default::default() });
-            f.go_to_marker(t, "constructor5");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "U".to_string(), parameter_span: "U".to_string(), ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "constructor1");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "testClass<T extends IFoo, U, M extends IFoo>(a: T, b: U, c: M): testClass<T, U, M>".to_string(), parameter_name: "T".to_string(), parameter_span: "T extends IFoo".to_string(), ..Default::default() });
+        f.go_to_marker(t, "constructor2");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "U".to_string(), parameter_span: "U".to_string(), ..Default::default() });
+        f.go_to_marker(t, "constructor3");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "T".to_string(), parameter_span: "T extends IFoo".to_string(), ..Default::default() });
+        f.go_to_marker(t, "constructor4");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "M".to_string(), parameter_span: "M extends IFoo".to_string(), ..Default::default() });
+        f.go_to_marker(t, "constructor5");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "U".to_string(), parameter_span: "U".to_string(), ..Default::default() });
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -858,8 +739,7 @@ use crate::tests::prelude::*;
 // genericParameterHelpTypeReferences_test.go:10
 pub fn test_generic_parameter_help_type_references(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface IFoo { }
+    let content: &str = r"interface IFoo { }
 
 class testClass<T extends IFoo, U, M extends IFoo> {
     constructor(a:T, b:U, c:M){ }
@@ -876,26 +756,20 @@ let i: I</*interface*/>;
 
 type Ty<T> = T;
 let t: Ty</*typeAlias*/>;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "type1");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "testClass<T extends IFoo, U, M extends IFoo>".to_string(), parameter_name: "T".to_string(), parameter_span: "T extends IFoo".to_string(), ..Default::default() });
-            f.go_to_marker(t, "type2");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "testClass<T extends IFoo, U, M extends IFoo>".to_string(), parameter_name: "T".to_string(), parameter_span: "T extends IFoo".to_string(), ..Default::default() });
-            f.go_to_marker(t, "type3");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "testClass<T extends IFoo, U, M extends IFoo>".to_string(), parameter_name: "T".to_string(), parameter_span: "T extends IFoo".to_string(), ..Default::default() });
-            f.go_to_marker(t, "type4");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "M".to_string(), parameter_span: "M extends IFoo".to_string(), ..Default::default() });
-            f.go_to_marker(t, "interface");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "I<T>".to_string(), parameter_name: "T".to_string(), parameter_span: "T".to_string(), ..Default::default() });
-            f.go_to_marker(t, "typeAlias");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "Ty<T>".to_string(), parameter_name: "T".to_string(), parameter_span: "T".to_string(), ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "type1");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "testClass<T extends IFoo, U, M extends IFoo>".to_string(), parameter_name: "T".to_string(), parameter_span: "T extends IFoo".to_string(), ..Default::default() });
+        f.go_to_marker(t, "type2");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "testClass<T extends IFoo, U, M extends IFoo>".to_string(), parameter_name: "T".to_string(), parameter_span: "T extends IFoo".to_string(), ..Default::default() });
+        f.go_to_marker(t, "type3");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "testClass<T extends IFoo, U, M extends IFoo>".to_string(), parameter_name: "T".to_string(), parameter_span: "T extends IFoo".to_string(), ..Default::default() });
+        f.go_to_marker(t, "type4");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "M".to_string(), parameter_span: "M extends IFoo".to_string(), ..Default::default() });
+        f.go_to_marker(t, "interface");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "I<T>".to_string(), parameter_name: "T".to_string(), parameter_span: "T".to_string(), ..Default::default() });
+        f.go_to_marker(t, "typeAlias");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "Ty<T>".to_string(), parameter_name: "T".to_string(), parameter_span: "T".to_string(), ..Default::default() });
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -906,8 +780,7 @@ use crate::tests::prelude::*;
 // genericRespecialization1_test.go:10
 pub fn test_generic_respecialization1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @strict: false
+    let content: &str = r#"// @strict: false
 class Food {
     private amount: number;
     constructor(public name: string) {
@@ -970,24 +843,18 @@ class GenericPlanet2<T extends Food, V>{
     constructor(public name: string, public solarSystem: string, public species: GenericMonster<T, V>) { }
 }
  /*1*/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_errors(t);
-            f.go_to_marker(t, "1");
-            f.insert_line(t, "");
-            f.insert_line(t, "");
-            f.verify_no_errors(t);
-            f.go_to_marker(t, "2");
-            f.delete_at_caret(t, 6);
-            f.insert(t, "any");
-            f.verify_no_errors(t);
-            f.insert_line(t, "var narnia = new GenericPlanet2<Cookie, string>(");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_no_errors(t);
+        f.go_to_marker(t, "1");
+        f.insert_line(t, "");
+        f.insert_line(t, "");
+        f.verify_no_errors(t);
+        f.go_to_marker(t, "2");
+        f.delete_at_caret(t, 6);
+        f.insert(t, "any");
+        f.verify_no_errors(t);
+        f.insert_line(t, "var narnia = new GenericPlanet2<Cookie, string>(");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -998,24 +865,17 @@ use crate::tests::prelude::*;
 // genericSignaturesAreProperlyCleaned_test.go:10
 pub fn test_generic_signatures_are_properly_cleaned(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface Int<T> {
+    let content: &str = r"interface Int<T> {
 val<U>(f: (t: T) => U): Int<U>;
 }
 declare var v1: Int<string>;
 var v2: Int<number> = v1/*1*/;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_number_of_errors_in_current_file(t, 1);
-            f.go_to_marker(t, "1");
-            f.delete_at_caret(t, 1);
-            f.verify_number_of_errors_in_current_file(t, 1);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_number_of_errors_in_current_file(t, 1);
+        f.go_to_marker(t, "1");
+        f.delete_at_caret(t, 1);
+        f.verify_number_of_errors_in_current_file(t, 1);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1026,8 +886,7 @@ use crate::tests::prelude::*;
 // genericTypeAliasIntersectionCompletions_test.go:11
 pub fn test_generic_type_alias_intersection_completions(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"type MixinCtor<A, B> = new () => A & B & { constructor: MixinCtor<A, B> };
+    let content: &str = r"type MixinCtor<A, B> = new () => A & B & { constructor: MixinCtor<A, B> };
 function merge<A, B>(a: { prototype: A }, b: { prototype: B }): MixinCtor<A, B> {
   let merged = function() { }
   Object.assign(merged.prototype, a.prototype, b.prototype);
@@ -1054,15 +913,9 @@ abstract class RightSideNode extends TreeNode {
 
 var obj = new (merge(LeftSideNode, RightSideNode))();
 obj./**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("right".to_string()), Any::String("left".to_string()), Any::String("value".to_string()), Any::String("constructor".to_string())]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("right".to_string()), Any::String("left".to_string()), Any::String("value".to_string()), Any::String("constructor".to_string())]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1073,8 +926,7 @@ use crate::tests::prelude::*;
 // genericTypeParamUnrelatedToArguments1_test.go:10
 pub fn test_generic_type_param_unrelated_to_arguments1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface Foo<T> {
+    let content: &str = r"interface Foo<T> {
     new (x: number): Foo<T>;
 }
 declare var f/*1*/1: Foo<number>;
@@ -1083,20 +935,14 @@ var f/*3*/3 = new Foo(3);
 var f/*4*/4: Foo<number> = new Foo(3);
 var f/*5*/5 = new Foo<number>(3);
 var f/*6*/6: Foo<number> = new Foo<number>(3);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "var f1: Foo<number>", "");
-            f.verify_quick_info_at(t, "2", "var f2: Foo<number>", "");
-            f.verify_quick_info_at(t, "3", "var f3: any", "");
-            f.verify_quick_info_at(t, "4", "var f4: Foo<number>", "");
-            f.verify_quick_info_at(t, "5", "var f5: any", "");
-            f.verify_quick_info_at(t, "6", "var f6: Foo<number>", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "var f1: Foo<number>", "");
+        f.verify_quick_info_at(t, "2", "var f2: Foo<number>", "");
+        f.verify_quick_info_at(t, "3", "var f3: any", "");
+        f.verify_quick_info_at(t, "4", "var f4: Foo<number>", "");
+        f.verify_quick_info_at(t, "5", "var f5: any", "");
+        f.verify_quick_info_at(t, "6", "var f6: Foo<number>", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1107,8 +953,7 @@ use crate::tests::prelude::*;
 // genericTypeWithMultipleBases1MultiFile_test.go:12
 pub fn test_generic_type_with_multiple_bases1_multi_file(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: genericTypeWithMultipleBases_0.ts
+    let content: &str = r"// @Filename: genericTypeWithMultipleBases_0.ts
 interface iBaseScope {
     watch: () => void;
 }
@@ -1124,15 +969,9 @@ interface iScope<TModel> extends iBaseScope, iMover {
 var x: iScope<number>;
 // @Filename: genericTypeWithMultipleBases_4.ts
 x./**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "watch".to_string(), detail: Some("(property) iBaseScope.watch: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "moveUp".to_string(), detail: Some("(property) iMover.moveUp: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "family".to_string(), detail: Some("(property) iScope<number>.family: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "watch".to_string(), detail: Some("(property) iBaseScope.watch: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "moveUp".to_string(), detail: Some("(property) iMover.moveUp: () => void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "family".to_string(), detail: Some("(property) iScope<number>.family: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1143,8 +982,7 @@ use crate::tests::prelude::*;
 // genericWithSpecializedProperties1_test.go:10
 pub fn test_generic_with_specialized_properties1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface Foo<T> {
+    let content: &str = r"interface Foo<T> {
     x: Foo<string>;
     y: Foo<number>;
 }
@@ -1154,18 +992,12 @@ var /*2*/yy = f.y;
 var f2: Foo<string>;
 var /*3*/x2 = f2.x;
 var /*4*/y2 = f2.y;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "var xx: Foo<string>", "");
-            f.verify_quick_info_at(t, "2", "var yy: Foo<number>", "");
-            f.verify_quick_info_at(t, "3", "var x2: Foo<string>", "");
-            f.verify_quick_info_at(t, "4", "var y2: Foo<number>", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "var xx: Foo<string>", "");
+        f.verify_quick_info_at(t, "2", "var yy: Foo<number>", "");
+        f.verify_quick_info_at(t, "3", "var x2: Foo<string>", "");
+        f.verify_quick_info_at(t, "4", "var y2: Foo<number>", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1176,20 +1008,13 @@ use crate::tests::prelude::*;
 // genericWithSpecializedProperties2_test.go:10
 pub fn test_generic_with_specialized_properties2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "interface Foo<T> {\n    y: Foo<number>;\n    x: Foo<string>;\n}\nvar f: Foo<string>;\nvar /*1*/x = f.x; \nvar /*2*/y = f.y; \nvar f2: Foo<number>;\nvar /*3*/x2 = f2.x; \nvar /*4*/y2 = f2.y; ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "var x: Foo<string>", "");
-            f.verify_quick_info_at(t, "2", "var y: Foo<number>", "");
-            f.verify_quick_info_at(t, "3", "var x2: Foo<string>", "");
-            f.verify_quick_info_at(t, "4", "var y2: Foo<number>", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "interface Foo<T> {\n    y: Foo<number>;\n    x: Foo<string>;\n}\nvar f: Foo<string>;\nvar /*1*/x = f.x; \nvar /*2*/y = f.y; \nvar f2: Foo<number>;\nvar /*3*/x2 = f2.x; \nvar /*4*/y2 = f2.y; ";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "var x: Foo<string>", "");
+        f.verify_quick_info_at(t, "2", "var y: Foo<number>", "");
+        f.verify_quick_info_at(t, "3", "var x2: Foo<string>", "");
+        f.verify_quick_info_at(t, "4", "var y2: Foo<number>", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1200,8 +1025,7 @@ use crate::tests::prelude::*;
 // genericWithSpecializedProperties3_test.go:10
 pub fn test_generic_with_specialized_properties3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"interface Foo<T, U> {
+    let content: &str = r"interface Foo<T, U> {
     x: Foo<T, U>;
     y: Foo<U, U>;
 }
@@ -1211,18 +1035,12 @@ var /*2*/yy = f.y;
 var f2: Foo<string, number>;
 var /*3*/x2 = f2.x;
 var /*4*/y2 = f2.y;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "1", "var xx: Foo<number, string>", "");
-            f.verify_quick_info_at(t, "2", "var yy: Foo<string, string>", "");
-            f.verify_quick_info_at(t, "3", "var x2: Foo<string, number>", "");
-            f.verify_quick_info_at(t, "4", "var y2: Foo<number, number>", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "1", "var xx: Foo<number, string>", "");
+        f.verify_quick_info_at(t, "2", "var yy: Foo<string, string>", "");
+        f.verify_quick_info_at(t, "3", "var x2: Foo<string, number>", "");
+        f.verify_quick_info_at(t, "4", "var y2: Foo<number, number>", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1233,8 +1051,7 @@ use crate::tests::prelude::*;
 // genericsFormatting_test.go:10
 pub fn test_generics_formatting(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*inClassDeclaration*/class Foo   <    T1   ,  T2    >  {
+    let content: &str = r"/*inClassDeclaration*/class Foo   <    T1   ,  T2    >  {
 /*inMethodDeclaration*/    public method    <   T3,    T4   >   ( a: T1,   b: Array    < T4 > ):   Map < T1  ,   T2, Array < T3    >    > {
     }
 }
@@ -1255,33 +1072,27 @@ foo()<number, string, T >();
 }
 /*expressionWithTypeArguments*/class A < T > extends bar <  T >( )  <  T > {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.go_to_marker(t, "inClassDeclaration");
-            f.verify_current_line_content(t, "class Foo<T1, T2> {");
-            f.go_to_marker(t, "inMethodDeclaration");
-            f.verify_current_line_content(t, "    public method<T3, T4>(a: T1, b: Array<T4>): Map<T1, T2, Array<T3>> {");
-            f.go_to_marker(t, "typeArguments");
-            f.verify_current_line_content(t, "var foo = new Foo<number, Array<number>>();");
-            f.go_to_marker(t, "typeArgumentsWithTypeLiterals");
-            f.verify_current_line_content(t, "foo = new Foo<{ bar: number }, Array<{ baz: string }>>();");
-            f.go_to_marker(t, "inNewSignature");
-            f.verify_current_line_content(t, "    new <T>(a: T);");
-            f.go_to_marker(t, "inOptionalMethodSignature");
-            f.verify_current_line_content(t, "    op?<T, M>(a: T, b: M);");
-            f.go_to_marker(t, "inFunctionDeclaration");
-            f.verify_current_line_content(t, "function bar<T>() {");
-            f.go_to_marker(t, "inClassExpression");
-            f.verify_current_line_content(t, "    return class <T2> {");
-            f.go_to_marker(t, "expressionWithTypeArguments");
-            f.verify_current_line_content(t, "class A<T> extends bar<T>()<T> {");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.go_to_marker(t, "inClassDeclaration");
+        f.verify_current_line_content(t, "class Foo<T1, T2> {");
+        f.go_to_marker(t, "inMethodDeclaration");
+        f.verify_current_line_content(t, "    public method<T3, T4>(a: T1, b: Array<T4>): Map<T1, T2, Array<T3>> {");
+        f.go_to_marker(t, "typeArguments");
+        f.verify_current_line_content(t, "var foo = new Foo<number, Array<number>>();");
+        f.go_to_marker(t, "typeArgumentsWithTypeLiterals");
+        f.verify_current_line_content(t, "foo = new Foo<{ bar: number }, Array<{ baz: string }>>();");
+        f.go_to_marker(t, "inNewSignature");
+        f.verify_current_line_content(t, "    new <T>(a: T);");
+        f.go_to_marker(t, "inOptionalMethodSignature");
+        f.verify_current_line_content(t, "    op?<T, M>(a: T, b: M);");
+        f.go_to_marker(t, "inFunctionDeclaration");
+        f.verify_current_line_content(t, "function bar<T>() {");
+        f.go_to_marker(t, "inClassExpression");
+        f.verify_current_line_content(t, "    return class <T2> {");
+        f.go_to_marker(t, "expressionWithTypeArguments");
+        f.verify_current_line_content(t, "class A<T> extends bar<T>()<T> {");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1292,8 +1103,7 @@ use crate::tests::prelude::*;
 // genericsFormattingMultiline_test.go:10
 pub fn test_generics_formatting_multiline(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"
+    let content: &str = r#"
 class Foo   <   
  T1   extends unknown,
   T2   
@@ -1360,11 +1170,9 @@ const t = s<
   string[] & ArrayLike<any>
       >`abc${1}def` ;
 "#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.format_document(t, "");
-            f.verify_current_file_content(t, r#"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.format_document(t, "");
+        f.verify_current_file_content(t, r#"
 class Foo<
     T1 extends unknown,
     T2
@@ -1431,11 +1239,7 @@ const t = s<
     string[] & ArrayLike<any>
 >`abc${1}def`;
 "#);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1446,8 +1250,7 @@ use crate::tests::prelude::*;
 // getDeclarationDiagnostics_test.go:10
 pub fn test_get_declaration_diagnostics(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @strict: false
+    let content: &str = r#"// @strict: false
 // @declaration: true
 // @outDir: out
 // @Filename: inputFile1.ts
@@ -1460,18 +1263,12 @@ namespace m {
 } /*1*/
 // @Filename: input2.ts
 var x = "hello world"; /*2*/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.verify_number_of_errors_in_current_file(t, 1);
-            f.go_to_marker(t, "2");
-            f.verify_number_of_errors_in_current_file(t, 0);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.verify_number_of_errors_in_current_file(t, 1);
+        f.go_to_marker(t, "2");
+        f.verify_number_of_errors_in_current_file(t, 0);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1482,8 +1279,7 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_test.go:10
 pub fn test_get_edits_for_file_rename(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /a.ts
+    let content: &str = r#"// @Filename: /a.ts
 /// <reference path="./src/old.ts" />
 import old from "./src/old";
 // @Filename: /src/a.ts
@@ -1498,18 +1294,12 @@ import { x } from "././src/./foo/./a";
 export default 0;
 // @Filename: /tsconfig.json
 { "files": ["a.ts", "src/a.ts", "src/foo/a.ts", "src/old.ts"] }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/src/old.ts", "/src/new.ts", go::map_of([("/a.ts".to_string(), r#"/// <reference path="./src/new.ts" />
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/src/old.ts", "/src/new.ts", go::map_of([("/a.ts".to_string(), r#"/// <reference path="./src/new.ts" />
 import old from "./src/new";"#.to_string()), ("/src/a.ts".to_string(), r#"/// <reference path="./new.ts" />
 import old from "./new";"#.to_string()), ("/src/foo/a.ts".to_string(), r#"/// <reference path="../new.ts" />
 import old from "../new";"#.to_string()), ("/tsconfig.json".to_string(), r#"{ "files": ["a.ts", "src/a.ts", "src/foo/a.ts", "src/new.ts"] }"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1520,8 +1310,7 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_ambientModule_test.go:10
 pub fn test_get_edits_for_file_rename_ambient_module(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /tsconfig.json
+    let content: &str = r#"// @Filename: /tsconfig.json
 {}
 // @Filename: /sub/types.d.ts
 // @Symlink: /node_modules/sub/types.d.ts
@@ -1533,15 +1322,9 @@ declare module "sub" {
 { "types": "types.d.ts" }
 // @Filename: /a.ts
 import { abc } from "sub";"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/a.ts", "/b.ts", go::map_of([]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/a.ts", "/b.ts", go::map_of([]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1552,21 +1335,14 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_amd_test.go:10
 pub fn test_get_edits_for_file_rename_amd(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @moduleResolution: classic
+    let content: &str = r#"// @moduleResolution: classic
 // @Filename: /src/user.ts
 import { x } from "old";
 // @Filename: /src/old.ts
 export const x = 0;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/src/old.ts", "/src/new.ts", go::map_of([("/src/user.ts".to_string(), r#"import { x } from "./new";"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/src/old.ts", "/src/new.ts", go::map_of([("/src/user.ts".to_string(), r#"import { x } from "./new";"#.to_string())]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1577,21 +1353,14 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_caseInsensitive_test.go:10
 pub fn test_get_edits_for_file_rename_case_insensitive(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @useCaseSensitiveFileNames: false
+    let content: &str = r#"// @useCaseSensitiveFileNames: false
 // @Filename: /a.ts
 export const a = 0;
 // @Filename: /b.ts
 import { a } from "./A";"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/a.ts", "/eh.ts", go::map_of([("/b.ts".to_string(), r#"import { a } from "./eh";"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/a.ts", "/eh.ts", go::map_of([("/b.ts".to_string(), r#"import { a } from "./eh";"#.to_string())]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1602,20 +1371,13 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_casing_test.go:10
 pub fn test_get_edits_for_file_rename_casing(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /a.ts
+    let content: &str = r#"// @Filename: /a.ts
 import { foo } from "./dir/fOo";
 // @Filename: /dir/fOo.ts
 export const foo = 0;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/dir", "/newDir", go::map_of([("/a.ts".to_string(), r#"import { foo } from "./newDir/fOo";"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/dir", "/newDir", go::map_of([("/a.ts".to_string(), r#"import { foo } from "./newDir/fOo";"#.to_string())]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1626,8 +1388,7 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_cssImport2_test.go:10
 pub fn test_get_edits_for_file_rename_css_import2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /tsconfig.json
+    let content: &str = r#"// @Filename: /tsconfig.json
 { "compilerOptions": { "allowArbitraryExtensions": true } }
 // @Filename: /app.css
 .cookie-banner {
@@ -1640,20 +1401,14 @@ declare const css: {
 export default css;
 // @Filename: /a.ts
 import styles from "./app.css";"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/app.d.css.ts", "/app2.d.css.ts", go::map_of([("/a.ts".to_string(), r#"import styles from "./app2.css";"#.to_string()), ("/app2.css".to_string(), r".cookie-banner {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/app.d.css.ts", "/app2.d.css.ts", go::map_of([("/a.ts".to_string(), r#"import styles from "./app2.css";"#.to_string()), ("/app2.css".to_string(), r".cookie-banner {
   display: none;
 }".to_string()), ("/app2.d.css.ts".to_string(), r"declare const css: {
   cookieBanner: string;
 };
 export default css;".to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1664,8 +1419,7 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_cssImport3_test.go:10
 pub fn test_get_edits_for_file_rename_css_import3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"
+    let content: &str = r#"
 // @Filename: /tsconfig.json
 { "compilerOptions": { "allowArbitraryExtensions": true } }
 // @Filename: /app.css
@@ -1679,20 +1433,14 @@ declare const css: {
 export default css;
 // @Filename: /a.ts
 import styles from ".//*rename*/app.css";"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_rename(t, "rename", "app2.css", go::map_of([("/a.ts".to_string(), r#"import styles from "./app2.css";"#.to_string()), ("/app2.d.css.ts".to_string(), r"declare const css: {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_rename(t, "rename", "app2.css", go::map_of([("/a.ts".to_string(), r#"import styles from "./app2.css";"#.to_string()), ("/app2.d.css.ts".to_string(), r"declare const css: {
   cookieBanner: string;
 };
 export default css;".to_string()), ("/app2.css".to_string(), r".cookie-banner {
   display: none;
 }".to_string())]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1744,8 +1492,7 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_directory_test.go:10
 pub fn test_get_edits_for_file_rename_directory(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /a.ts
+    let content: &str = r#"// @Filename: /a.ts
 /// <reference path="./src/old/file.ts" />
 import old from "./src/old";
 import old2 from "./src/old/file";
@@ -1770,10 +1517,8 @@ export default 0;
 export default 0;
 // @Filename: /tsconfig.json
 { "files": ["a.ts", "src/b.ts", "src/foo/c.ts", "src/old/index.ts", "src/old/file.ts"] }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/src/old", "/src/new", go::map_of([("/a.ts".to_string(), r#"/// <reference path="./src/new/file.ts" />
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/src/old", "/src/new", go::map_of([("/a.ts".to_string(), r#"/// <reference path="./src/new/file.ts" />
 import old from "./src/new";
 import old2 from "./src/new/file";
 export default 0;"#.to_string()), ("/src/b.ts".to_string(), r#"/// <reference path="./new/file.ts" />
@@ -1783,11 +1528,7 @@ export default 0;"#.to_string()), ("/src/foo/c.ts".to_string(), r#"/// <referenc
 import old from "../new";
 import old2 from "../new/file";
 export default 0;"#.to_string()), ("/tsconfig.json".to_string(), r#"{ "files": ["a.ts", "src/b.ts", "src/foo/c.ts", "src/new/index.ts", "src/new/file.ts"] }"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1798,8 +1539,7 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_directory_down_test.go:10
 pub fn test_get_edits_for_file_rename_directory_down(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /a.ts
+    let content: &str = r#"// @Filename: /a.ts
 /// <reference path="./src/old/file.ts" />
 import old from "./src/old";
 import old2 from "./src/old/file";
@@ -1824,10 +1564,8 @@ export default 0;
 export default 0;
 // @Filename: /tsconfig.json
 { "files": ["a.ts", "src/b.ts", "src/foo/c.ts", "src/old/index.ts", "src/old/file.ts"] }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/src/old", "/src/newDir/new", go::map_of([("/a.ts".to_string(), r#"/// <reference path="./src/newDir/new/file.ts" />
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/src/old", "/src/newDir/new", go::map_of([("/a.ts".to_string(), r#"/// <reference path="./src/newDir/new/file.ts" />
 import old from "./src/newDir/new";
 import old2 from "./src/newDir/new/file";
 export default 0;"#.to_string()), ("/src/b.ts".to_string(), r#"/// <reference path="./newDir/new/file.ts" />
@@ -1841,11 +1579,7 @@ import a2 from "../../b";
 import a3 from "../../foo/c";
 import f from "./file";
 export default 0;"#.to_string()), ("/tsconfig.json".to_string(), r#"{ "files": ["a.ts", "src/b.ts", "src/foo/c.ts", "src/newDir/new/index.ts", "src/newDir/new/file.ts"] }"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1856,20 +1590,13 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_directory_noUpdateNodeModulesImport_test.go:10
 pub fn test_get_edits_for_file_rename_directory_no_update_node_modules_import(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /a/b/file1.ts
+    let content: &str = r#"// @Filename: /a/b/file1.ts
 import { foo } from "foo";
 // @Filename: /a/b/node_modules/foo/index.d.ts
 export const foo = 0;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/a/b", "/a/d", go::map_of([]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/a/b", "/a/d", go::map_of([]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -1880,8 +1607,7 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_directory_up_test.go:10
 pub fn test_get_edits_for_file_rename_directory_up(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /a.ts
+    let content: &str = r#"// @Filename: /a.ts
 /// <reference path="./src/old/file.ts" />
 import old from "./src/old";
 import old2 from "./src/old/file";
@@ -1906,10 +1632,8 @@ export default 0;
 export default 0;
 // @Filename: /tsconfig.json
 { "files": ["a.ts", "src/b.ts", "src/foo/c.ts", "src/old/index.ts", "src/old/file.ts"] }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/src/old", "/newDir/new", go::map_of([("/a.ts".to_string(), r#"/// <reference path="./newDir/new/file.ts" />
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/src/old", "/newDir/new", go::map_of([("/a.ts".to_string(), r#"/// <reference path="./newDir/new/file.ts" />
 import old from "./newDir/new";
 import old2 from "./newDir/new/file";
 export default 0;"#.to_string()), ("/src/b.ts".to_string(), r#"/// <reference path="../newDir/new/file.ts" />
@@ -1923,11 +1647,7 @@ import a2 from "../../src/b";
 import a3 from "../../src/foo/c";
 import f from "./file";
 export default 0;"#.to_string()), ("/tsconfig.json".to_string(), r#"{ "files": ["a.ts", "src/b.ts", "src/foo/c.ts", "newDir/new/index.ts", "newDir/new/file.ts"] }"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2001,21 +1721,14 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_jsExtension_test.go:10
 pub fn test_get_edits_for_file_rename_js_extension(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @allowJs: true
+    let content: &str = r#"// @allowJs: true
 // @Filename: /src/a.js
 export const a = 0;
 // @Filename: /b.js
 import { a } from "./src/a.js";"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/b.js", "/src/b.js", go::map_of([("/src/b.js".to_string(), r#"import { a } from "./a.js";"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/b.js", "/src/b.js", go::map_of([("/src/b.js".to_string(), r#"import { a } from "./a.js";"#.to_string())]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2026,23 +1739,16 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_jsRename_test.go:10
 pub fn test_get_edits_for_file_rename_js_rename(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"
+    let content: &str = r#"
 // @Filename: /tsconfig.json
 { "compilerOptions": { "module": "nodenext" } }
 // @Filename: /a.ts
 export const a = 1;
 // @Filename: /b.ts
 import { a } from ".//*rename*/a.js";"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_rename(t, "rename", "c.js", go::map_of([("/c.ts".to_string(), "export const a = 1;".to_string()), ("/b.ts".to_string(), r#"import { a } from "./c.js";"#.to_string())]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_rename(t, "rename", "c.js", go::map_of([("/c.ts".to_string(), "export const a = 1;".to_string()), ("/b.ts".to_string(), r#"import { a } from "./c.js";"#.to_string())]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2053,21 +1759,14 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_js_simple_test.go:10
 pub fn test_get_edits_for_file_rename_js_simple(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @allowJs: true
+    let content: &str = r#"// @allowJs: true
 // @Filename: /a.js
 import b from "./b.js";
 // @Filename: /b.js
 module.exports = 1;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/b.js", "/c.js", go::map_of([("/a.js".to_string(), r#"import b from "./c.js";"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/b.js", "/c.js", go::map_of([("/a.js".to_string(), r#"import b from "./c.js";"#.to_string())]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2078,8 +1777,7 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_keepFileExtensions_test.go:10
 pub fn test_get_edits_for_file_rename_keep_file_extensions(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /tsconfig.json
+    let content: &str = r#"// @Filename: /tsconfig.json
 {
   "compilerOptions": {
     "module": "Node16",
@@ -2090,15 +1788,9 @@ pub fn test_get_edits_for_file_rename_keep_file_extensions(t: &T) {
 export const name = 0;
 // @Filename: /src/index.ts
 import {name} from "./person.js";"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/src/person.ts", "/src/vip.ts", go::map_of([("/src/index.ts".to_string(), r#"import {name} from "./vip.js";"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/src/person.ts", "/src/vip.ts", go::map_of([("/src/index.ts".to_string(), r#"import {name} from "./vip.js";"#.to_string())]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2109,20 +1801,13 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_nodeModuleDirectoryCase_test.go:10
 pub fn test_get_edits_for_file_rename_node_module_directory_case(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /a/b/file1.ts
+    let content: &str = r#"// @Filename: /a/b/file1.ts
 import { foo } from "foo";
 // @Filename: /a/node_modules/foo/index.d.ts
 export const foo = 0;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/a/b", "/a/B", go::map_of([]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/a/b", "/a/B", go::map_of([]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2133,22 +1818,15 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_notAffectedByJsFile_test.go:10
 pub fn test_get_edits_for_file_rename_not_affected_by_js_file(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /a.ts
+    let content: &str = r#"// @Filename: /a.ts
 export const x = 0;
 // @Filename: /a.js
 exports.x = 0;
 // @Filename: /b.ts
 import { x } from "./a";"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/a.ts", "/a2.ts", go::map_of([("/b.ts".to_string(), r#"import { x } from "./a2";"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/a.ts", "/a2.ts", go::map_of([("/b.ts".to_string(), r#"import { x } from "./a2";"#.to_string())]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2159,24 +1837,17 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_preferences_test.go:11
 pub fn test_get_edits_for_file_rename_preferences(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /dir/a.ts
+    let content: &str = r#"// @Filename: /dir/a.ts
 export const a = 0;
 // @Filename: /dir/b.ts
 import {} from "dir/a";
 import {} from 'dir/a';
 // @Filename: /tsconfig.json
 {"compilerOptions":{"paths":{"*":["*"]}}}"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/dir/a.ts", "/dir/a1.ts", go::map_of([("/dir/b.ts".to_string(), r#"import {} from "dir/a1";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/dir/a.ts", "/dir/a1.ts", go::map_of([("/dir/b.ts".to_string(), r#"import {} from "dir/a1";
 import {} from 'dir/a1';"#.to_string())]), Some(lsutil::UserPreferences { import_module_specifier_preference: modulespecifiers::ImportModuleSpecifierPreference::NonRelative, quote_preference: lsutil::QuotePreference::Single, ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2187,8 +1858,7 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_preservePathEnding_test.go:10
 pub fn test_get_edits_for_file_rename_preserve_path_ending(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @allowJs: true
+    let content: &str = r#"// @allowJs: true
 // @checkJs: true
 // @strict: true
 // @jsx: preserve
@@ -2205,21 +1875,15 @@ import { x as x1 } from "./index";
 import { x as x2 } from "./index.js";
 import { y } from "./jsx.jsx";
 import { j } from "./j.jonah.json";"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_errors(t);
-            f.verify_will_rename_files_edits(t, "/a.js", "/b.js", go::map_of([]), None);
-            f.verify_will_rename_files_edits(t, "/b.js", "/src/b.js", go::map_of([("/src/b.js".to_string(), r#"import { x as x0 } from "..";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_no_errors(t);
+        f.verify_will_rename_files_edits(t, "/a.js", "/b.js", go::map_of([]), None);
+        f.verify_will_rename_files_edits(t, "/b.js", "/src/b.js", go::map_of([("/src/b.js".to_string(), r#"import { x as x0 } from "..";
 import { x as x1 } from "../index";
 import { x as x2 } from "../index.js";
 import { y } from "../jsx.jsx";
 import { j } from "../j.jonah.json";"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2230,8 +1894,7 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_renameFromIndex_test.go:10
 pub fn test_get_edits_for_file_rename_rename_from_index(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /a.ts
+    let content: &str = r#"// @Filename: /a.ts
 /// <reference path="./src/index.ts" />
 import old from "./src";
 import old2 from "./src/index";
@@ -2247,21 +1910,15 @@ import old2 from "../index";
 
 // @Filename: /tsconfig.json
 { "files": ["a.ts", "src/a.ts", "src/foo/a.ts", "src/index.ts"] }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/src/index.ts", "/src/new.ts", go::map_of([("/a.ts".to_string(), r#"/// <reference path="./src/new.ts" />
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/src/index.ts", "/src/new.ts", go::map_of([("/a.ts".to_string(), r#"/// <reference path="./src/new.ts" />
 import old from "./src/new";
 import old2 from "./src/new";"#.to_string()), ("/src/a.ts".to_string(), r#"/// <reference path="./new.ts" />
 import old from "./new";
 import old2 from "./new";"#.to_string()), ("/src/foo/a.ts".to_string(), r#"/// <reference path="../new.ts" />
 import old from "../new";
 import old2 from "../new";"#.to_string()), ("/tsconfig.json".to_string(), r#"{ "files": ["a.ts", "src/a.ts", "src/foo/a.ts", "src/new.ts"] }"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2272,8 +1929,7 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_renameToIndex_test.go:10
 pub fn test_get_edits_for_file_rename_rename_to_index(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /a.ts
+    let content: &str = r#"// @Filename: /a.ts
 /// <reference path="./src/old.ts" />
 import old from "./src/old";
 // @Filename: /src/a.ts
@@ -2286,18 +1942,12 @@ import old from "../old";
 
 // @Filename: /tsconfig.json
 { "files": ["a.ts", "src/a.ts", "src/foo/a.ts", "src/old.ts"] }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/src/old.ts", "/src/index.ts", go::map_of([("/a.ts".to_string(), r#"/// <reference path="./src/index.ts" />
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/src/old.ts", "/src/index.ts", go::map_of([("/a.ts".to_string(), r#"/// <reference path="./src/index.ts" />
 import old from "./src";"#.to_string()), ("/src/a.ts".to_string(), r#"/// <reference path="./index.ts" />
 import old from ".";"#.to_string()), ("/src/foo/a.ts".to_string(), r#"/// <reference path="../index.ts" />
 import old from "..";"#.to_string()), ("/tsconfig.json".to_string(), r#"{ "files": ["a.ts", "src/a.ts", "src/foo/a.ts", "src/index.ts"] }"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2308,21 +1958,14 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_resolveJsonModule_test.go:10
 pub fn test_get_edits_for_file_rename_resolve_json_module(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @resolveJsonModule: true
+    let content: &str = r#"// @resolveJsonModule: true
 // @Filename: /a.ts
 import text from "./message.json";
 // @Filename: /message.json
 {}"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/a.ts", "/src/a.ts", go::map_of([("/src/a.ts".to_string(), r#"import text from "../message.json";"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/a.ts", "/src/a.ts", go::map_of([("/src/a.ts".to_string(), r#"import text from "../message.json";"#.to_string())]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2333,20 +1976,13 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_shortenRelativePaths_test.go:10
 pub fn test_get_edits_for_file_rename_shorten_relative_paths(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /src/foo/x.ts
+    let content: &str = r#"// @Filename: /src/foo/x.ts
 
 // @Filename: /src/old.ts
 import { x } from "./foo/x";"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/src/old.ts", "/src/foo/new.ts", go::map_of([("/src/foo/new.ts".to_string(), r#"import { x } from "./x";"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/src/old.ts", "/src/foo/new.ts", go::map_of([("/src/foo/new.ts".to_string(), r#"import { x } from "./x";"#.to_string())]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2357,20 +1993,13 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_subDir_test.go:10
 pub fn test_get_edits_for_file_rename_sub_dir(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /src/foo/a.ts
+    let content: &str = r#"// @Filename: /src/foo/a.ts
 
 // @Filename: /src/old.ts
 import a from "./foo/a";"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/src/old.ts", "/src/dir/new.ts", go::map_of([("/src/dir/new.ts".to_string(), r#"import a from "../foo/a";"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/src/old.ts", "/src/dir/new.ts", go::map_of([("/src/dir/new.ts".to_string(), r#"import a from "../foo/a";"#.to_string())]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2381,22 +2010,15 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_symlink_test.go:10
 pub fn test_get_edits_for_file_rename_symlink(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /foo.ts
+    let content: &str = r"// @Filename: /foo.ts
 // @Symlink: /node_modules/foo/index.ts
 export const x = 0;
 // @Filename: /user.ts
 import { x } from 'foo';";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_no_errors(t);
-            f.verify_will_rename_files_edits(t, "/user.ts", "/luser.ts", go::map_of([]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_no_errors(t);
+        f.verify_will_rename_files_edits(t, "/user.ts", "/luser.ts", go::map_of([]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2407,8 +2029,7 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_tsconfig_test.go:10
 pub fn test_get_edits_for_file_rename_tsconfig(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /src/tsconfig.json
+    let content: &str = r#"// @Filename: /src/tsconfig.json
 {
     "compilerOptions": {
         "baseUrl": "./old",
@@ -2425,10 +2046,8 @@ pub fn test_get_edits_for_file_rename_tsconfig(t: &T) {
 }
 // @Filename: /src/old/someFile.ts
 "#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/src/old", "/src/new", go::map_of([("/src/tsconfig.json".to_string(), r#"{
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/src/old", "/src/new", go::map_of([("/src/tsconfig.json".to_string(), r#"{
     "compilerOptions": {
         "baseUrl": "new",
         "paths": {
@@ -2442,11 +2061,7 @@ pub fn test_get_edits_for_file_rename_tsconfig(t: &T) {
     "include": ["new/*.ts"],
     "exclude": ["new"],
 }"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2457,20 +2072,13 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_tsconfig_empty_include_test.go:10
 pub fn test_get_edits_for_file_rename_tsconfig_empty_include(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /a/foo.ts
+    let content: &str = r#"// @Filename: /a/foo.ts
 const x = 1
 // @Filename: /a/tsconfig.json
 { "include": [] }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/a/foo.ts", "/a/bar.ts", go::map_of([]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/a/foo.ts", "/a/bar.ts", go::map_of([]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2481,24 +2089,17 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_tsconfig_include_add_test.go:10
 pub fn test_get_edits_for_file_rename_tsconfig_include_add(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /src/tsconfig.json
+    let content: &str = r#"// @Filename: /src/tsconfig.json
 {
     "include": ["dir"],
 }
 // @Filename: /src/dir/a.ts
 "#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/src/dir/a.ts", "/src/newDir/b.ts", go::map_of([("/src/tsconfig.json".to_string(), r#"{
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/src/dir/a.ts", "/src/newDir/b.ts", go::map_of([("/src/tsconfig.json".to_string(), r#"{
     "include": ["dir", "newDir/b.ts"],
 }"#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2509,22 +2110,15 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_tsconfig_include_noChange_test.go:10
 pub fn test_get_edits_for_file_rename_tsconfig_include_no_change(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /src/tsconfig.json
+    let content: &str = r#"// @Filename: /src/tsconfig.json
 {
     "include": ["dir"],
 }
 // @Filename: /src/dir/a.ts
 "#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/src/dir/a.ts", "/src/dir/b.ts", go::map_of([]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/src/dir/a.ts", "/src/dir/b.ts", go::map_of([]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2535,22 +2129,15 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_unaffectedNonRelativePath_test.go:10
 pub fn test_get_edits_for_file_rename_unaffected_non_relative_path(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /sub/a.ts
+    let content: &str = r#"// @Filename: /sub/a.ts
 export const a = 1;
 // @Filename: /sub/b.ts
 import { a } from "sub/a";
 // @Filename: /tsconfig.json
 {"compilerOptions":{"paths":{"*":["*"]}}}"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/sub/b.ts", "/sub/c/d.ts", go::map_of([]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/sub/b.ts", "/sub/c/d.ts", go::map_of([]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2561,8 +2148,7 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_unresolvableImport_test.go:10
 pub fn test_get_edits_for_file_rename_unresolvable_import(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /tsconfig.json
+    let content: &str = r#"// @Filename: /tsconfig.json
 {
   "compilerOptions": {
     "allowJs": true,
@@ -2579,15 +2165,9 @@ pub fn test_get_edits_for_file_rename_unresolvable_import(t: &T) {
 import "@local/some-other-import";
 // @Filename: /modules/@local/index.js
 import "@local/some-other-import";"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/modules/@app/something", "/modules/@app/something-2", go::map_of([]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/modules/@app/something", "/modules/@app/something-2", go::map_of([]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2598,17 +2178,10 @@ use crate::tests::prelude::*;
 // getEditsForFileRename_unresolvableNodeModule_test.go:10
 pub fn test_get_edits_for_file_rename_unresolvable_node_module(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = "// @allowJs: true\n// @checkJs: true\n// @Filename: /modules/@app/something/index.js\nimport \"doesnt-exist\";\n// @Filename: /modules/@local/foo.js\nimport \"doesnt-exist\"; ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/modules/@app/something", "/modules/@app/something-2", go::map_of([]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    let content: &str = "// @allowJs: true\n// @checkJs: true\n// @Filename: /modules/@app/something/index.js\nimport \"doesnt-exist\";\n// @Filename: /modules/@local/foo.js\nimport \"doesnt-exist\"; ";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/modules/@app/something", "/modules/@app/something-2", go::map_of([]), None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2619,8 +2192,7 @@ use crate::tests::prelude::*;
 // getEditsForFileRenameWithSolutionConfigFile_test.go:12
 pub fn test_get_edits_for_file_rename_with_solution_config_file(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"
+    let content: &str = r#"
 // @Filename: /tsconfig.json
 {
   "files": [],
@@ -2643,24 +2215,17 @@ b;
 
 // @Filename: /src/b.ts
 export const b = 0;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_will_rename_files_edits(t, "/src/b.ts", "/src/c.ts", go::map_of([("/src/a.ts".to_string(), r#"import { b } from "./c";
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_will_rename_files_edits(t, "/src/b.ts", "/src/c.ts", go::map_of([("/src/a.ts".to_string(), r#"import { b } from "./c";
 b;
 "#.to_string())]), None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 // getEditsForFileRenameWithSolutionConfigFile_test.go:52
 pub fn test_get_edits_for_file_rename_loads_unopened_composite_project(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"
+    let content: &str = r#"
 // @stateBaseline: true
 // @Filename: /tsconfig.json
 {
@@ -2700,29 +2265,23 @@ helper;
 // @Filename: /app/main.ts
 import { helper } from "../lib/helper";
 helper;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "helper");
-            let result = f.will_rename_files(t, &[lsproto::FileRename { old_uri: lsconv::file_name_to_document_uri("/lib/helper.ts"), new_uri: lsconv::file_name_to_document_uri("/lib/renamed-helper.ts") }]);
-            if result.workspace_edit.is_none() || result.workspace_edit.as_ref().unwrap().document_changes.is_none() {
-                t.fatal("workspace/willRenameFiles returned no document changes");
-            }
-            for change in result.workspace_edit.as_ref().unwrap().document_changes.as_ref().unwrap().clone() {
-                if let Some(__present3) = change.text_document_edit.as_ref() && __present3.text_document.uri.file_name().as_str() == "/app/main.ts" {
-                    for edit in __present3.edits.clone() {
-                        if let Some(__present4) = edit.text_edit.as_ref() && __present4.new_text.as_str() == "../lib/renamed-helper" {
-                            return;
-                        }
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "helper");
+        let result = f.will_rename_files(t, &[lsproto::FileRename { old_uri: lsconv::file_name_to_document_uri("/lib/helper.ts"), new_uri: lsconv::file_name_to_document_uri("/lib/renamed-helper.ts") }]);
+        if result.workspace_edit.is_none() || result.workspace_edit.as_ref().unwrap().document_changes.is_none() {
+            t.fatal("workspace/willRenameFiles returned no document changes");
+        }
+        for change in result.workspace_edit.as_ref().unwrap().document_changes.as_ref().unwrap().clone() {
+            if let Some(__present1) = change.text_document_edit.as_ref() && __present1.text_document.uri.file_name().as_str() == "/app/main.ts" {
+                for edit in __present1.edits.clone() {
+                    if let Some(__present2) = edit.text_edit.as_ref() && __present2.new_text.as_str() == "../lib/renamed-helper" {
+                        return;
                     }
                 }
             }
-            t.fatal("workspace/willRenameFiles returned no import update for /app/main.ts");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+        }
+        t.fatal("workspace/willRenameFiles returned no import update for /app/main.ts");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2733,21 +2292,14 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions1_test.go:12
 pub fn test_get_java_script_completions1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 /** @type {number} */
 var v;
 v./**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2758,22 +2310,15 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions10_test.go:12
 pub fn test_get_java_script_completions10(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 /**
  * @type {function(this:number)}
  */
 function f() { this./**/ }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2784,21 +2329,14 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions11_test.go:12
 pub fn test_get_java_script_completions11(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 /** @type {number|string} */
 var v;
 v./**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "charCodeAt".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "charCodeAt".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2809,8 +2347,7 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions12_test.go:13
 pub fn test_get_java_script_completions12(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @allowNonTsExtensions: true
+    let content: &str = r#"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 /**
  * @param {number} input
@@ -2832,17 +2369,11 @@ convert(1, "")./*3*/
  * @param {number} x
  */
 var test1 = function(x) { return x./*4*/ }, test2 = function(a) { return a./*5*/ };"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "charCodeAt".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::StringSlice(vec!["2".to_string(), "3".to_string(), "4".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("5".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "test1".to_string(), kind: Some(lsproto::CompletionItemKind::Text), sort_text: Some("18".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "charCodeAt".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::StringSlice(vec!["2".to_string(), "3".to_string(), "4".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("5".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "test1".to_string(), kind: Some(lsproto::CompletionItemKind::Text), sort_text: Some("18".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2853,8 +2384,7 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions13_test.go:13
 pub fn test_get_java_script_completions13(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: file1.js
 var file1Identifier = 1;
 interface Foo { FooProp: number };
@@ -2863,16 +2393,10 @@ var file2Identifier1 = 2;
 var file2Identifier2 = 2;
 /*1*/
 file2Identifier2./*2*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("file2Identifier1".to_string()), Any::String("file2Identifier2".to_string()), Any::CompletionItem(lsproto::CompletionItem { label: "file1Identifier".to_string(), sort_text: Some("15".to_string()), ..Default::default() })], excludes: vec!["FooProp".to_string()], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "file2Identifier1".to_string(), sort_text: Some("18".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "file2Identifier2".to_string(), sort_text: Some("18".to_string()), ..Default::default() })], excludes: vec!["file1Identifier".to_string(), "FooProp".to_string()], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("file2Identifier1".to_string()), Any::String("file2Identifier2".to_string()), Any::CompletionItem(lsproto::CompletionItem { label: "file1Identifier".to_string(), sort_text: Some("15".to_string()), ..Default::default() })], excludes: vec!["FooProp".to_string()], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "file2Identifier1".to_string(), sort_text: Some("18".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "file2Identifier2".to_string(), sort_text: Some("18".to_string()), ..Default::default() })], excludes: vec!["file1Identifier".to_string(), "FooProp".to_string()], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2883,23 +2407,16 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions14_test.go:12
 pub fn test_get_java_script_completions14(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: file1.js
 interface Number {
     toExponential(fractionDigits?: number): string;
 }
 var x = 1;
 x./*1*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2910,8 +2427,7 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions15_test.go:13
 pub fn test_get_java_script_completions15(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @allowNonTsExtensions: true
+    let content: &str = r#"// @allowNonTsExtensions: true
 // @Filename: refFile1.ts
 export var V = 1;
 // @Filename: refFile2.ts
@@ -2926,18 +2442,12 @@ ref2.V./*2*/;
 var v = { x: require("./refFile3") };
 v.x./*3*/;
 v.x.V./*4*/;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("toExponential".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("toLowerCase".to_string())], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("V".to_string()), Any::CompletionItem(lsproto::CompletionItem { label: "ref1".to_string(), sort_text: Some("18".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "ref2".to_string(), sort_text: Some("18".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "require".to_string(), sort_text: Some("18".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "v".to_string(), sort_text: Some("18".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), sort_text: Some("18".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String("4".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("toLowerCase".to_string())], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("toExponential".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("toLowerCase".to_string())], ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("V".to_string()), Any::CompletionItem(lsproto::CompletionItem { label: "ref1".to_string(), sort_text: Some("18".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "ref2".to_string(), sort_text: Some("18".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "require".to_string(), sort_text: Some("18".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "v".to_string(), sort_text: Some("18".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), sort_text: Some("18".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
+        f.verify_completions(t, Any::String("4".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("toLowerCase".to_string())], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2948,8 +2458,7 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions16_test.go:12
 pub fn test_get_java_script_completions16(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @allowNonTsExtensions: true
+    let content: &str = r#"// @allowNonTsExtensions: true
 // @Filename: file.js
 "use strict";
 
@@ -2970,23 +2479,17 @@ class Something {
     }
 }
 let x = new Something(/*sig*/);"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "body");
-            f.insert(t, ".");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toFixed".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.backspace(t, 1);
-            f.go_to_marker(t, "sig");
-            f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "Something(a: number, b: any): Something".to_string(), ..Default::default() });
-            f.go_to_marker(t, "method");
-            f.insert(t, ".");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toFixed".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "body");
+        f.insert(t, ".");
+        f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toFixed".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.backspace(t, 1);
+        f.go_to_marker(t, "sig");
+        f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "Something(a: number, b: any): Something".to_string(), ..Default::default() });
+        f.go_to_marker(t, "method");
+        f.insert(t, ".");
+        f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toFixed".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -2997,8 +2500,7 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions18_test.go:12
 pub fn test_get_java_script_completions18(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: file.js
 /**
   * @param {number} a
@@ -3008,20 +2510,14 @@ exports.foo = function(a, b) {
 	a/*a*/;
 	b/*b*/
 };";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "a");
-            f.insert(t, ".");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toFixed".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "b");
-            f.insert(t, ".");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "substring".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "a");
+        f.insert(t, ".");
+        f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toFixed".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "b");
+        f.insert(t, ".");
+        f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "substring".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3032,8 +2528,7 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions19_test.go:12
 pub fn test_get_java_script_completions19(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: file.js
 function fn() {
 	if (foo) {
@@ -3048,20 +2543,14 @@ if(typeof x === 'string') {
 } else {
 	x/*num*/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "str");
-            f.insert(t, ".");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "substring".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.go_to_marker(t, "num");
-            f.insert(t, ".");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toFixed".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "str");
+        f.insert(t, ".");
+        f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "substring".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.go_to_marker(t, "num");
+        f.insert(t, ".");
+        f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toFixed".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3072,21 +2561,14 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions2_test.go:12
 pub fn test_get_java_script_completions2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 /** @type {(number|string)} */
 var v;
 v./**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "valueOf".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "valueOf".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3097,8 +2579,7 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions20_test.go:13
 pub fn test_get_java_script_completions20(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: file.js
 /**
@@ -3115,15 +2596,9 @@ function Person(name, age) {
 
 Person.getName = 10;
 Person.getNa/**/ = 10;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_function_members_with_prototype_plus(&[Any::String("getName".to_string()), Any::String("getNa".to_string()), Any::CompletionItem(lsproto::CompletionItem { label: "Person".to_string(), sort_text: Some("18".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "name".to_string(), sort_text: Some("18".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "age".to_string(), sort_text: Some("18".to_string()), ..Default::default() })])), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_function_members_with_prototype_plus(&[Any::String("getName".to_string()), Any::String("getNa".to_string()), Any::CompletionItem(lsproto::CompletionItem { label: "Person".to_string(), sort_text: Some("18".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "name".to_string(), sort_text: Some("18".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "age".to_string(), sort_text: Some("18".to_string()), ..Default::default() })])), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3134,23 +2609,16 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions21_test.go:12
 pub fn test_get_java_script_completions21(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: file.js
 class Prv {
     #privatething = 1;
     notSoPrivate = 1;
 }
 new Prv()['[|/**/|]'];";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "notSoPrivate".to_string(), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: "notSoPrivate".to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "notSoPrivate".to_string(), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: "notSoPrivate".to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3161,22 +2629,15 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions22_test.go:10
 pub fn test_get_java_script_completions22(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: file.js
 const abc = {};
 ({./*1*/});";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, ".");
-            f.verify_completions(t, Any::Nil, None);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert(t, ".");
+        f.verify_completions(t, Any::Nil, None);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3187,21 +2648,14 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions3_test.go:12
 pub fn test_get_java_script_completions3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 /** @type {Array.<number>} */
 var v;
 v./**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "concat".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "concat".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3212,21 +2666,14 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions4_test.go:12
 pub fn test_get_java_script_completions4(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 /** @return {number} */
 function foo(a,b) { }
 foo(1,2)./**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3237,8 +2684,7 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions5_test.go:12
 pub fn test_get_java_script_completions5(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 /**
  * @template T
@@ -3247,15 +2693,9 @@ pub fn test_get_java_script_completions5(t: &T) {
 function foo(a) { }
 let x = foo;
 foo(1)./**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3266,23 +2706,16 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions8_test.go:12
 pub fn test_get_java_script_completions8(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 /**
  * @type {function(): number}
  */
 var v;
 v()./**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3293,23 +2726,16 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions9_test.go:12
 pub fn test_get_java_script_completions9(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 /**
  * @type {function(new:number)}
  */
 var v;
 new v()./**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toExponential".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3320,23 +2746,16 @@ use crate::tests::prelude::*;
 // getJavaScriptCompletions_tsCheck_test.go:11
 pub fn test_get_java_script_completions_ts_check(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: /a.js
 // @ts-check
 interface I { a: number; b: number; }
 interface J { b: number; c: number; }
 declare const ij: I | J;
 ij./**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("b".to_string())]), ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("b".to_string())]), ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3347,8 +2766,7 @@ use crate::tests::prelude::*;
 // getJavaScriptGlobalCompletions1_test.go:13
 pub fn test_get_java_script_global_completions1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 function f() {
     // helloWorld leaks from here into the global space?
@@ -3359,15 +2777,9 @@ function f() {
 }
 
 hello/**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "helloWorld".to_string(), sort_text: Some("18".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "helloWorld".to_string(), sort_text: Some("18".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3378,20 +2790,13 @@ use crate::tests::prelude::*;
 // getJavaScriptQuickInfo1_test.go:10
 pub fn test_get_java_script_quick_info1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 /** @type {function(new:string,number)} */
 var /**/v;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "", "var v: new (arg1: number) => string", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "", "var v: new (arg1: number) => string", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3402,20 +2807,13 @@ use crate::tests::prelude::*;
 // getJavaScriptQuickInfo2_test.go:10
 pub fn test_get_java_script_quick_info2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 /** @param {number} [a] */
 function /**/f(a) { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "", "function f(a?: number): void", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "", "function f(a?: number): void", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3426,20 +2824,13 @@ use crate::tests::prelude::*;
 // getJavaScriptQuickInfo3_test.go:10
 pub fn test_get_java_script_quick_info3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 /** @param {number[]} [a] */
 function /**/f(a) { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "", "function f(a?: number[]): void", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "", "function f(a?: number[]): void", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3450,20 +2841,13 @@ use crate::tests::prelude::*;
 // getJavaScriptQuickInfo4_test.go:10
 pub fn test_get_java_script_quick_info4(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 /** @param {[number,string]} [a] */
 function /**/f(a) { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "", "function f(a?: [number, string]): void", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "", "function f(a?: [number, string]): void", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3474,22 +2858,15 @@ use crate::tests::prelude::*;
 // getJavaScriptQuickInfo5_test.go:10
 pub fn test_get_java_script_quick_info5(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 /** @param {{b:number}} [a] */
 function /**/f(a) { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "", r"function f(a?: {
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "", r"function f(a?: {
     b: number;
 }): void", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3500,20 +2877,13 @@ use crate::tests::prelude::*;
 // getJavaScriptQuickInfo6_test.go:10
 pub fn test_get_java_script_quick_info6(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 /** @type {function(this:number)} */
 function f() { /**/this }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "", "number", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "", "number", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3524,8 +2894,7 @@ use crate::tests::prelude::*;
 // getJavaScriptQuickInfo7_test.go:10
 pub fn test_get_java_script_quick_info7(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: file.js
 /**
  * This is a very cool function that is very nice.
@@ -3540,15 +2909,9 @@ function a1(p) {
 }
 
 x - /**/a1()";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "", "function a1(p: any): number", "This is a very cool function that is very nice.");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "", "function a1(p: any): number", "This is a very cool function that is very nice.");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3559,8 +2922,7 @@ use crate::tests::prelude::*;
 // getJavaScriptQuickInfo8_test.go:12
 pub fn test_get_java_script_quick_info8(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowNonTsExtensions: true
+    let content: &str = r"// @allowNonTsExtensions: true
 // @Filename: file.js
 let x = {
 	/** @type {number} */
@@ -3578,21 +2940,15 @@ class Foo {
 }
 var y = new Foo();
 y.b/*2*/;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.go_to_marker(t, "1");
-            f.insert(t, ".");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toFixed".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.backspace(t, 1);
-            f.go_to_marker(t, "2");
-            f.insert(t, ".");
-            f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "substring".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.go_to_marker(t, "1");
+        f.insert(t, ".");
+        f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "toFixed".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
+        f.backspace(t, 1);
+        f.go_to_marker(t, "2");
+        f.insert(t, ".");
+        f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "substring".to_string(), kind: Some(lsproto::CompletionItemKind::Method), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3603,21 +2959,14 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics01_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics01(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+    let content: &str = r"// @lib: es5
 // @allowJs: true
 // @Filename: a.js
 var ===;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3628,24 +2977,17 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics02_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics02(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"// @lib: es5
+    let content: &str = r#"// @lib: es5
 // @allowJs: true
 // @Filename: b.js
 var a = "a";
 var b: boolean = true;
 function foo(): string { }
 var var = "c";"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.mark_test_as_strada_server();
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.mark_test_as_strada_server();
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3656,19 +2998,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics1_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 import a = b;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3679,19 +3014,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics10_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics10(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 function F<T>() { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3702,19 +3030,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics11_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics11(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 function F(): number { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3725,19 +3046,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics12_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics12(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 declare var v;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3748,19 +3062,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics13_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics13(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 var v: () => number;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3771,19 +3078,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics14_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics14(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 Foo<number>();";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3794,19 +3094,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics15_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics15(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 function F(public p) { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3817,19 +3110,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics16_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics16(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 function F(p?) { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3840,19 +3126,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics17_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics17(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 function F(a: number) { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3863,8 +3142,7 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics18_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics18(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 class C {
     x; // Regular property declaration allowed
@@ -3875,15 +3153,9 @@ class C {
 class C {
     x: number; // Types not allowed
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3894,19 +3166,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics19_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics19(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 enum E { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3917,19 +3182,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics2_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 export = b;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3940,20 +3198,13 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics21_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics21(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @experimentalDecorators: true
 // @Filename: a.js
 @internal class C {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_non_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_non_suggestion_diagnostics(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3964,19 +3215,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics22_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics22(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 function foo(...a) {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_non_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_non_suggestion_diagnostics(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -3987,8 +3231,7 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics23_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics23(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 function Person(age) {
     if (age >= 18) {
@@ -3997,16 +3240,10 @@ function Person(age) {
         this.canVote = false;
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_non_suggestion_diagnostics(t, &[]);
-            f.verify_non_suggestion_diagnostics(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_non_suggestion_diagnostics(t, &[]);
+        f.verify_non_suggestion_diagnostics(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4017,8 +3254,7 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics24_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics24(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 function Person(age) {
     if (age >= 18) {
@@ -4029,15 +3265,9 @@ function Person(age) {
 }
 let x = new Person(100);
 x.canVote/**/;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_quick_info_at(t, "", "(property) Person.canVote: number | boolean", "");
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_quick_info_at(t, "", "(property) Person.canVote: number | boolean", "");
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4048,19 +3278,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics3_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 class C<T> { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4071,19 +3294,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics4_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics4(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 public class C { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4094,19 +3310,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics5_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics5(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 class C implements D { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4117,19 +3326,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics6_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics6(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 interface I { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4140,19 +3342,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics7_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics7(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 namespace M { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4163,19 +3358,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics8_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics8(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 type a = b;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4186,19 +3374,12 @@ use crate::tests::prelude::*;
 // getJavaScriptSyntacticDiagnostics9_test.go:10
 pub fn test_get_java_script_syntactic_diagnostics9(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+    let content: &str = r"// @allowJs: true
 // @Filename: a.js
 public function F() { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_non_suggestion_diagnostics(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_non_suggestion_diagnostics(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4209,8 +3390,7 @@ use crate::tests::prelude::*;
 // getJSXOutliningSpans_test.go:10
 pub fn test_get_jsx_outlining_spans(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"import React, { Component } from 'react';
+    let content: &str = r#"import React, { Component } from 'react';
 
 export class Home extends Component[| {
   render()[| {
@@ -4244,15 +3424,9 @@ export class Home extends Component[| {
     )|];
   }|]
 }|]"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_outlining_spans(t, &[]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_outlining_spans(t, &[]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4263,20 +3437,13 @@ use crate::tests::prelude::*;
 // getNavigationBarItems_test.go:10
 pub fn test_get_navigation_bar_items(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r#"class C {
+    let content: &str = r#"class C {
     foo;
     ["bar"]: string;
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_symbol(t);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_symbol(t);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4287,8 +3454,7 @@ use crate::tests::prelude::*;
 // getOccurrencesAbstract01_test.go:11
 pub fn test_get_occurrences_abstract01(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"[|abstract|] class Animal {
+    let content: &str = r"[|abstract|] class Animal {
     [|abstract|] prop1; // Does not compile
     [|abstract|] abstract();
     [|abstract|] walk(): void;
@@ -4299,15 +3465,9 @@ abstract class Foo {
     abstract foo(): void;
     abstract bar(): void;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4318,8 +3478,7 @@ use crate::tests::prelude::*;
 // getOccurrencesAbstract02_test.go:11
 pub fn test_get_occurrences_abstract02(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// Not valid TS (abstract methods can only appear in abstract classes)
+    let content: &str = r"// Not valid TS (abstract methods can only appear in abstract classes)
 class Animal {
     [|abstract|] walk(): void;
     [|abstract|] makeSound(): void;
@@ -4329,16 +3488,10 @@ let c = /*1*/abstract class Foo {
     /*2*/abstract foo(): void;
     abstract bar(): void;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &[Any::String("1".to_string()), Any::String("2".to_string())]);
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &[Any::String("1".to_string()), Any::String("2".to_string())]);
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4349,8 +3502,7 @@ use crate::tests::prelude::*;
 // getOccurrencesAbstract03_test.go:11
 pub fn test_get_occurrences_abstract03(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"function f() {
+    let content: &str = r"function f() {
     [|abstract|] class A {
         [|abstract|] m(): void;
     }
@@ -4362,15 +3514,9 @@ switch (0) {
     default:
         [|abstract|] class B { [|abstract|] m(): void; }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4381,27 +3527,20 @@ use crate::tests::prelude::*;
 // getOccurrencesAfterEdit_test.go:10
 pub fn test_get_occurrences_after_edit(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"/*0*/
+    let content: &str = r"/*0*/
 interface A {
     foo: string;
 }
 function foo(x: A) {
     x.f/*1*/oo
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &[Any::String("1".to_string())]);
-            f.go_to_marker(t, "0");
-            f.insert(t, r"
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &[Any::String("1".to_string())]);
+        f.go_to_marker(t, "0");
+        f.insert(t, r"
 ");
-            f.verify_baseline_document_highlights(t, None, &[Any::String("1".to_string())]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+        f.verify_baseline_document_highlights(t, None, &[Any::String("1".to_string())]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4412,8 +3551,7 @@ use crate::tests::prelude::*;
 // getOccurrencesAsyncAwait_test.go:11
 pub fn test_get_occurrences_async_await(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"[|async|] function f() {
+    let content: &str = r"[|async|] function f() {
  [|await|] 100;
  [|a/**/wait|] [|await|] 200;
 class Foo {
@@ -4431,15 +3569,9 @@ async function g() {
         await 400;
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4450,23 +3582,16 @@ use crate::tests::prelude::*;
 // getOccurrencesAsyncAwait2_test.go:11
 pub fn test_get_occurrences_async_await2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"[|a/**/sync|] function f() {
+    let content: &str = r"[|a/**/sync|] function f() {
  [|await|] 100;
  [|await|] [|await|] 200;
  return [|await|] async function () {
    await 300;
  }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4477,20 +3602,13 @@ use crate::tests::prelude::*;
 // getOccurrencesAsyncAwait3_test.go:10
 pub fn test_get_occurrences_async_await3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"a/**/wait 100;
+    let content: &str = r"a/**/wait 100;
 async function f() {
     await 300;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &[Any::String(String::new())]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &[Any::String(String::new())]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4501,8 +3619,7 @@ use crate::tests::prelude::*;
 // getOccurrencesClassExpressionConstructor_test.go:11
 pub fn test_get_occurrences_class_expression_constructor(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"let A = class Foo {
+    let content: &str = r"let A = class Foo {
     [|constructor|]();
     [|constructor|](x: number);
     [|constructor|](y: string);
@@ -4514,15 +3631,9 @@ let B = class D {
     constructor(x: number) {
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4533,8 +3644,7 @@ use crate::tests::prelude::*;
 // getOccurrencesClassExpressionPrivate_test.go:11
 pub fn test_get_occurrences_class_expression_private(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"let A = class Foo {
+    let content: &str = r"let A = class Foo {
     [|private|] foo;
     [|private|] private;
     constructor([|private|] y: string, public x: string) {
@@ -4550,15 +3660,9 @@ let B = class D {
     private test() {}
     public test2() {}
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4569,8 +3673,7 @@ use crate::tests::prelude::*;
 // getOccurrencesClassExpressionPublic_test.go:11
 pub fn test_get_occurrences_class_expression_public(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"let A = class Foo {
+    let content: &str = r"let A = class Foo {
     [|public|] foo;
     [|public|] public;
     constructor([|public|] y: string, private x: string) {
@@ -4586,15 +3689,9 @@ let B = class D {
     private test() {}
     public test2() {}
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4605,8 +3702,7 @@ use crate::tests::prelude::*;
 // getOccurrencesClassExpressionStatic_test.go:11
 pub fn test_get_occurrences_class_expression_static(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"let A = class Foo {
+    let content: &str = r"let A = class Foo {
     public [|static|] foo;
     [|static|] a;
     constructor(public y: string, private x: string) {
@@ -4624,15 +3720,9 @@ let B = class D {
     private static test() {}
     public static test2() {}
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4643,8 +3733,7 @@ use crate::tests::prelude::*;
 // getOccurrencesClassExpressionStaticThis_test.go:11
 pub fn test_get_occurrences_class_expression_static_this(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"var x = class C {
+    let content: &str = r"var x = class C {
     public x;
     public y;
     public z;
@@ -4689,15 +3778,9 @@ pub fn test_get_occurrences_class_expression_static_this(t: &T) {
         }
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4708,8 +3791,7 @@ use crate::tests::prelude::*;
 // getOccurrencesClassExpressionThis_test.go:11
 pub fn test_get_occurrences_class_expression_this(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"var x = class C {
+    let content: &str = r"var x = class C {
     public x;
     public y;
     public z;
@@ -4752,15 +3834,9 @@ pub fn test_get_occurrences_class_expression_this(t: &T) {
         }
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4771,23 +3847,16 @@ use crate::tests::prelude::*;
 // getOccurrencesConst01_test.go:11
 pub fn test_get_occurrences_const01(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"[|const|] enum E1 {
+    let content: &str = r"[|const|] enum E1 {
     v1,
     v2
 }
 
 /*2*/const c = 0;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-            f.verify_baseline_document_highlights(t, None, &[Any::String("2".to_string())]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
+        f.verify_baseline_document_highlights(t, None, &[Any::String("2".to_string())]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4798,8 +3867,7 @@ use crate::tests::prelude::*;
 // getOccurrencesConst02_test.go:11
 pub fn test_get_occurrences_const02(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace m {
+    let content: &str = r"namespace m {
     declare /*1*/const x;
     declare [|const|] enum E {
     }
@@ -4808,16 +3876,10 @@ pub fn test_get_occurrences_const02(t: &T) {
 declare /*2*/const x;
 declare [|const|] enum E {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.markers()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.markers()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4828,8 +3890,7 @@ use crate::tests::prelude::*;
 // getOccurrencesConst03_test.go:11
 pub fn test_get_occurrences_const03(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace m {
+    let content: &str = r"namespace m {
     export /*1*/const x;
     export [|const|] enum E {
     }
@@ -4838,16 +3899,10 @@ pub fn test_get_occurrences_const03(t: &T) {
 export /*2*/const x;
 export [|const|] enum E {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.markers()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.markers()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4858,21 +3913,14 @@ use crate::tests::prelude::*;
 // getOccurrencesConst04_test.go:10
 pub fn test_get_occurrences_const04(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"export const class C {
+    let content: &str = r"export const class C {
     private static c/*1*/onst f/*2*/oo;
     constructor(public con/*3*/st foo) {
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &[Any::String("1".to_string()), Any::String("2".to_string()), Any::String("3".to_string())]);
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &[Any::String("1".to_string()), Any::String("2".to_string()), Any::String("3".to_string())]);
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4883,8 +3931,7 @@ use crate::tests::prelude::*;
 // getOccurrencesConstructor_test.go:11
 pub fn test_get_occurrences_constructor(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class C {
+    let content: &str = r"class C {
     [|const/**/ructor|]();
     [|constructor|](x: number);
     [|constructor|](y: string, x: number);
@@ -4901,15 +3948,9 @@ class D {
     constructor(public x: number, public y: number) {
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4920,8 +3961,7 @@ use crate::tests::prelude::*;
 // getOccurrencesConstructor2_test.go:11
 pub fn test_get_occurrences_constructor2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"class C {
+    let content: &str = r"class C {
     constructor();
     constructor(x: number);
     constructor(y: string, x: number);
@@ -4938,15 +3978,9 @@ class D {
     [|con/**/structor|](public x: number, public y: number) {
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -4957,8 +3991,7 @@ use crate::tests::prelude::*;
 // getOccurrencesDeclare1_test.go:11
 pub fn test_get_occurrences_declare1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace m {
+    let content: &str = r"namespace m {
     export class C1 {
         public pub1;
         public pub2;
@@ -5010,15 +4043,9 @@ pub fn test_get_occurrences_declare1(t: &T) {
     export var exportedThing = 10;
     [|declare|] function foo(): string;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5029,8 +4056,7 @@ use crate::tests::prelude::*;
 // getOccurrencesDeclare2_test.go:11
 pub fn test_get_occurrences_declare2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace m {
+    let content: &str = r"namespace m {
     export class C1 {
         public pub1;
         public pub2;
@@ -5083,15 +4109,9 @@ pub fn test_get_occurrences_declare2(t: &T) {
     export var exportedThing = 10;
     declare function foo(): string;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5102,8 +4122,7 @@ use crate::tests::prelude::*;
 // getOccurrencesDeclare3_test.go:11
 pub fn test_get_occurrences_declare3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"
+    let content: &str = r"
 [|declare|] var x;
 export [|declare|] var y, z;
 
@@ -5163,15 +4182,9 @@ namespace m {
 [|declare|] export var v1, v2;
 [|declare|] namespace dm { }
 export class EC { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5182,8 +4195,7 @@ use crate::tests::prelude::*;
 // getOccurrencesExport1_test.go:11
 pub fn test_get_occurrences_export1(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace m {
+    let content: &str = r"namespace m {
     [|export|] class C1 {
         public pub1;
         public pub2;
@@ -5235,15 +4247,9 @@ pub fn test_get_occurrences_export1(t: &T) {
     [|export|] var exportedThing = 10;
     declare function foo(): string;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5254,8 +4260,7 @@ use crate::tests::prelude::*;
 // getOccurrencesExport2_test.go:11
 pub fn test_get_occurrences_export2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"namespace m {
+    let content: &str = r"namespace m {
     export class C1 {
         public pub1;
         public pub2;
@@ -5308,15 +4313,9 @@ pub fn test_get_occurrences_export2(t: &T) {
     export var exportedThing = 10;
     declare function foo(): string;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5327,8 +4326,7 @@ use crate::tests::prelude::*;
 // getOccurrencesExport3_test.go:11
 pub fn test_get_occurrences_export3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"
+    let content: &str = r"
 declare var x;
 [|export|] declare var y, z;
 
@@ -5388,15 +4386,9 @@ namespace m {
 declare [|export|] var v1, v2;
 declare namespace dm { }
 [|export|] class EC { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5407,8 +4399,7 @@ use crate::tests::prelude::*;
 // getOccurrencesIfElse_test.go:11
 pub fn test_get_occurrences_if_else(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"[|if|] (true) {
+    let content: &str = r"[|if|] (true) {
     if (false) {
     }
     else {
@@ -5429,15 +4420,9 @@ pub fn test_get_occurrences_if_else(t: &T) {
 [|if|] (false) {
 }
 [|else|] { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5448,8 +4433,7 @@ use crate::tests::prelude::*;
 // getOccurrencesIfElse2_test.go:11
 pub fn test_get_occurrences_if_else2(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"if (true) {
+    let content: &str = r"if (true) {
     [|if|] (false) {
     }
     [|else|]{
@@ -5470,15 +4454,9 @@ else
 if (false) {
 }
 else { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5489,8 +4467,7 @@ use crate::tests::prelude::*;
 // getOccurrencesIfElse3_test.go:11
 pub fn test_get_occurrences_if_else3(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"if (true) {
+    let content: &str = r"if (true) {
     if (false) {
     }
     else {
@@ -5511,15 +4488,9 @@ else
 if (false) {
 }
 else { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.ranges()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
@@ -5530,8 +4501,7 @@ use crate::tests::prelude::*;
 // getOccurrencesIfElse4_test.go:11
 pub fn test_get_occurrences_if_else4(t: &T) {
     t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"if (true) {
+    let content: &str = r"if (true) {
     if (false) {
     }
     else {
@@ -5552,15 +4522,9 @@ else
 if (false) {
 }
 else { }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_baseline_document_highlights(t, None, &util::to_any(&f.markers()[..]));
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
+    fourslash::run_generated_test(t, content, |f, t| {
+        f.verify_baseline_document_highlights(t, None, &util::to_any(&f.markers()[..]));
     });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
 }
 
 }
