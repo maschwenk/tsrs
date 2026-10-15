@@ -14,6 +14,10 @@ tsrs_core.workspace = true
 rustc-hash.workspace = true
 rayon.workspace = true
 bitflags.workspace = true
+lz4_flex = { version = "0.14.0", default-features = false, features = ["std", "safe-encode", "safe-decode", "checked-decode"] }
+
+[build-dependencies]
+lz4 = "1.28.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 rustix = { version = "1.1.4", features = ["fs"] }

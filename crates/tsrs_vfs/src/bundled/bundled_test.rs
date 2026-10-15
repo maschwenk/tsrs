@@ -36,6 +36,9 @@ fn test_embedded_contents_match_source() {
         let contents = fs.read_file(&path).unwrap();
         let expected = os.read_file(&format!("{}/{}", testing_lib_path(), name)).unwrap();
         assert_eq!(contents, expected, "{name}");
+        let shared = embedded_file(&path).unwrap();
+        assert_eq!(shared, expected, "{name}");
+        assert!(std::ptr::eq(shared, embedded_file(&path).unwrap()), "{name}");
         let stat = fs.stat(&path).unwrap();
         assert_eq!(stat.name(), *name);
         assert_eq!(stat.size(), contents.len() as i64);

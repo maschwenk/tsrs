@@ -52,7 +52,7 @@ impl host {
     // changed is compared by text.
     fn get_watch_source_file(&self, cache: &Mutex<FxHashMap<SourceFileParseOptions, (P<SourceFile>, Option<std::time::SystemTime>)>>, opts: SourceFileParseOptions) -> Option<P<SourceFile>> {
         let cached = cache.lock().unwrap().get(&opts).copied();
-        // A bundled lib is text in the binary.
+        // Bundled library contents never change.
         if let Some((file, _)) = cached
             && tsrs_vfs::bundled::embedded_file(&opts.file_name).is_some()
         {
