@@ -833,6 +833,18 @@ impl checkerPool {
         split_ctx: Option<&Context>,
         cb: impl Fn(&mut Checker, usize, P<SourceFile>) + Sync,
     ) {
+        self.for_each_checker_group_do_inner(files, single_threaded, allow_steal, split_ctx, &cb);
+    }
+
+    // Share the scheduling body across callbacks; dispatch happens once per file, outside the checker walk.
+    fn for_each_checker_group_do_inner(
+        &self,
+        files: &[P<SourceFile>],
+        single_threaded: bool,
+        allow_steal: bool,
+        split_ctx: Option<&Context>,
+        cb: &(dyn Fn(&mut Checker, usize, P<SourceFile>) + Sync),
+    ) {
         let state = self.create_checkers();
         let stats = assignment_stats_enabled();
         let n = state.checkers.len();
