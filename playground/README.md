@@ -65,6 +65,43 @@ Chromium executable. The browser checks use the production build; integration ch
 file bytes against native tsrs. The Vite build rejects a bundled JavaScript TypeScript compiler or language-service worker.
 It also verifies the vendored website's visual source against the pinned upstream SHA-256 manifest.
 
+Set `PLAYWRIGHT_BASE_URL=https://tsrs-playground.void.app` to run the same browser checks against the hosted site
+without starting a local preview server. Hosted checks allow longer timeouts for network loading.
+
+## Deployment
+
+[The playground](https://tsrs-playground.void.app) is a static site on Void Cloud. The
+[Playground workflow](../.github/workflows/void-deploy.yml) validates pull requests and pushes to `main`, including
+the native/WASM comparison and production browser checks. Only pushes to `maschwenk/tsrs`'s `main` deploy. There
+is no manual trigger or preview deployment. Production deployments are serialized and superseded commits are skipped.
+
+The deploy job uploads the exact validated build artifact using Void CLI 0.28.0, then runs the browser checks
+against the hosted URL. GitHub OIDC grants a short-lived project-scoped token; no `VOID_TOKEN` secret is needed.
+The platform URL and project slug are public workflow configuration. Dependencies and the compiler are built in
+the validation job, which has no deployment permission.
+
+For the initial setup, build and verify the site as above, then run these commands from the repository root:
+
+```sh
+vp dlx void@0.28.0 connect https://api.void.cloud
+vp dlx void@0.28.0 deploy --platform void --project tsrs-playground --dir playground/dist
+vp dlx void@0.28.0 github install
+vp dlx void@0.28.0 github connect tsrs-playground \
+  --repo maschwenk/tsrs --branch main --executor github_actions \
+  --workflow .github/workflows/void-deploy.yml
+vp dlx void@0.28.0 github status tsrs-playground
+```
+
+The first deployment creates the project (with confirmation in an interactive terminal). GitHub App installation
+needs repository access; use `github join` for an existing shared installation, or ask the repository owner to install
+it. The OIDC connection must authorize exactly the repository, branch, and workflow above before the workflow lands. Local
+connection state under `.void/` is ignored by git; fresh CI runners connect with `--no-login` before deployment.
+
+Inspect deployments with `vp dlx void@0.28.0 project status tsrs-playground`. To restore a previous deployment,
+run `vp dlx void@0.28.0 project rollback <deployId>` from the linked checkout. A hosted browser-check failure marks
+the workflow failed after publication; inspect the failure and roll back if needed. Fix the underlying problem
+before the next push to `main`, which deploys again automatically.
+
 ## Upstream and licensing
 
 See [vendoring provenance](vendor/UPSTREAM.md) for the pinned source, copied paths, licenses, and adaptations.

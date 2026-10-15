@@ -11,6 +11,7 @@ bench/results/
 .env.*
 .npmrc
 node_modules/
+.void/
 npm/tsrs/dist/
 npm/tsrs/tsconfig.tsbuildinfo
 npm/tsrs-wasm/tsrs.wasm

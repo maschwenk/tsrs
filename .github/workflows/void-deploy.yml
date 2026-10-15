@@ -1,0 +1,144 @@
+name: Playground
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: playground-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  VOID_API_URL: https://api.void.cloud
+  VOID_PROJECT: tsrs-playground
+  VOID_VERSION: 0.28.0
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: voidzero-dev/setup-vp@6a60d12bdb8382f7ce636a9a846dc61e69855b2b
+        with:
+          version-file: playground/package.json
+          node-version-file: .node-version
+          cache: true
+          run-install: |
+            args: ['--frozen-lockfile']
+
+      - name: Read Rust version
+        id: rust
+        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ steps.rust.outputs.toolchain }}
+          targets: wasm32-wasip1
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: playground
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install Binaryen 133
+        run: |
+          curl -sSLf -o "$RUNNER_TEMP/binaryen.tgz" https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
+          echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  $RUNNER_TEMP/binaryen.tgz" | sha256sum -c -
+          tar xzf "$RUNNER_TEMP/binaryen.tgz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/binaryen-version_133/bin" >> "$GITHUB_PATH"
+
+      - name: Build native reference and WASM
+        run: |
+          cargo build --profile dev --locked -p tsrs_cli -p tsrs_testrunner
+          tools/wasm/build.sh
+
+      - name: Check and build playground
+        working-directory: playground
+        run: |
+          vp run prepare-assets
+          vp check
+          vp test run
+          vp build
+
+      - name: Verify production build in Chromium
+        working-directory: playground
+        run: |
+          vp exec playwright install --with-deps chromium
+          vp run test:browser
+
+      - name: Save validated site
+        if: github.event_name == 'push' && github.repository == 'maschwenk/tsrs'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playground-${{ github.sha }}
+          path: playground/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'maschwenk/tsrs'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: playground-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: voidzero-dev/setup-vp@6a60d12bdb8382f7ce636a9a846dc61e69855b2b
+        with:
+          version-file: playground/package.json
+          node-version-file: .node-version
+          cache: true
+          run-install: |
+            args: ['--frozen-lockfile']
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: playground-${{ github.sha }}
+          path: playground/dist/
+
+      # This runs inside the production lock, so a slow older build cannot replace a newer deployment.
+      - name: Check that this commit is still main
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          if [ "$latest" = "$GITHUB_SHA" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Skipping superseded commit $GITHUB_SHA (main is $latest)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Deploy to Void using OIDC
+        if: steps.current.outputs.deploy == 'true'
+        run: |
+          vp dlx "void@$VOID_VERSION" connect "$VOID_API_URL" --no-login
+          vp dlx "void@$VOID_VERSION" deploy --platform void --project "$VOID_PROJECT" --dir playground/dist
+
+      - name: Verify hosted playground
+        if: steps.current.outputs.deploy == 'true'
+        working-directory: playground
+        env:
+          PLAYWRIGHT_BASE_URL: https://tsrs-playground.void.app
+        run: |
+          vp exec playwright install --with-deps chromium
+          vp run test:browser
+          echo "Playground: $PLAYWRIGHT_BASE_URL (commit $GITHUB_SHA)" >> "$GITHUB_STEP_SUMMARY"

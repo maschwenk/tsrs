@@ -16,6 +16,7 @@ test("the static build loads beneath a directory, including worker and WASM asse
   await expect(page.locator(".playground-plugin-container")).toContainText(
     "export const value = 1",
   );
+  await context.unrouteAll({ behavior: "wait" });
 });
 
 test("dragging resizes the sidebar and the editor remains usable", async ({ page }) => {

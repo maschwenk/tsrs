@@ -14,6 +14,7 @@ pnpm exec tsrs --noEmit
 ```
 
 You can try `tsrs` today and give us feedback on performance, memory usage, and conformance.
+Try checking and emitting code in the [browser playground](https://tsrs-playground.void.app).
 
 ## Conformance
 
