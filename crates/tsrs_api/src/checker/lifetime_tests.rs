@@ -283,7 +283,10 @@ fn released_snapshot_checker_memory_is_poisoned() {
     let (flags, before) = {
         let sd = session.snapshot_data(snap as u64).unwrap();
         let ty = sd.checker_state.registry.resolve_type(&project, id as u32, None).unwrap();
-        (ty.flags.as_ptr().cast::<u32>(), ty.flags.get().bits())
+        // SAFETY: ty retains the checker until these metadata reads finish. The pointer is only
+        // read again in poison mode, which keeps the freed storage mapped for this assertion.
+        let raw = unsafe { ty.as_raw() };
+        (raw.flags.as_ptr().cast::<u32>(), raw.flags.get().bits())
     };
     let poison_word = u32::from_ne_bytes([0xA5; 4]);
     assert_ne!(before, poison_word, "live type memory is not poison");

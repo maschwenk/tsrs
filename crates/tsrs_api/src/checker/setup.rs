@@ -13,6 +13,7 @@ use tsrs_project::ID;
 use super::host::{CheckerError, CheckerHost, CheckerResult, SnapshotScope};
 use super::json::Obj;
 use super::params::{DocumentIdentifier, SymbolReference, SYMBOL_OWNER_KIND_FILE, SYMBOL_OWNER_KIND_SNAPSHOT};
+use super::registry::{ResultOwner, SignatureHandle, TypeHandle};
 use super::symbol_index::source_file_symbol;
 
 /// A snapshot + project without a checker (Go `getSnapshotData` + `params.Project`), used by the property
@@ -43,39 +44,19 @@ impl<'h> SnapshotCtx<'h> {
         build_symbol_response(self.host, symbol, reference.build())
     }
 
-    /// Go `snapshotData.newSignatureResponse(projectID, sig)` for a signature produced by `checker_id`.
-    pub(crate) fn signature_response(&self, checker_id: u32, sig: P<Signature>) -> CheckerResult<Value> {
-        let id = self.scope.registry.register_signature(&self.project, checker_id, sig)?;
-        let mut o = Obj::new();
-        o.num("id", id as f64);
-        o.num("flags", sig.flags().bits() as f64);
-        if let Some(decl) = sig.declaration() {
-            o.str_nonempty("declaration", &self.host.node_handle(decl)?);
-        }
-        o.ids("typeParameters", sig.type_parameters().iter().map(|t| t.id().0 as f64));
-        if !sig.parameters().is_empty() {
-            o.set("parameters", Value::Array(sig.parameters().iter().map(|p| compact_symbol_reference(self.host, *p)).collect::<CheckerResult<_>>()?));
-        }
-        if let Some(this) = sig.this_parameter() {
-            o.set("thisParameter", compact_symbol_reference(self.host, this)?);
-        }
-        if let Some(target) = sig.target() {
-            o.nonzero("target", target.id().0 as f64);
-        }
-        Ok(o.build())
+    /// A signature target keeps the identity of the checker that originally produced it.
+    pub(crate) fn signature_response(&self, sig: &SignatureHandle) -> CheckerResult<Value> {
+        let id = self.scope.registry.register_signature_target(&self.project, sig)?;
+        // SAFETY: sig retains its pinned checker region throughout response construction.
+        build_signature_response(self.host, unsafe { sig.as_raw() }, id)
     }
 
-    pub(crate) fn resolve_type(&self, id: u32, checker_id: Option<u32>) -> CheckerResult<P<Type>> {
+    pub(crate) fn resolve_type(&self, id: u32, checker_id: Option<u32>) -> CheckerResult<TypeHandle> {
         self.scope.registry.resolve_type(&self.project, id, checker_id)
     }
 
-    pub(crate) fn resolve_signature(&self, id: u64, checker_id: Option<u32>) -> CheckerResult<P<Signature>> {
+    pub(crate) fn resolve_signature(&self, id: u64, checker_id: Option<u32>) -> CheckerResult<SignatureHandle> {
         self.scope.registry.resolve_signature(&self.project, id, checker_id)
-    }
-
-    /// The API checker that produced the project's registered handles (for responses built without one).
-    pub(crate) fn registered_checker_id(&self) -> u32 {
-        self.scope.registry.project_checker_id(&self.project)
     }
 
     pub(crate) fn program(&self) -> CheckerResult<ProgramLease> {
@@ -108,8 +89,10 @@ impl<'h> SetupOwner<'h> {
         let lease = super::lease::acquire(&self.program)?;
         let ctx = with_checker_lifetime(&self.sd.host.context(), CheckerLifetime::API);
         let checker = self.program.get_type_checker(&ctx);
-        let checker_id = checker.id;
-        Ok(Setup { checker, _lease: lease, checker_id, program: &self.program, sd: &self.sd })
+        // SAFETY: API acquisition pins this checker's region until this program owner is destroyed,
+        // including when cancellation replaces the persistent checker.
+        let results = unsafe { ResultOwner::new(&self.program, checker.id) };
+        Ok(Setup { checker, _lease: lease, results, program: &self.program, sd: &self.sd })
     }
 }
 
@@ -118,7 +101,7 @@ pub(crate) struct Setup<'h> {
     pub(crate) checker: CheckerHandle<'h>,
     // Dropped after `checker`: the gate is released only once the checker slot is free again.
     _lease: super::lease::ApiCheckerLease,
-    pub(crate) checker_id: u32,
+    results: ResultOwner,
     pub(crate) program: &'h ProgramLease,
     pub(crate) sd: &'h SnapshotCtx<'h>,
 }
@@ -141,11 +124,18 @@ impl Setup<'_> {
     }
 
     pub(crate) fn signature_response(&self, sig: P<Signature>) -> CheckerResult<Value> {
-        self.sd.signature_response(self.checker_id, sig)
+        let id = self.register_signature(sig)?;
+        build_signature_response(self.sd.host, sig, id)
+    }
+
+    pub(crate) fn register_signature(&self, sig: P<Signature>) -> CheckerResult<u64> {
+        // SAFETY: request handlers pass results of this setup's exclusively held persistent checker.
+        unsafe { self.sd.scope.registry.register_signature(&self.sd.project, &self.results, sig) }
     }
 
     fn register_type(&self, t: P<Type>) -> CheckerResult<u32> {
-        self.sd.scope.registry.register_type(&self.sd.project, self.checker_id, t)
+        // SAFETY: request handlers pass results of this setup's exclusively held persistent checker.
+        unsafe { self.sd.scope.registry.register_type(&self.sd.project, &self.results, t) }
     }
 
     fn register_opt_type(&self, t: Option<P<Type>>) -> CheckerResult<u32> {
@@ -220,11 +210,18 @@ impl Setup<'_> {
     }
 
     pub(crate) fn resolve_type(&self, id: u32) -> CheckerResult<P<Type>> {
-        self.sd.resolve_type(id, Some(self.checker_id))
+        let result = self.sd.resolve_type(id, Some(self.results.checker_id))?;
+        assert!(result.belongs_to(&self.results), "type belongs to a different program");
+        // SAFETY: results retains the same program and pinned checker for the whole request. Legacy
+        // raw pointers stay inside the handler; registry responses retain an owner before escaping.
+        Ok(unsafe { result.as_raw() })
     }
 
     pub(crate) fn resolve_signature(&self, id: u64) -> CheckerResult<P<Signature>> {
-        self.sd.resolve_signature(id, Some(self.checker_id))
+        let result = self.sd.resolve_signature(id, Some(self.results.checker_id))?;
+        assert!(result.belongs_to(&self.results), "signature belongs to a different program");
+        // SAFETY: results retains the originating checker, which this setup holds exclusively.
+        Ok(unsafe { result.as_raw() })
     }
 
     /// Go `checkerSetup.resolveSymbolHandle`.
@@ -472,4 +469,25 @@ pub(crate) fn resolve_symbol_for_program(sd: &SnapshotCtx, program: &ProgramLeas
 // in bits 30 and 31 (tsrs_checker types.rs). proto.go:1261 sends `uint32(t.ObjectFlags())`, which never has them.
 fn go_object_flags(t: P<Type>) -> ObjectFlags {
     t.object_flags() - ObjectFlags::WeakTypeMemo
+}
+
+/// Go `snapshotData.newSignatureResponse(projectID, sig)`, with registration handled by the caller.
+fn build_signature_response(host: &dyn CheckerHost, sig: P<Signature>, id: u64) -> CheckerResult<Value> {
+    let mut o = Obj::new();
+    o.num("id", id as f64);
+    o.num("flags", sig.flags().bits() as f64);
+    if let Some(decl) = sig.declaration() {
+        o.str_nonempty("declaration", &host.node_handle(decl)?);
+    }
+    o.ids("typeParameters", sig.type_parameters().iter().map(|t| t.id().0 as f64));
+    if !sig.parameters().is_empty() {
+        o.set("parameters", Value::Array(sig.parameters().iter().map(|p| compact_symbol_reference(host, *p)).collect::<CheckerResult<_>>()?));
+    }
+    if let Some(this) = sig.this_parameter() {
+        o.set("thisParameter", compact_symbol_reference(host, this)?);
+    }
+    if let Some(target) = sig.target() {
+        o.nonzero("target", target.id().0 as f64);
+    }
+    Ok(o.build())
 }

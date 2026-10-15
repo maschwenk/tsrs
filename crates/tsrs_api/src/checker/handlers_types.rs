@@ -208,7 +208,9 @@ pub(crate) enum TypeSymbolProperty {
 /// Go `resolveSymbolPropertyOfType` (no checker).
 pub(crate) fn resolve_type_symbol_property(host: &dyn CheckerHost, p: &Params, property: TypeSymbolProperty) -> CheckerResult<Value> {
     let sd = SnapshotCtx::new(host, p.u64("snapshot")?, p.project()?)?;
-    let t = sd.resolve_type(p.u32("objectId")?, None)?;
+    let handle = sd.resolve_type(p.u32("objectId")?, None)?;
+    // SAFETY: handle retains its pinned checker region until the response has been built.
+    let t = unsafe { handle.as_raw() };
     let result = match property {
         TypeSymbolProperty::Symbol => t.symbol(),
         TypeSymbolProperty::AliasSymbol => t.alias().and_then(|a| a.symbol()),
@@ -494,7 +496,9 @@ pub(crate) enum SignatureProperty {
 
 pub(crate) fn signature_property(host: &dyn CheckerHost, p: &Params, property: SignatureProperty) -> CheckerResult<Value> {
     let sd = SnapshotCtx::new(host, p.u64("snapshot")?, p.project()?)?;
-    let sig = sd.resolve_signature(p.u64("objectId")?, None)?;
+    let result = sd.resolve_signature(p.u64("objectId")?, None)?;
+    // SAFETY: result retains its pinned checker region until the response has been built.
+    let sig = unsafe { result.as_raw() };
     match property {
         SignatureProperty::Parameters => {
             let params = sig.parameters();
@@ -507,8 +511,8 @@ pub(crate) fn signature_property(host: &dyn CheckerHost, p: &Params, property: S
             Some(sym) => sd.symbol_response(sym, &sd.project),
             None => Ok(Value::Null),
         },
-        SignatureProperty::Target => match sig.target() {
-            Some(target) => sd.signature_response(sd.registered_checker_id(), target),
+        SignatureProperty::Target => match result.target() {
+            Some(target) => sd.signature_response(&target),
             None => Ok(Value::Null),
         },
     }
@@ -630,7 +634,7 @@ pub(crate) fn get_well_known_signatures(host: &dyn CheckerHost, p: &Params) -> C
     let owner = setup(host, p)?;
     let mut s = owner.acquire()?;
     let unknown = s.c().get_unknown_signature();
-    let id = s.sd.scope.registry.register_signature(&s.sd.project, s.checker_id, unknown)?;
+    let id = s.register_signature(unknown)?;
     let mut o = obj();
     o.num("unknown", id as f64);
     Ok(o.build())

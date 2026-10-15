@@ -610,6 +610,106 @@ fn replaced_api_checker_makes_old_handles_stale() {
 }
 
 #[test]
+fn registered_results_retain_owner_after_snapshot_release() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    for last_type in [false, true] {
+        for unwind in [false, true] {
+            let h = fixture();
+            let response = h.type_at(MAIN_FILE, MAIN, "box:");
+            let type_id = num(&response, "id") as u32;
+            let ty = h.registry.resolve_type(&h.project, type_id, None).unwrap();
+            let call = h.ancestor_handle_at("make(1)", 1);
+            let response = h.ok("getResolvedSignature", &h.sp(&format!(r#""location":"{call}""#)));
+            let sig = h.registry.resolve_signature(&h.project, num(&response, "id"), None).unwrap();
+            let target = sig.target().expect("instantiated signature has a target");
+            let target_id = target.id();
+            let freed = Arc::new(AtomicBool::new(false));
+            let notify = Arc::clone(&freed);
+            // SAFETY: ty retains the checker while its region is located; the callback owns no region.
+            tsrs_core::arena::Region::containing(unsafe { ty.as_raw() }.addr()).unwrap().on_free(Box::new(move || {
+                notify.store(true, Ordering::SeqCst);
+            }));
+            let clone = ty.clone();
+            drop(ty);
+            drop(sig);
+            h.registry.release();
+            assert!(h.registry.resolve_type(&h.project, type_id, None).is_err());
+            assert!(h.registry.resolve_signature(&h.project, target_id, None).is_err());
+            assert!(h.registry.register_signature_target(&h.project, &target).unwrap_err().message.contains("released"));
+            drop(h);
+            assert!(!freed.load(Ordering::SeqCst), "resolved results retain the checker after snapshot destruction");
+            assert_eq!(clone.id(), type_id);
+            assert_eq!(target.id(), target_id);
+            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let ty = clone;
+                let sig = target;
+                if last_type {
+                    drop(sig);
+                    assert!(!freed.load(Ordering::SeqCst), "the type clone is the last owner");
+                    assert_eq!(ty.id(), type_id);
+                    assert!(!unwind, "release the last type during unwinding");
+                    drop(ty);
+                } else {
+                    drop(ty);
+                    assert!(!freed.load(Ordering::SeqCst), "the signature target is the last owner");
+                    assert_eq!(sig.id(), target_id);
+                    assert!(!unwind, "release the last signature during unwinding");
+                    drop(sig);
+                }
+            }));
+            assert_eq!(outcome.is_err(), unwind);
+            assert!(freed.load(Ordering::SeqCst), "the last result releases the checker region");
+        }
+    }
+}
+
+#[test]
+fn replaced_checker_cannot_adopt_an_old_signature_target() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let h = fixture();
+    let response = h.type_at(MAIN_FILE, MAIN, "box:");
+    let ty = h.registry.resolve_type(&h.project, num(&response, "id") as u32, None).unwrap();
+    let call = h.ancestor_handle_at("make(1)", 1);
+    let response = h.ok("getResolvedSignature", &h.sp(&format!(r#""location":"{call}""#)));
+    let sig = h.registry.resolve_signature(&h.project, num(&response, "id"), None).unwrap();
+    let target = sig.target().unwrap();
+    let old_id = h.registry.project_checker_id(&h.project);
+    let type_id = ty.id();
+    let signature_id = sig.id();
+    let freed = Arc::new(AtomicBool::new(false));
+    let notify = Arc::clone(&freed);
+    // SAFETY: ty retains the checker while its region is located; the callback owns no region.
+    tsrs_core::arena::Region::containing(unsafe { ty.as_raw() }.addr()).unwrap().on_free(Box::new(move || {
+        notify.store(true, Ordering::SeqCst);
+    }));
+    {
+        let owner = super::setup::SetupOwner::new(&h, h.handle, &h.project).unwrap();
+        // Exercise the pool's cancellation disposal path; the next acquisition creates a new checker.
+        owner.acquire().unwrap().checker.was_canceled = true;
+    }
+    h.ok("getNumberType", &h.sp(""));
+    let new_id = h.registry.project_checker_id(&h.project);
+    assert_ne!(new_id, old_id);
+    assert!(h.registry.resolve_type(&h.project, type_id, Some(old_id)).unwrap_err().message.contains("stale"));
+    assert!(h.registry.resolve_signature(&h.project, signature_id, Some(old_id)).unwrap_err().message.contains("stale"));
+    let err = h.registry.register_signature_target(&h.project, &target).unwrap_err();
+    assert!(err.message.contains("stale"), "{err}");
+    assert_eq!(h.registry.project_checker_id(&h.project), new_id, "an old target cannot reset the registry generation");
+    drop(h);
+    assert!(!freed.load(Ordering::SeqCst), "old results retain the canceled checker's region");
+    assert_eq!(ty.id(), type_id, "a resolved old type survives replacement and snapshot destruction");
+    assert_eq!(sig.id(), signature_id, "a resolved old signature survives replacement and snapshot destruction");
+    assert_eq!(sig.target().unwrap().id(), target.id());
+    drop(ty);
+    drop(sig);
+    assert!(!freed.load(Ordering::SeqCst), "the old target is the last owner");
+    drop(target);
+    assert!(freed.load(Ordering::SeqCst), "the last result also frees a parked checker");
+}
+
+#[test]
 fn unowned_methods_fall_through() {
     let h = fixture();
     let params = json::unmarshal(&h.sp("")).unwrap();

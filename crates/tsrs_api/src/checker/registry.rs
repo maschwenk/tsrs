@@ -7,9 +7,9 @@
 // handle produced by the old checker becomes a stale-handle client error instead of silently resolving
 // against a different checker.
 //
-// Raw pointers in here are only valid while the owning snapshot is retained. `release()` runs when the
-// snapshot's `SnapshotData` is dropped (`CheckerSnapshotState::drop`, right after `SnapshotData::drop` derefs the
-// project snapshot); no request can reach the registry by then, and after release every lookup fails.
+// Each project's type/signature maps retain their program owner. Resolved handles retain it separately,
+// so releasing the snapshot or replacing the checker cannot invalidate an already resolved result.
+// Symbols still use snapshot/request ownership. After release every new lookup fails.
 
 use std::collections::hash_map::Entry;
 use std::sync::Mutex;
@@ -21,9 +21,12 @@ use tsrs_core::P;
 
 use super::host::{CheckerError, CheckerResult};
 
-#[derive(Default)]
+mod results;
+pub use results::{SignatureHandle, TypeHandle};
+pub(super) use results::ResultOwner;
+
 struct ProjectRegistry {
-    checker_id: u32,
+    owner: ResultOwner,
     types: FxHashMap<u32, P<Type>>,
     signatures: FxHashMap<u64, P<Signature>>,
 }
@@ -57,9 +60,11 @@ impl CheckerRegistry {
         st.released = true;
         st.symbols = FxHashMap::default();
         st.symbol_projects = FxHashMap::default();
-        st.projects = FxHashMap::default();
+        let projects = std::mem::take(&mut st.projects);
         let retained = std::mem::take(&mut st.retained);
         drop(st);
+        // Last leases may destroy checker pools and regions; do that outside the registry lock.
+        drop(projects);
         for snapshot in retained {
             snapshot.deref();
         }
@@ -121,22 +126,27 @@ impl CheckerRegistry {
         st.symbols.get(&id).copied().ok_or_else(|| CheckerError::client(format!("symbol handle {id} not found in snapshot registry")))
     }
 
-    fn project_for_checker<'a>(st: &'a mut RegistryState, project: &str, checker_id: u32) -> &'a mut ProjectRegistry {
-        let reg = st.projects.entry(project.to_string()).or_default();
-        if reg.checker_id != checker_id {
+    fn project_for_checker<'a>(st: &'a mut RegistryState, project: &str, owner: &ResultOwner) -> &'a mut ProjectRegistry {
+        let reg = st.projects.entry(project.to_string()).or_insert_with(|| ProjectRegistry {
+            owner: owner.clone(), types: FxHashMap::default(), signatures: FxHashMap::default(),
+        });
+        if !reg.owner.matches(owner) {
             // The project's API checker changed: handles from the previous checker are stale.
-            *reg = ProjectRegistry { checker_id, ..Default::default() };
+            *reg = ProjectRegistry { owner: owner.clone(), types: FxHashMap::default(), signatures: FxHashMap::default() };
         }
         reg
     }
 
-    /// Go `registerType`. `checker_id` is the id of the API checker that produced `t`.
-    pub fn register_type(&self, project: &str, checker_id: u32, t: P<Type>) -> CheckerResult<u32> {
+    /// Go `registerType`.
+    ///
+    /// # Safety
+    /// `t` and its reachable graph must belong to the persistent API checker retained by `owner`.
+    pub(super) unsafe fn register_type(&self, project: &str, owner: &ResultOwner, t: P<Type>) -> CheckerResult<u32> {
         assert!(!project.is_empty(), "registerType: empty project ID");
         let id = t.id().0;
         let mut st = self.lock();
         Self::check_live(&st)?;
-        let reg = Self::project_for_checker(&mut st, project, checker_id);
+        let reg = Self::project_for_checker(&mut st, project, owner);
         match reg.types.entry(id) {
             Entry::Occupied(entry) => assert!(*entry.get() == t, "duplicate type"),
             Entry::Vacant(entry) => {
@@ -147,7 +157,7 @@ impl CheckerRegistry {
     }
 
     /// Go `resolveTypeHandle`. With `checker_id = Some(id)` the handle must come from that checker.
-    pub fn resolve_type(&self, project: &str, id: u32, checker_id: Option<u32>) -> CheckerResult<P<Type>> {
+    pub fn resolve_type(&self, project: &str, id: u32, checker_id: Option<u32>) -> CheckerResult<TypeHandle> {
         if id == 0 {
             return Err(CheckerError::client("empty type handle"));
         }
@@ -159,19 +169,23 @@ impl CheckerRegistry {
         let Some(reg) = st.projects.get(project) else {
             return Err(CheckerError::client(format!("type handle {id} not found (no registry for project {project})")));
         };
-        if checker_id.is_some_and(|c| c != reg.checker_id) {
+        if checker_id.is_some_and(|c| c != reg.owner.checker_id) {
             return Err(CheckerError::client(format!("type handle {id} is stale (the project's API checker was replaced)")));
         }
-        reg.types.get(&id).copied().ok_or_else(|| CheckerError::client(format!("type handle {id} not found in project registry")))
+        reg.types.get(&id).map(|&value| TypeHandle { value, owner: reg.owner.clone() })
+            .ok_or_else(|| CheckerError::client(format!("type handle {id} not found in project registry")))
     }
 
     /// Go `registerSignature`.
-    pub fn register_signature(&self, project: &str, checker_id: u32, sig: P<Signature>) -> CheckerResult<u64> {
+    ///
+    /// # Safety
+    /// `sig` and its reachable graph must belong to the persistent API checker retained by `owner`.
+    pub(super) unsafe fn register_signature(&self, project: &str, owner: &ResultOwner, sig: P<Signature>) -> CheckerResult<u64> {
         assert!(!project.is_empty(), "registerSignature: empty project ID");
         let id = sig.id().0 as u64;
         let mut st = self.lock();
         Self::check_live(&st)?;
-        let reg = Self::project_for_checker(&mut st, project, checker_id);
+        let reg = Self::project_for_checker(&mut st, project, owner);
         match reg.signatures.entry(id) {
             Entry::Occupied(entry) => assert!(*entry.get() == sig, "duplicate signature"),
             Entry::Vacant(entry) => {
@@ -182,7 +196,7 @@ impl CheckerRegistry {
     }
 
     /// Go `resolveSignatureHandle`.
-    pub fn resolve_signature(&self, project: &str, id: u64, checker_id: Option<u32>) -> CheckerResult<P<Signature>> {
+    pub fn resolve_signature(&self, project: &str, id: u64, checker_id: Option<u32>) -> CheckerResult<SignatureHandle> {
         if id == 0 {
             return Err(CheckerError::client("empty signature handle"));
         }
@@ -194,14 +208,30 @@ impl CheckerRegistry {
         let Some(reg) = st.projects.get(project) else {
             return Err(CheckerError::client(format!("signature handle {id} not found (no registry for project {project})")));
         };
-        if checker_id.is_some_and(|c| c != reg.checker_id) {
+        if checker_id.is_some_and(|c| c != reg.owner.checker_id) {
             return Err(CheckerError::client(format!("signature handle {id} is stale (the project's API checker was replaced)")));
         }
-        reg.signatures.get(&id).copied().ok_or_else(|| CheckerError::client(format!("signature handle {id} not found in project registry")))
+        reg.signatures.get(&id).map(|&value| SignatureHandle { value, owner: reg.owner.clone() })
+            .ok_or_else(|| CheckerError::client(format!("signature handle {id} not found in project registry")))
+    }
+
+    /// Register a target reached from a resolved signature without switching the active generation.
+    pub(super) fn register_signature_target(&self, project: &str, sig: &SignatureHandle) -> CheckerResult<u64> {
+        let id = sig.id();
+        let mut st = self.lock();
+        Self::check_live(&st)?;
+        let reg = st.projects.get_mut(project).filter(|reg| reg.owner.matches(&sig.owner))
+            .ok_or_else(|| CheckerError::client(format!("signature handle {id} is stale (the project's API checker was replaced)")))?;
+        match reg.signatures.entry(id) {
+            Entry::Occupied(entry) => assert!(*entry.get() == sig.value, "duplicate signature"),
+            Entry::Vacant(entry) => { entry.insert(sig.value); }
+        }
+        Ok(id)
     }
 
     /// Checker that produced the project's registered types/signatures (0 if none yet).
+    #[cfg(test)]
     pub fn project_checker_id(&self, project: &str) -> u32 {
-        self.lock().projects.get(project).map_or(0, |r| r.checker_id)
+        self.lock().projects.get(project).map_or(0, |r| r.owner.checker_id)
     }
 }

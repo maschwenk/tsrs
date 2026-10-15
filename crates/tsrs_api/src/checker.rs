@@ -42,7 +42,7 @@ use crate::wire::Obj;
 
 /// Per-snapshot checker registries (Go `snapshotData.symbolRegistry` + `projectRegistries`). Core
 /// creates it with `Default` when a snapshot is registered and drops it with the snapshot; dropping
-/// releases every registered pointer.
+/// releases the maps and their owners. Already resolved type/signature handles retain their own leases.
 #[derive(Default)]
 pub struct CheckerSnapshotState {
     pub(crate) registry: Arc<CheckerRegistry>,

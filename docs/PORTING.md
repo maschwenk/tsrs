@@ -84,6 +84,12 @@ programs and file versions ([LSP.md](LSP.md#memory-management)). The rules are:
   leaks or casts. The compiler lease adapter contains the legacy static receiver used by emit and diagnostics;
   its unsafe owner constructor must pair the exact program with the owner that frees it. This protects the
   acquisition, not the `P<T>` results it returns: region ownership and request leases still protect those results.
+- The API type/signature registry retains the program owner of its persistent checker. Resolved results are
+  opaque owning handles; signature targets inherit the same owner and checker identity. Do not add `Deref`
+  to these handles: the legacy graph's accessors return unowned pointers and static references. Raw conversion
+  inside the checker lane is unsafe and requires the handle or a matching owner to cover every use. This
+  relies on API checker regions being pinned until program destruction, including after cancellation; it does
+  not apply to temporary language-service checker results or to the symbol registry.
 - Arena objects remain live until their arena is released, unless an explicit recycling site proves them dead
   (rolled-back parses, dropped flow labels, scratch mappers and inference contexts whose escape
   bit is clear; `tsrs_core::arena`, notes/mem-recycle.md). A struct field that keeps a mapper must be a `MapperCell`.

@@ -31,8 +31,11 @@ if let Some(result) = checker::handle(session, method, &params) { /* map result 
     `signatureToSignatureDeclaration`; the handler returns `CheckerResponse::EncodedNode(bytes)` and the
     transport emits raw binary (msgpack) or `{ "data": base64 }` (JSON-RPC).
 * `CheckerRegistry` (checker/registry.rs) — one per API snapshot handle, stored in core's snapshot data.
-  Core must call `registry.release()` before releasing the snapshot's last API reference. After release
-  every lookup is a client error; no raw pointer outlives its snapshot.
+  Core calls `registry.release()` when its snapshot entry drops. After release every lookup is a client
+  error. Type/signature maps retain a program lease per checker generation; resolving one returns an
+  opaque `TypeHandle` / `SignatureHandle` that retains the owner independently. Already resolved results
+  survive release, and dropping the last result allows the program and checker regions to be freed.
+  Symbols still depend on the existing snapshot/request leases.
 * Errors: `CheckerError { kind: InvalidRequest | Client | Unsupported | Internal, message }` = Go
   `ErrInvalidRequest` / `ErrClientError` / an explicit unsupported error / other errors (mapped to core's
   `ErrorKind` in checker.rs). Handlers do not panic on bad input (wrong JSON types, out-of-range numbers, wrong
@@ -49,6 +52,11 @@ if let Some(result) = checker::handle(session, method, &params) { /* map result 
   API checker that produced them. A replaced API checker (e.g. after cancellation) makes older handles a
   stale-handle error instead of resolving against another checker. Cross-project and cross-snapshot
   handles are rejected.
+  Rust result handles also carry the exact program owner. A signature target inherits its source's
+  checker identity; registering it after the registry switches checkers fails without resetting the
+  active generation. Raw conversions are confined to the checker lane's unsafe adapter, whose caller
+  must retain the result or a matching owner. The underlying checker graph still uses legacy `P<T>`;
+  these handles do not expose `Deref` or the graph's unowned accessors.
 * Positions in requests are UTF-16 offsets, converted with the file's position map before
   `GetTouchingPropertyName`.
 
