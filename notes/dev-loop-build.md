@@ -63,6 +63,18 @@ byte-identical (SHA-256):
 - `fail.txt`: `68a77b3bf208d66221f3aa41cf78cc9e26a302e7d54ce7e1bbf1afee3ce024f8`
 - `skip.txt`: `ccb960a7fa1f53597fcb5de33d680fcfdaad7b9829ae12adbebb247425606b0d`
 
+One upstream fixture constructs a 583,770-byte file containing five long runs of blank lines. Emitting those runs
+literally made one generated Rust shard 589,068 lines. The generator now emits a runtime builder for local constants
+with newline runs of at least 1,024 bytes: the shard is 5,363 lines, and an isolated `tsrs_fourslash` compile fell
+from 5.79 s (4.83 s frontend) to 4.70 s (3.78 s frontend), with the suite hashes above unchanged.
+
+For correctness CI, `lto = false` still ran ThinLTO within every optimized crate. On the same 12-core arm64 host and
+commit, a clean `ci-native` build of `tsrs`, `tsrs-test` and `tsrs-fourslash` took 43.81 s with that setting and
+34.57 s with `lto = "off"`, a 21.1% reduction. Keeping 16 codegen units was faster than raising it to 256 (37.32 s)
+and had less test-runtime cost, so `ci-native` changes only the LTO setting. Warm conformance was 9.52 s against
+9.70 s and fourslash 3.86-3.90 s against 4.01 s; all result lists were identical. With the generated-source change
+above as well, the final clean build took 33.56 s. Release and dist remain unchanged.
+
 ## `cargo test` (the CI "fast crates" list)
 
 | | before | after |

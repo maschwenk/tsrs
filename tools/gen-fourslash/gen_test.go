@@ -133,6 +133,17 @@ func TestRustStringDelimiters(t *testing.T) {
 	}
 }
 
+func TestRustCompressedString(t *testing.T) {
+	if got, ok := rustCompressedString("head\ntail"); ok {
+		t.Fatalf("short newline run compressed as %s", got)
+	}
+	input := "head" + strings.Repeat("\n", 1024) + "tail"
+	want := `{ let mut s = String::with_capacity(1032); s.push_str("head"); for _ in 0..1024 { s.push('\n'); } s.push_str("tail"); s }`
+	if got, ok := rustCompressedString(input); !ok || got != want {
+		t.Fatalf("rustCompressedString() = %s, %v; want %s", got, ok, want)
+	}
+}
+
 func TestLiteralFormattingFixture(t *testing.T) {
 	g, d := checkedGen(t, `func f() { sink([]string{"const value={a:1};", "no braces"}) }`)
 	if !g.literalFormattingFixture(d.Body.List[0]) {

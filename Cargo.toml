@@ -120,7 +120,7 @@ codegen-units = 1
 # LTO, which builds in about a third of the release build's time; these gates compare outputs, which LTO does not change.
 [profile.ci-native]
 inherits = "release"
-lto = false
+lto = "off"
 codegen-units = 16
 
 # Correctness CI does not need to optimize the generated glue. Override both inherited release package settings;

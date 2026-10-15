@@ -95,3 +95,53 @@ func rustStr(s string) (string, bool) {
 	b.WriteByte('"')
 	return b.String(), true
 }
+
+// rustCompressedString renders strings with very long newline runs as a small runtime builder expression. The
+// really-large-file fourslash fixture contains more than half a million blank lines; spelling those lines in Rust
+// source makes rustc lex and index them on every generated-test rebuild without testing anything extra.
+func rustCompressedString(s string) (string, bool) {
+	const minRun = 1024
+	var b strings.Builder
+	start := 0
+	found := false
+	for i := 0; i < len(s); {
+		if s[i] != '\n' {
+			i++
+			continue
+		}
+		end := i + 1
+		for end < len(s) && s[end] == '\n' {
+			end++
+		}
+		if end-i < minRun {
+			i = end
+			continue
+		}
+		if !found {
+			fmt.Fprintf(&b, "{ let mut s = String::with_capacity(%d); ", len(s))
+			found = true
+		}
+		if start < i {
+			lit, ok := rustStr(s[start:i])
+			if !ok {
+				return "", false
+			}
+			fmt.Fprintf(&b, "s.push_str(%s); ", lit)
+		}
+		fmt.Fprintf(&b, "for _ in 0..%d { s.push('\\n'); } ", end-i)
+		start = end
+		i = end
+	}
+	if !found {
+		return "", false
+	}
+	if start < len(s) {
+		lit, ok := rustStr(s[start:])
+		if !ok {
+			return "", false
+		}
+		fmt.Fprintf(&b, "s.push_str(%s); ", lit)
+	}
+	b.WriteString("s }")
+	return b.String(), true
+}

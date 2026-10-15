@@ -133,6 +133,13 @@ func (g *gen) stmt(s ast.Stmt) {
 				for _, n := range vs.Names {
 					obj := g.info.Defs[n].(*types.Const)
 					name := ident(n.Name)
+					if isString(obj.Type()) {
+						if value, ok := rustCompressedString(constant.StringVal(obj.Val())); ok {
+							g.vars[obj] = &varInfo{name: name, kind: kPlace}
+							g.line("let %s: String = %s;", name, value)
+							continue
+						}
+					}
 					k := kOwned
 					if isString(obj.Type()) {
 						k = kStr
