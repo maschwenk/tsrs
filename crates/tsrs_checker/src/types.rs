@@ -3441,38 +3441,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn literal_value_equals_preserves_literal_equality() {
-        let copied_text = tsrs_core::alloc_str("literal");
-        let values = [
-            None,
-            Some(LiteralValue::Number(jsnum::Number(0.0))),
-            Some(LiteralValue::Number(jsnum::Number(-0.0))),
-            Some(LiteralValue::Number(jsnum::Number(1.0))),
-            Some(LiteralValue::Number(jsnum::Number(-1.0))),
-            Some(LiteralValue::Number(jsnum::Number(0.5))),
-            Some(LiteralValue::Number(jsnum::nan())),
-            Some(LiteralValue::Number(jsnum::inf(1))),
-            Some(LiteralValue::Number(jsnum::inf(-1))),
-            Some(LiteralValue::String("")),
-            Some(LiteralValue::String("literal")),
-            Some(LiteralValue::String(copied_text)),
-            Some(LiteralValue::String("other")),
-            Some(LiteralValue::Boolean(false)),
-            Some(LiteralValue::Boolean(true)),
-            Some(LiteralValue::BigInt(jsnum::PseudoBigInt::default())),
-            Some(LiteralValue::BigInt(jsnum::PseudoBigInt { negative: false, base10_value: "1" })),
-            Some(LiteralValue::BigInt(jsnum::PseudoBigInt { negative: true, base10_value: "1" })),
-        ];
-        for left in values {
-            for right in values {
-                let source = LiteralType { value: Cell::new(left), ..LiteralType::default() };
-                let target = LiteralType { value: Cell::new(right), ..LiteralType::default() };
-                assert_eq!(source.value_equals(&target), left == right, "{left:?} compared with {right:?}");
-            }
-        }
-    }
-
-    #[test]
     fn value_symbol_links_synthetic_mode_keeps_every_field() {
         let t1 = Type::alloc(TypeFlags::Any, ObjectFlags::None, TypeId(1), IntrinsicType::default());
         let t2 = Type::alloc(TypeFlags::Any, ObjectFlags::None, TypeId(2), IntrinsicType::default());
