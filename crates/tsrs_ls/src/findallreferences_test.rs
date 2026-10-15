@@ -103,7 +103,7 @@ fn test_implementations_worklist_does_not_blow_up() {
         let source_file = program.get_source_file("/repro.ts").unwrap();
         let line_content = content.clone();
         let converters = lsconv::new_converters(lsproto::PositionEncodingKind::UTF8, move |_| Some(compute_lsp_line_starts(&line_content)));
-        let l = new_language_service(ProjectID("/tsconfig.json".to_string()), program, Arc::new(testHost { fs, converters: std::sync::Arc::clone(&converters) }), "/repro.ts");
+        let l = new_language_service(ProjectID("/tsconfig.json".to_string()), tsrs_compiler::ProgramLease::from_static(program), Arc::new(testHost { fs, converters: std::sync::Arc::clone(&converters) }), "/repro.ts");
 
         // Position of the `m` property in the final `i.m();`.
         let offset = content.rfind("i.m").unwrap() + "i.".len();

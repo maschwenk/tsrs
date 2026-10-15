@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, JSDeclarationKind, Kind, ModifierFlags, Node, NodeFlags, SourceFile};
-use tsrs_compiler::Program;
+use tsrs_compiler::{Program, ProgramLease};
 use tsrs_core::collections::MultiMap;
 use tsrs_core::context::Context;
 use tsrs_core::goslices;
@@ -667,7 +667,7 @@ struct DeclarationInfo {
 #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
 pub fn provide_workspace_symbols(
     ctx: &Context,
-    programs: &[&'static Program],
+    programs: &[ProgramLease],
     converters: &Converters,
     preferences: &UserPreferences,
     query: &str,

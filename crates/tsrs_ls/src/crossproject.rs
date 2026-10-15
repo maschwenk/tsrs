@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use indexmap::map::Entry;
 use rustc_hash::FxHashMap;
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 use tsrs_core::collections::{OrderedMap, Set};
 use tsrs_core::context::Context;
 use tsrs_core::tspath::Path;
@@ -15,7 +15,7 @@ use crate::languageservice::LanguageService;
 // crossproject.go:17
 pub trait Project: Send + Sync {
     fn id(&self) -> String;
-    fn get_program(&self) -> Option<&'static Program>;
+    fn get_program(&self) -> Option<ProgramLease>;
     fn has_file(&self, file_name: &str) -> bool;
 }
 

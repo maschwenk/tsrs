@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, CheckFlags, Kind, ModifierFlags, Node, NodeFactory, NodeFlags, NodeList, SourceFile, Symbol, SymbolFlags, TokenFlags};
 use tsrs_checker::{self as checker, Checker, Flags, IndexInfo, InternalFlags, NodeBuilder, Signature, Type};
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 use tsrs_core::context::Locale;
 use tsrs_core::{alloc_str, P};
 use tsrs_diagnostics as diagnostics;
@@ -26,7 +26,7 @@ bitflags::bitflags! {
 pub(crate) struct missingMemberFixer<'a> {
     change_tracker: &'a change::Tracker,
     type_checker: &'a mut Checker,
-    program: &'static Program,
+    program: &'a ProgramLease,
     preferences: UserPreferences,
     import_adder: Option<&'a mut (dyn ImportAdder + 'static)>,
     #[expect(dead_code, reason = "Go reads it for Method_not_implemented.Localize(f.locale); Message::localize has no locale parameter (English only)")]
@@ -36,7 +36,7 @@ pub(crate) struct missingMemberFixer<'a> {
 // codeactions_missingmemberfixer.go:35
 pub(crate) fn new_missing_member_fixer<'a>(
     change_tracker: &'a change::Tracker,
-    program: &'static Program,
+    program: &'a ProgramLease,
     type_checker: &'a mut Checker,
     preferences: UserPreferences,
     import_adder: Option<&'a mut (dyn ImportAdder + 'static)>,

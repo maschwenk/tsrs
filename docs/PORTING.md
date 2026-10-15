@@ -77,11 +77,13 @@ programs and file versions ([LSP.md](LSP.md#memory-management)). The rules are:
   Rust `static` is an `SP<T>`. Packed words store `p.to_bits()` / `p.key()`, never addresses.
 - Go `*T` that can be nil -> `Option<P<T>>`. Go `*T` that is never nil -> `P<T>`.
   Decide from the Go code (nil checks, `return nil`). When unsure, use `Option`.
-- Arena graph data still uses the legacy `'static` references described above. Acquired checker handles use
-  owner-borrowed lifetimes: `CheckerHandle<'pool>` cannot outlive its pool borrow, and API setup wrappers carry
-  their session or host lifetime. Use lifetime parameters for these ownership boundaries; do not erase them with
-  leaks or casts. This protects the acquisition, not the `P<T>` results it returns: region ownership and request
-  leases still protect those results, and unsafe program destruction must wait for all acquisitions to end.
+- Arena graph data still uses the legacy `'static` references described above. Project and API program access
+  returns a `ProgramLease` retaining the existing program owner; language services retain one too. Borrow the
+  program and its `CheckerHandle<'pool>` from that lease. API setup first retains its program, then acquires a
+  checker borrowing the setup. Use lifetime parameters for these ownership boundaries; do not erase them with
+  leaks or casts. The compiler lease adapter contains the legacy static receiver used by emit and diagnostics;
+  its unsafe owner constructor must pair the exact program with the owner that frees it. This protects the
+  acquisition, not the `P<T>` results it returns: region ownership and request leases still protect those results.
 - Arena objects remain live until their arena is released, unless an explicit recycling site proves them dead
   (rolled-back parses, dropped flow labels, scratch mappers and inference contexts whose escape
   bit is clear; `tsrs_core::arena`, notes/mem-recycle.md). A struct field that keeps a mapper must be a `MapperCell`.

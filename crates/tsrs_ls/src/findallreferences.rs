@@ -5,7 +5,7 @@ use std::rc::Rc;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, CheckFlags, FileReference, Kind, ModifierFlags, Node, SemanticMeaning, SourceFile, SubtreeFacts, Symbol, SymbolFlags};
 use tsrs_checker::{Checker, ContextFlags, EmitResolver};
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 use tsrs_core::collections::{new_set_with_size_hint, Set};
 use tsrs_core::context::Context;
 use tsrs_core::{tspath, TextPos, TextRange, P};
@@ -821,7 +821,7 @@ impl LanguageService {
     pub(crate) fn provide_symbols_and_entries_at_position(
         &self,
         ctx: &Context,
-        program: &'static Program,
+        program: &ProgramLease,
         source_file: P<SourceFile>,
         position: u32,
         is_rename: bool,
@@ -889,7 +889,7 @@ impl LanguageService {
         ctx: &Context,
         position: u32,
         node: P<Node>,
-        program: &'static Program,
+        program: &ProgramLease,
         is_rename: bool,
         implementations: bool,
     ) -> Vec<SymbolAndEntries> {
@@ -1332,7 +1332,7 @@ impl LanguageService {
 
     // Go's variadic `referencesToMerge ...[]*SymbolAndEntries` is a Vec of groups.
     // findallreferences.go:1149
-    pub(crate) fn merge_references(&self, program: &'static Program, references_to_merge: Vec<Vec<SymbolAndEntries>>) -> Vec<SymbolAndEntries> {
+    pub(crate) fn merge_references(&self, program: &ProgramLease, references_to_merge: Vec<Vec<SymbolAndEntries>>) -> Vec<SymbolAndEntries> {
         let mut result: Vec<SymbolAndEntries> = Vec::new();
         let get_source_file_index_of_entry = |entry: &ReferenceEntry| -> Option<usize> {
             Self::resolve_entry_source(entry);
@@ -1485,7 +1485,7 @@ impl LanguageService {
         ctx: &Context,
         position: u32,
         node: P<Node>,
-        program: &'static Program,
+        program: &ProgramLease,
         source_files: &[P<SourceFile>],
         options: RefOptions,
     ) -> Vec<SymbolAndEntries> {
@@ -1647,7 +1647,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         symbol: Option<P<Symbol>>,
-        program: &'static Program,
+        program: &ProgramLease,
         source_files: &[P<SourceFile>],
         checker: &mut Checker,
         options: RefOptions,
@@ -2046,7 +2046,7 @@ pub(crate) fn find_first_jsx_node(root: P<Node>) -> Option<P<Node>> {
 }
 
 // findallreferences.go:1718
-pub(crate) fn get_references_for_non_module(_referenced_file: P<SourceFile>, _program: &'static Program) -> Vec<Rc<ReferenceEntry>> {
+pub(crate) fn get_references_for_non_module(_referenced_file: P<SourceFile>, _program: &ProgramLease) -> Vec<Rc<ReferenceEntry>> {
     // !!! not implemented
     Vec::new()
 }
@@ -2068,7 +2068,7 @@ impl LanguageService {
     // findallreferences.go:1735
     pub(crate) fn get_referenced_symbols_for_module(
         checker: &mut Checker,
-        program: &'static Program,
+        program: &ProgramLease,
         symbol: P<Symbol>,
         exclude_import_type_of_export_equals: bool,
         source_files: &[P<SourceFile>],
@@ -2209,7 +2209,7 @@ pub(crate) fn get_special_search_kind(node: Option<P<Node>>) -> &'static str {
 // findallreferences.go:1853
 pub(crate) fn get_referenced_symbols_for_symbol(
     ctx: &Context,
-    program: &'static Program,
+    program: &ProgramLease,
     original_symbol: P<Symbol>,
     node: Option<P<Node>>,
     source_files: &[P<SourceFile>],
@@ -2290,7 +2290,7 @@ pub(crate) struct RefState<'a> {
     pub(crate) special_search_kind: &'static str, // "none", "constructor", or "class"
     pub(crate) checker: &'a mut Checker,
     pub(crate) ctx: &'a Context,
-    pub(crate) program: &'static Program,
+    pub(crate) program: &'a ProgramLease,
     pub(crate) search_meaning: SemanticMeaning,
     pub(crate) options: RefOptions,
     pub(crate) result: Vec<SymbolAndEntries>,
@@ -2306,7 +2306,7 @@ pub(crate) struct RefState<'a> {
 // findallreferences.go:1926
 pub(crate) fn new_state<'a>(
     ctx: &'a Context,
-    program: &'static Program,
+    program: &'a ProgramLease,
     source_files: &'a [P<SourceFile>],
     source_files_set: &'a Set<String>,
     node: Option<P<Node>>,

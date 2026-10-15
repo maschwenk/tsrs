@@ -877,7 +877,7 @@ impl ProjectCollectionBuilder {
         }
 
         let children = program.get_resolved_project_references();
-        wg.borrow_mut().extend(children.into_iter().flatten().map(|child_config| projectTreeWork::Child(program, child_config)));
+        wg.borrow_mut().extend(children.into_iter().flatten().map(|child_config| projectTreeWork::Child(program.clone(), child_config)));
     }
 
     // projectcollectionbuilder.go:815
@@ -1760,7 +1760,7 @@ fn log_change_file_result(result: &changeFileResult, logger: &LogTree) {
 // A function queued on `DidRequestProjectTrees`' work group.
 enum projectTreeWork {
     Project(ConfiguredProjectID),
-    Child(&'static Program, P<ParsedCommandLine>),
+    Child(tsrs_compiler::ProgramLease, P<ParsedCommandLine>),
 }
 
 #[derive(Clone)]

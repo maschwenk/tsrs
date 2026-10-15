@@ -4,7 +4,7 @@ use std::collections::hash_map::Entry;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, Kind, Node, SourceFile, Symbol};
 use tsrs_checker::{Checker, ContextFlags, LiteralValue, Type};
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 use tsrs_core::PathSubstitutions;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::context::Context;
@@ -488,7 +488,7 @@ fn string_literal_completions_from_properties(t: P<Type>, type_checker: &mut Che
 
 impl LanguageService {
     // string_completions.go:587
-    fn get_string_literal_completions_from_module_names(&self, file: P<SourceFile>, node: P<Node>, program: &'static Program, checker: &mut Checker) -> Option<stringLiteralCompletions> {
+    fn get_string_literal_completions_from_module_names(&self, file: P<SourceFile>, node: P<Node>, program: &ProgramLease, checker: &mut Checker) -> Option<stringLiteralCompletions> {
         let text_start = astnav::get_start_of_node(node, file, false /*includeJSDoc*/) + 1;
         let replacement_span = self.path_completion_replacement_span(file, get_directory_fragment_range(node.text(), text_start))?;
         let name_and_kinds = self.get_string_literal_completions_from_module_names_worker(file, node, program, checker);
@@ -560,7 +560,7 @@ fn get_directory_fragment_range(text: &str, text_start: u32) -> Option<TextRange
 
 impl LanguageService {
     // string_completions.go:663
-    fn get_string_literal_completions_from_module_names_worker(&self, file: P<SourceFile>, node: P<Node>, program: &'static Program, checker: &mut Checker) -> Vec<moduleCompletionNameAndKind> {
+    fn get_string_literal_completions_from_module_names_worker(&self, file: P<SourceFile>, node: P<Node>, program: &ProgramLease, checker: &mut Checker) -> Vec<moduleCompletionNameAndKind> {
         let literal_value = tspath::normalize_slashes(node.text());
         let mut mode = RESOLUTION_MODE_NONE;
         if ast::is_string_literal_like(node) {
@@ -592,7 +592,7 @@ impl LanguageService {
         fragment: &str,
         script_path: &str,
         mode: ResolutionMode,
-        program: &'static Program,
+        program: &ProgramLease,
         type_checker: &mut Checker,
         extension_options: &extensionOptions,
     ) -> Vec<moduleCompletionNameAndKind> {
@@ -823,7 +823,7 @@ impl LanguageService {
     // string_completions.go:931
     fn get_completion_entries_from_typings(
         &self,
-        program: &'static Program,
+        program: &ProgramLease,
         script_path: &str,
         fragment_directory: &str,
         extension_options: &extensionOptions,
@@ -853,7 +853,7 @@ impl LanguageService {
         options: &CompilerOptions,
         fragment_directory: &str,
         extension_options: &extensionOptions,
-        program: &'static Program,
+        program: &ProgramLease,
         seen: &mut FxHashMap<String, bool>,
         result: &mut moduleCompletionNameAndKindSet,
     ) {
@@ -987,7 +987,7 @@ impl LanguageService {
         &self,
         literal_value: &str,
         script_directory: &str,
-        program: &'static Program,
+        program: &ProgramLease,
         script_path: &Path,
         extension_options: &extensionOptions,
     ) -> Vec<moduleCompletionNameAndKind> {
@@ -1007,7 +1007,7 @@ impl LanguageService {
         root_dirs: &[String],
         fragment: &str,
         script_directory: &str,
-        program: &'static Program,
+        program: &ProgramLease,
         exclude: &str,
         extension_options: &extensionOptions,
     ) -> Vec<moduleCompletionNameAndKind> {
@@ -1155,7 +1155,7 @@ impl LanguageService {
         fragment: &str,
         script_directory: &str,
         extension_options: &extensionOptions,
-        program: &'static Program,
+        program: &ProgramLease,
         module_specifier_is_relative: bool,
         exclude: &str,
         result: &mut moduleCompletionNameAndKindSet,
@@ -1240,7 +1240,7 @@ impl LanguageService {
     fn add_completion_entries_from_paths(
         &self,
         result: &mut moduleCompletionNameAndKindSet,
-        program: &'static Program,
+        program: &ProgramLease,
         fragment: &str,
         base_directory: &str,
         extension_options: &extensionOptions,
@@ -1273,7 +1273,7 @@ impl LanguageService {
     fn add_completion_entries_from_paths_or_exports_or_imports(
         &self,
         result: &mut moduleCompletionNameAndKindSet,
-        program: &'static Program,
+        program: &ProgramLease,
         is_exports: bool,
         is_imports: bool,
         fragment: &str,
@@ -1360,7 +1360,7 @@ impl LanguageService {
         is_exports: bool,
         is_imports: bool,
         extension_options: &extensionOptions,
-        program: &'static Program,
+        program: &ProgramLease,
     ) -> Vec<moduleCompletionNameAndKind> {
         let mut fragment_directory = get_fragment_directory(fragment);
         if !fragment_directory.is_empty() {
@@ -1460,7 +1460,7 @@ impl LanguageService {
         is_exports: bool,
         is_imports: bool,
         extension_options: &extensionOptions,
-        program: &'static Program,
+        program: &ProgramLease,
     ) -> Vec<moduleCompletionNameAndKind> {
         let parsed = try_parse_pattern(pattern);
         let PatternKind::Wildcard(star_index) = parsed.kind else {
@@ -1656,7 +1656,7 @@ fn get_possible_original_input_path_without_changing_ext(file_path: &str, ignore
 }
 
 // string_completions.go:1855
-fn get_filename_with_extension_option(name: &str, program: &'static Program, extension_options: &extensionOptions, is_exports_or_imports_wildcard: bool) -> (String, String) {
+fn get_filename_with_extension_option(name: &str, program: &ProgramLease, extension_options: &extensionOptions, is_exports_or_imports_wildcard: bool) -> (String, String) {
     let non_js_result = modulespecifiers::try_get_real_file_name_for_non_js_declaration_file_name(name);
     if !non_js_result.is_empty() {
         let ext = tspath::try_get_extension_from_path(&non_js_result).to_string();
@@ -1668,7 +1668,7 @@ fn get_filename_with_extension_option(name: &str, program: &'static Program, ext
 
     let mut allowed_endings = modulespecifiers::get_allowed_endings_in_preferred_order(
         &modulespecifiers::UserPreferences { import_module_specifier_ending: extension_options.ending_preference, ..Default::default() },
-        program,
+        program.program(),
         &program.options(),
         extension_options.importing_source_file,
         "", /*oldImportSpecifier*/
@@ -1976,7 +1976,7 @@ impl LanguageService {
         &self,
         file: P<SourceFile>,
         position: u32,
-        program: &'static Program,
+        program: &ProgramLease,
         _checker: &mut Checker,
     ) -> Option<pathCompletions> {
         let compiler_options = program.options();

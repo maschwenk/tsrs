@@ -3,7 +3,7 @@
 
 use tsrs_ast::{Node, SourceFile, Symbol, SymbolFlags};
 use tsrs_checker::{Checker, IndexInfo, ObjectFlags, Signature, Type, TypeFlags};
-use tsrs_compiler::{CheckerHandle, Program};
+use tsrs_compiler::{CheckerHandle, ProgramLease};
 use tsrs_core::context::{with_checker_lifetime, CheckerLifetime};
 use tsrs_core::json::Value;
 use tsrs_core::tspath::Path;
@@ -78,7 +78,7 @@ impl<'h> SnapshotCtx<'h> {
         self.scope.registry.project_checker_id(&self.project)
     }
 
-    pub(crate) fn program(&self) -> CheckerResult<&'static Program> {
+    pub(crate) fn program(&self) -> CheckerResult<ProgramLease> {
         let project = self
             .scope
             .snapshot
@@ -89,30 +89,41 @@ impl<'h> SnapshotCtx<'h> {
     }
 }
 
-/// Go `checkerSetup`. Field order matters: the checker handle is released before the snapshot scope.
+/// Retains the program before acquiring a checker, so the guard borrows an external owner.
+pub(crate) struct SetupOwner<'h> {
+    sd: SnapshotCtx<'h>,
+    program: ProgramLease,
+}
+
+impl<'h> SetupOwner<'h> {
+    pub(crate) fn new(host: &'h dyn CheckerHost, snapshot: u64, project: &str) -> CheckerResult<Self> {
+        let sd = SnapshotCtx::new(host, snapshot, project)?;
+        let program = sd.program()?;
+        Ok(Self { sd, program })
+    }
+
+    /// Go `setupChecker`: acquire the persistent API checker once per handler. It is exclusive and
+    /// not reentrant; the owner and snapshot cannot be released while the returned setup is in use.
+    pub(crate) fn acquire(&self) -> CheckerResult<Setup<'_>> {
+        let lease = super::lease::acquire(&self.program)?;
+        let ctx = with_checker_lifetime(&self.sd.host.context(), CheckerLifetime::API);
+        let checker = self.program.get_type_checker(&ctx);
+        let checker_id = checker.id;
+        Ok(Setup { checker, _lease: lease, checker_id, program: &self.program, sd: &self.sd })
+    }
+}
+
+/// Go `checkerSetup`. The checker is released before the reentrancy gate, then the owner can drop.
 pub(crate) struct Setup<'h> {
     pub(crate) checker: CheckerHandle<'h>,
     // Dropped after `checker`: the gate is released only once the checker slot is free again.
     _lease: super::lease::ApiCheckerLease,
     pub(crate) checker_id: u32,
-    pub(crate) program: &'static Program,
-    pub(crate) sd: SnapshotCtx<'h>,
+    pub(crate) program: &'h ProgramLease,
+    pub(crate) sd: &'h SnapshotCtx<'h>,
 }
 
-impl<'h> Setup<'h> {
-    /// Go `setupChecker`: resolves snapshot and program and acquires the program's persistent API checker
-    /// (`core.CheckerLifetimeAPI`). The checker is exclusive and not reentrant: a handler must acquire it
-    /// once and never call back into anything that acquires the API checker again.
-    pub(crate) fn new(host: &'h dyn CheckerHost, snapshot: u64, project: &str) -> CheckerResult<Setup<'h>> {
-        let sd = SnapshotCtx::new(host, snapshot, project)?;
-        let program = sd.program()?;
-        let lease = super::lease::acquire(program)?;
-        let ctx = with_checker_lifetime(&host.context(), CheckerLifetime::API);
-        let checker = program.get_type_checker(&ctx);
-        let checker_id = checker.id;
-        Ok(Setup { checker, _lease: lease, checker_id, program, sd })
-    }
-
+impl Setup<'_> {
     pub(crate) fn c(&mut self) -> &mut Checker {
         &mut self.checker
     }
@@ -218,7 +229,7 @@ impl<'h> Setup<'h> {
 
     /// Go `checkerSetup.resolveSymbolHandle`.
     pub(crate) fn resolve_symbol(&self, r: &SymbolReference) -> CheckerResult<P<Symbol>> {
-        resolve_symbol_for_program(&self.sd, self.program, r)
+        resolve_symbol_for_program(self.sd, self.program, r)
     }
 
     pub(crate) fn source_file(&self, file: &DocumentIdentifier) -> CheckerResult<P<SourceFile>> {
@@ -430,7 +441,7 @@ const TYPE_RESPONSE_FIELD_ORDER: &[&str] = &[
 
 /// Go `checkerSetup{sd, snapshot, program, projectID}.resolveSymbolHandle(ref)`: snapshot-owned references
 /// must name this snapshot; file-owned references must name a file of `program` with an identical descriptor.
-pub(crate) fn resolve_symbol_for_program(sd: &SnapshotCtx, program: &'static Program, r: &SymbolReference) -> CheckerResult<P<Symbol>> {
+pub(crate) fn resolve_symbol_for_program(sd: &SnapshotCtx, program: &ProgramLease, r: &SymbolReference) -> CheckerResult<P<Symbol>> {
     match r.kind {
         SYMBOL_OWNER_KIND_SNAPSHOT => {
             if r.snapshot != sd.scope.handle || r.file.is_some() {

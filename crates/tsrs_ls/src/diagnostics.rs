@@ -1,5 +1,5 @@
 use tsrs_ast::{self as ast, Diagnostic, DiagnosticExt as _, SourceFile};
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::context::Context;
 use tsrs_core::{TextRange, P};
@@ -13,7 +13,7 @@ use crate::spanmap::Fidelity;
 // getAllDiagnostics collects all diagnostics for a file: syntactic, semantic,
 // suggestion, and (when declarations are emitted) declaration diagnostics.
 // diagnostics.go:18
-pub(crate) fn get_all_diagnostics(ctx: &Context, program: &'static Program, file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+pub(crate) fn get_all_diagnostics(ctx: &Context, program: &ProgramLease, file: P<SourceFile>) -> Vec<P<Diagnostic>> {
     let mut diags: Vec<P<Diagnostic>> = Vec::new();
     let mut files = vec![file];
     files.extend_from_slice(file.supplemental_source_files());

@@ -1,6 +1,6 @@
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, FindAncestorResult, Kind, ModifierFlags, Node, SourceFile};
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 use tsrs_core::collections::{new_set_with_size_hint, Set};
 use tsrs_core::context::Context;
 use tsrs_core::{stringutil, P};
@@ -72,7 +72,7 @@ impl LanguageService {
         ctx: &Context,
         document_uri: &lsproto::DocumentUri,
         position: u32,
-        program: &'static Program,
+        program: &ProgramLease,
         source_file: P<SourceFile>,
         files_to_search: &[lsproto::DocumentUri],
     ) -> lsproto::MultiDocumentHighlightsOrNull {
@@ -164,7 +164,7 @@ impl LanguageService {
         ctx: &Context,
         position: u32,
         node: P<Node>,
-        program: &'static Program,
+        program: &ProgramLease,
         source_files: &[P<SourceFile>],
     ) -> Vec<lsproto::MultiDocumentHighlight> {
         let options = RefOptions { use_: ReferenceUse::None, ..Default::default() };

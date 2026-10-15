@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use tsrs_ast::{SourceFile, SourceFileParseOptions};
-use tsrs_compiler::Program;
 use tsrs_core::context::Context;
 use tsrs_core::tspath::Path;
 use tsrs_core::{ScriptKind, P};
@@ -27,10 +26,10 @@ impl ResolutionHost for fakeCloneHost {
 }
 
 impl RegistryCloneHost for fakeCloneHost {
-    fn get_default_project(&self, _path: &Path) -> (Option<ProjectID>, Option<&'static Program>) {
+    fn get_default_project(&self, _path: &Path) -> (Option<ProjectID>, Option<tsrs_compiler::ProgramLease>) {
         (None, None)
     }
-    fn get_program_for_project(&self, _project_id: &ProjectID) -> Option<&'static Program> {
+    fn get_program_for_project(&self, _project_id: &ProjectID) -> Option<tsrs_compiler::ProgramLease> {
         None
     }
     fn get_package_json(&self, _file_name: &str) -> P<InfoCacheEntry> {

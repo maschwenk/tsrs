@@ -1,6 +1,6 @@
 use tsrs_ast::{self as ast, CheckFlags, Kind, Node, NodeList, SourceFile, Symbol, SymbolFlags};
 use tsrs_checker::{self as checker, Checker, ContextFlags, ElementFlags, Flags, InternalFlags, Signature, SymbolFormatFlags, Type};
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 use tsrs_core::context::Context;
 use tsrs_core::{NewLineKind, TextRange, P};
 use tsrs_lsproto as lsproto;
@@ -90,7 +90,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         position: u32,
-        program: &'static Program,
+        program: &ProgramLease,
         source_file: P<SourceFile>,
         context: Option<&lsproto::SignatureHelpContext>,
     ) -> Option<lsproto::SignatureHelp> {
@@ -249,7 +249,7 @@ impl LanguageService {
     // doesn't produce results. It searches all source files for declarations with matching names
     // that have call signatures.
     // signaturehelp.go:244
-    fn create_js_signature_help_items(&self, ctx: &Context, argument_info: &argumentListInfo, program: &'static Program, c: &mut Checker) -> Option<lsproto::SignatureHelp> {
+    fn create_js_signature_help_items(&self, ctx: &Context, argument_info: &argumentListInfo, program: &ProgramLease, c: &mut Checker) -> Option<lsproto::SignatureHelp> {
         if argument_info.invocation.contextual_invocation.is_some() {
             return None;
         }

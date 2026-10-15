@@ -125,7 +125,7 @@ pub trait CheckerHost {
     fn node_handle(&self, node: P<Node>) -> CheckerResult<String>;
 
     /// Go `snapshotData.resolveNodeHandle(program, handle)`.
-    fn resolve_node_handle(&self, program: &'static Program, handle: &str) -> CheckerResult<P<Node>>;
+    fn resolve_node_handle(&self, program: &Program, handle: &str) -> CheckerResult<P<Node>>;
 
     /// Go `encoder.EncodeNode(node, nil)` for a synthesized node.
     fn encode_node(&self, node: P<Node>) -> CheckerResult<Vec<u8>>;

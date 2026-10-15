@@ -9,13 +9,13 @@
 // - the regions of its source files (each parsed file version has one, see parsecache.rs);
 // - through its checker pool, the checkers' regions.
 //
-// `programOwner` is held by every `Project` value that refers to the program (projects are cloned per snapshot and
-// live as long as a snapshot or a language service refers to them), so it is dropped exactly when nothing can reach
-// the program any more. Dropping it frees the checkers and their regions, the `Program` itself, then the regions.
+// `programOwner` is held by every `Project` value and `ProgramLease` that refers to the program (projects are cloned
+// per snapshot; requests and language services retain leases). Dropping the last owner frees the checkers and their
+// regions, the `Program` itself, then the regions. Acquired checker guards borrow their program lease.
 
 use std::sync::Arc;
 
-use tsrs_compiler::Program;
+use tsrs_compiler::{Program, ProgramLease};
 use tsrs_core::arena::Region;
 
 use crate::checkerpool::checkerPool;
@@ -30,6 +30,11 @@ pub(crate) struct programOwner {
 }
 
 impl programOwner {
+    pub(crate) fn lease(self: &Arc<Self>) -> ProgramLease {
+        // SAFETY: this owner frees this exact program, its checkers and its regions only on final drop.
+        unsafe { ProgramLease::from_owner(self.program, Arc::<Self>::clone(self)) }
+    }
+
     // `full_build`: the program does not share data with an older version; `base` is then its own region, which
     // also becomes the owner of the shared processed-file data (`Program::get_symlink_cache` routes there).
     pub(crate) fn new(program: &'static Program, checker_pool: Option<Arc<checkerPool>>, region: Region, base: Region, full_build: bool) -> programOwner {
@@ -60,8 +65,8 @@ impl Drop for programOwner {
         if let Some(pool) = &self.checker_pool {
             pool.free_checkers();
         }
-        // SAFETY: the last project value referring to the program is being dropped: no snapshot, language service or
-        // held checker can reach it (see the file comment).
+        // SAFETY: the last project value or program lease is being dropped: no snapshot, language service or held
+        // checker can reach it (see the file comment).
         unsafe { tsrs_compiler::free_program(self.program) };
     }
 }

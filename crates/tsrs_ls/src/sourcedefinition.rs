@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, FileReference, JSDeclarationKind, Kind, ModifierFlags, Node, SourceFile, SourceFileParseOptions};
 use tsrs_checker::{self as checker, Checker};
-use tsrs_compiler::{CompilerHost, Program};
+use tsrs_compiler::{CompilerHost, ProgramLease};
 use tsrs_core::context::Context;
 use tsrs_core::{tspath, CompilerOptions, ModuleKind, ResolutionMode, TextPos, TextRange, Tristate, P};
 use tsrs_lsproto as lsproto;
@@ -38,7 +38,7 @@ impl LanguageService {
     fn provide_source_definition_at_position(
         &self,
         ctx: &Context,
-        program: &'static Program,
+        program: &ProgramLease,
         file: P<SourceFile>,
         text_pos: u32,
     ) -> Result<lsproto::DefinitionResponse, lsproto::Error> {
@@ -157,7 +157,7 @@ impl LanguageService {
 
 // Go passes `program.Host()` (a compiler.CompilerHost, which has the FS/GetCurrentDirectory methods of
 // module.ResolutionHost) to module.NewResolver; Rust needs the explicit adapter.
-struct compilerHostResolutionHost(&'static dyn CompilerHost);
+struct compilerHostResolutionHost(std::sync::Arc<dyn CompilerHost>);
 
 impl ResolutionHost for compilerHostResolutionHost {
     fn fs(&self) -> &dyn FS {
@@ -176,9 +176,9 @@ impl ResolutionHost for compilerHostResolutionHost {
 // sourcedefinition.go:132
 struct SourceDefResolver<'a> {
     ls: &'a LanguageService,
-    fs: &'static dyn FS,
+    fs: &'a dyn FS,
     options: P<CompilerOptions>,
-    program: &'static Program, // Go `getSourceFile func(string) *ast.SourceFile` (program.GetSourceFile)
+    program: &'a ProgramLease, // Go `getSourceFile func(string) *ast.SourceFile` (program.GetSourceFile)
     resolve_from: String,
     resolver: module::DefaultResolver,
     parsed_files: RefCell<FxHashMap<String, Option<P<SourceFile>>>>,
@@ -186,12 +186,12 @@ struct SourceDefResolver<'a> {
 
 impl LanguageService {
     // sourcedefinition.go:142
-    fn new_source_def_resolver(&self, program: &'static Program, resolve_from: &str) -> SourceDefResolver<'_> {
+    fn new_source_def_resolver<'a>(&'a self, program: &'a ProgramLease, resolve_from: &str) -> SourceDefResolver<'a> {
         let options = program.options();
         let mut no_dts_options: CompilerOptions = (*options).clone();
         no_dts_options.no_dts_resolution = Tristate::True;
-        let host: &'static dyn CompilerHost = &**program.host();
-        let resolution_host: &'static compilerHostResolutionHost = tsrs_core::alloc(compilerHostResolutionHost(host));
+        let host: &dyn CompilerHost = &**program.host();
+        let resolution_host: &'static compilerHostResolutionHost = tsrs_core::alloc(compilerHostResolutionHost(std::sync::Arc::clone(program.host())));
         SourceDefResolver {
             ls: self,
             fs: host.fs(),
@@ -250,7 +250,7 @@ impl SourceDefResolver<'_> {
 // returns the definition declarations for node along with the module specifier
 // of the import that brought the symbol into scope (empty if not applicable).
 // sourcedefinition.go:203
-fn get_source_def_checker_info(ctx: &Context, program: &'static Program, file: P<SourceFile>, node: P<Node>) -> (Vec<P<Node>>, String) {
+fn get_source_def_checker_info(ctx: &Context, program: &ProgramLease, file: P<SourceFile>, node: P<Node>) -> (Vec<P<Node>>, String) {
     let mut c = program.get_type_checker_for_file(ctx, file);
     let c: &mut Checker = &mut c;
 
@@ -312,7 +312,7 @@ impl SourceDefResolver<'_> {
         &self,
         file: P<SourceFile>,
         pos: u32,
-        program: &'static Program,
+        program: &ProgramLease,
     ) -> (Vec<P<Node>>, Option<P<FileReference>>) {
         let Some(ref_) = get_reference_at_position(file, pos, program) else {
             return (Vec::new(), None);

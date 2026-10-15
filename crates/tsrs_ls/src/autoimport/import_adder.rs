@@ -5,7 +5,7 @@ use std::sync::Arc;
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, Node, NodeFactory, NodeFactoryHooks, NodeVisitor, NodeVisitorHooks, SourceFile, Symbol};
 use tsrs_checker::{Checker, Flags, Type};
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::context::Context;
 use tsrs_core::P;
@@ -79,7 +79,7 @@ struct importAdder {
 // Go keeps the checker in the adder; the view built from the same checker already holds it (`View::checker`).
 pub fn new_import_adder(
     ctx: &Context,
-    _program: &'static Program,
+    _program: &ProgramLease,
     _checker: &mut Checker,
     _file: P<SourceFile>,
     view: View,

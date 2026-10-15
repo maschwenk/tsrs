@@ -50,7 +50,7 @@ impl Session {
     pub(crate) fn handle_format_node_for_insertion(&self, p: Params) -> ApiResult<Value> {
         let sd = self.snapshot_data(p.u64("snapshot")?)?;
         let program = sd.get_program(&ProjectID(p.str("project")?.to_string()))?;
-        let target = resolve_source_file(program, &p.document("file")?)?;
+        let target = resolve_source_file(&program, &p.document("file")?)?;
         let decoded = decode(p.str("data")?)?;
         let position = u32::try_from(p.u64("position")?)
             .map_err(|_| ApiError::invalid_request("position exceeds uint32"))?;

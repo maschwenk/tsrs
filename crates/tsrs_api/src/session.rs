@@ -5,16 +5,17 @@
 //   reference; every in-flight request that resolves the handle holds another. The underlying
 //   `tsrs_project::Snapshot` reference is dropped (`Snapshot::deref`) only when the last `Arc` goes
 //   away, so a `release` racing with a query never frees regions the query is still reading.
-// - Programs, source files, symbols and types are region-owned (`P<T>` / `&'static`): they may only be
-//   reached through a live `SnapshotData` and are never exposed as addresses. Wire handles are the
-//   pinned Go IDs (snapshot ids, project ids, symbol/type/signature ids, node handles).
+// - Programs are accessed through owning `ProgramLease`s; checker acquisitions borrow those leases.
+//   Source files, symbols and types still use region-owned `P<T>`: wire requests reach them through a
+//   live `SnapshotData`, and never expose addresses. Wire handles are the pinned Go IDs (snapshot ids,
+//   project ids, symbol/type/signature ids, node handles).
 
 use std::sync::Weak;
 use rustc_hash::FxHashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
-use tsrs_compiler::{CheckerHandle, Program};
+use tsrs_compiler::{CheckerHandle, ProgramLease};
 use tsrs_core::context::{with_checker_lifetime, CheckerLifetime, Context};
 use tsrs_core::json::{self, Value};
 use tsrs_project::{Snapshot, SnapshotHost, ID as ProjectID};
@@ -76,7 +77,7 @@ impl Drop for SnapshotData {
 
 impl SnapshotData {
     /// Go `snapshotData.getProject` / `getProgram`.
-    pub fn get_program(&self, project: &ProjectID) -> ApiResult<&'static Program> {
+    pub fn get_program(&self, project: &ProjectID) -> ApiResult<ProgramLease> {
         let proj = self
             .snapshot
             .project_collection
@@ -86,16 +87,22 @@ impl SnapshotData {
     }
 }
 
-/// Go `checkerSetup`. Holds the snapshot alive and the checker exclusively until dropped. Checker
-/// handles are not reentrant: never call `Session::setup_checker` again while one is held on the
-/// same program.
-pub struct CheckerSetup<'session> {
-    // Release the checker before dropping the snapshot that owns its program.
-    pub checker: CheckerHandle<'session>,
+/// Retains a snapshot and program for checker acquisition. Acquired guards borrow this setup, so it
+/// cannot be dropped while a checker is held.
+pub struct CheckerSetup {
     pub sd: Arc<SnapshotData>,
     pub snapshot: SnapshotID,
     pub project: ProjectID,
-    pub program: &'static Program,
+    pub program: ProgramLease,
+}
+
+impl CheckerSetup {
+    /// Acquire the exclusive API checker. This is not reentrant: release the guard before acquiring
+    /// another checker for the same program.
+    pub fn acquire_checker(&self) -> CheckerHandle<'_> {
+        let ctx = with_checker_lifetime(&Context::background(), CheckerLifetime::API);
+        self.program.get_type_checker(&ctx)
+    }
 }
 
 pub struct Session {
@@ -246,13 +253,12 @@ impl Session {
         self.snapshots.read().unwrap().get(&handle).map(|(sd, _)| Arc::clone(sd)).ok_or_else(|| ApiError::client(format!("snapshot {handle} not found")))
     }
 
-    /// Go `setupChecker`: resolves snapshot -> project -> program and acquires the API-lifetime checker.
-    pub fn setup_checker(&self, snapshot: SnapshotID, project: &ProjectID) -> ApiResult<CheckerSetup<'_>> {
+    /// Resolve snapshot -> project -> program. Call `acquire_checker` on the retained setup to borrow
+    /// its API checker.
+    pub fn setup_checker(&self, snapshot: SnapshotID, project: &ProjectID) -> ApiResult<CheckerSetup> {
         let sd = self.snapshot_data(snapshot)?;
         let program = sd.get_program(project)?;
-        let ctx = with_checker_lifetime(&Context::background(), CheckerLifetime::API);
-        let checker = program.get_type_checker(&ctx);
-        Ok(CheckerSetup { sd, snapshot, project: project.clone(), program, checker })
+        Ok(CheckerSetup { sd, snapshot, project: project.clone(), program })
     }
 
     /// Go `registerSnapshot`: the same snapshot id returned twice (no changes) bumps the API ref count so

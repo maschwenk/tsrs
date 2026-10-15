@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use tsrs_ast::{Diagnostic, SourceFile};
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::context::Context;
 use tsrs_core::{TextRange, P};
@@ -28,7 +28,7 @@ pub struct CodeFixContext<'a> {
     pub source_file: P<SourceFile>,
     pub span: TextRange,
     pub error_code: i32,
-    pub program: &'static Program,
+    pub program: &'a ProgramLease,
     pub ls: &'a LanguageService,
     pub diagnostic: Option<&'a lsproto::Diagnostic>,
     pub params: Option<&'a lsproto::CodeActionParams>,
@@ -178,7 +178,7 @@ impl LanguageService {
     fn get_fix_all_quick_fixes(
         &self,
         ctx: &Context,
-        program: &'static Program,
+        program: &ProgramLease,
         file: P<SourceFile>,
         uri: &lsproto::DocumentUri,
         fix_id_seen: &OrderedMap<String, &'static CodeFixProvider>,
@@ -230,7 +230,7 @@ impl LanguageService {
     fn create_fix_all_action(
         &self,
         ctx: &Context,
-        program: &'static Program,
+        program: &ProgramLease,
         file: P<SourceFile>,
         uri: &lsproto::DocumentUri,
     ) -> Result<Option<lsproto::CommandOrCodeAction>, lsproto::Error> {
@@ -272,7 +272,7 @@ impl LanguageService {
     fn create_organize_imports_action(
         &self,
         ctx: &Context,
-        program: &'static Program,
+        program: &ProgramLease,
         file: P<SourceFile>,
         kind: lsproto::CodeActionKind,
     ) -> lsproto::CommandOrCodeAction {
@@ -312,7 +312,7 @@ impl LanguageService {
 // hasMultipleFixableDiagnostics returns true if the file has at least 2 diagnostics
 // matching the given error codes. Checks all diagnostic sources (semantic,
 // syntactic, suggestion, declaration) to match ProvideDiagnostics.
-fn has_multiple_fixable_diagnostics(ctx: &Context, program: &'static Program, file: P<SourceFile>, error_codes: &[i32]) -> bool {
+fn has_multiple_fixable_diagnostics(ctx: &Context, program: &ProgramLease, file: P<SourceFile>, error_codes: &[i32]) -> bool {
     let all_diags = get_all_diagnostics(ctx, program, file);
     all_diags.into_iter().filter(|d| is_fixable_diagnostic(*d, error_codes)).nth(1).is_some()
 }

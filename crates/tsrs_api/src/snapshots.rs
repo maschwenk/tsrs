@@ -63,7 +63,7 @@ fn same_project(a: &Shared<Project>, b: &Shared<Project>) -> bool {
 
 fn same_program(a: &Project, b: &Project) -> bool {
     match (a.get_program(), b.get_program()) {
-        (Some(x), Some(y)) => std::ptr::eq(x, y),
+        (Some(x), Some(y)) => std::ptr::eq(x.program(), y.program()),
         (None, None) => true,
         _ => false,
     }
@@ -83,8 +83,10 @@ fn compute_snapshot_changes(prev: &Snapshot, next: &Snapshot) -> Value {
                     continue;
                 }
                 let empty = FxHashMap::default();
-                let old_files = old.get_program().map_or(&empty, tsrs_compiler::Program::files_by_path);
-                let new_files = new.get_program().map_or(&empty, tsrs_compiler::Program::files_by_path);
+                let old_program = old.get_program();
+                let new_program = new.get_program();
+                let old_files = old_program.as_deref().map_or(&empty, tsrs_compiler::Program::files_by_path);
+                let new_files = new_program.as_deref().map_or(&empty, tsrs_compiler::Program::files_by_path);
                 let mut changed_files: Vec<&Path> = Vec::new();
                 let mut deleted_files: Vec<&Path> = Vec::new();
                 #[expect(clippy::iter_over_hash_type, reason = "both lists are sorted before they are serialized")]

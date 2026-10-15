@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use tsrs_ast::{self as ast, Kind, Node, NodeFactory, NodeFactoryHooks, SourceFile};
 use tsrs_checker::Checker;
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::context::Context;
 use tsrs_core::stringutil::compare_strings_case_sensitive;
@@ -28,7 +28,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         source_file: P<SourceFile>,
-        program: &'static Program,
+        program: &ProgramLease,
         kind: lsproto::CodeActionKind,
     ) -> OrderedMap<String, Vec<lsproto::TextEdit>> {
         let mut change_tracker = change::new_tracker(ctx, &program.options(), self.format_options(), Arc::clone(&self.converters));
@@ -141,7 +141,7 @@ fn organize_imports_worker(
     should_combine: bool,
     should_remove: bool,
     source_file: P<SourceFile>,
-    program: &'static Program,
+    program: &ProgramLease,
     change_tracker: &mut change::Tracker,
     ctx: &Context,
 ) {
@@ -243,7 +243,7 @@ fn remove_unused_imports(
     old_imports: &[P<Node>],
     source_file: P<SourceFile>,
     type_checker: &mut Checker,
-    program: &'static Program,
+    program: &ProgramLease,
     change_tracker: &change::Tracker,
 ) -> Vec<P<Node>> {
     let compiler_options = program.options();

@@ -156,7 +156,7 @@ fn setup(d: &dataset) -> (LanguageService, Context) {
         Some(line_map)
     });
     let host = Arc::new(testHost { fs, converters });
-    let ls = new_language_service(ProjectID("/tsconfig.json".to_string()), program, host, "/b.ts");
+    let ls = new_language_service(ProjectID("/tsconfig.json".to_string()), tsrs_compiler::ProgramLease::from_static(program), host, "/b.ts");
     let mut caps = lsproto::ResolvedClientCapabilities { vs_supports_visual_studio_extensions: d.vs, ..Default::default() };
     caps.text_document.implementation.link_support = d.vs;
     let ctx = lsproto::with_client_capabilities(&Context::background(), Arc::new(caps));

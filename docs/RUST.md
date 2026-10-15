@@ -199,5 +199,5 @@ goal here (owner decision, 2026-10-05).
 
 Does not transfer: nightly-only flags (Bun's `-Zbuild-std`, `-Zlocation-detail=none`, `-Zshare-generics`; the release
 toolchain is stable), lifetime-carrying arenas such as bumpalo's `&'a T` (PORTING.md: graph data still uses legacy
-`'static` references; checker acquisitions borrow their owners), oxc's
+`'static` references; program leases retain owners and checker acquisitions borrow those leases), oxc's
 compile-time ban on `Drop` types in the arena (arena objects here own `Vec`s and maps on purpose).

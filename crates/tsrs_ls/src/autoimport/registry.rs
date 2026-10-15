@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::SourceFile;
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 use tsrs_core::collections::{new_set_from_items, Set, SyncMap};
 use tsrs_core::arena::Region;
 use tsrs_core::context::Context;
@@ -632,8 +632,8 @@ pub struct RegistryChange {
 
 // registry.go:514 (Go embeds module.ResolutionHost and repeats its FS(); `ResolutionHost::fs` covers both)
 pub trait RegistryCloneHost: ResolutionHost {
-    fn get_default_project(&self, path: &Path) -> (Option<ProjectID>, Option<&'static Program>);
-    fn get_program_for_project(&self, project_id: &ProjectID) -> Option<&'static Program>;
+    fn get_default_project(&self, path: &Path) -> (Option<ProjectID>, Option<ProgramLease>);
+    fn get_program_for_project(&self, project_id: &ProjectID) -> Option<ProgramLease>;
     fn get_package_json(&self, file_name: &str) -> P<InfoCacheEntry>;
     fn get_source_file(&self, file_name: &str, path: &Path) -> Option<P<SourceFile>>;
     fn dispose(&self);
@@ -1008,8 +1008,8 @@ impl registryBuilder<'_> {
         self.projects.range(|entry| {
             let program = host.get_program_for_project(&entry.key());
             if let Some(program) = program {
-                all_resolved_package_names.insert(entry.key(), Some(get_resolved_package_names(ctx, program)));
-                add_project_reference_output_mappings(program, &mut project_reference_outputs);
+                all_resolved_package_names.insert(entry.key(), Some(get_resolved_package_names(ctx, &program)));
+                add_project_reference_output_mappings(&program, &mut project_reference_outputs);
                 // pure set inserts; Go ranges the set too
                 all_deep_import_packages.m.extend(program.deep_import_package_names().keys().iter().map(std::clone::Clone::clone));
             }
@@ -1231,7 +1231,7 @@ impl registryBuilder<'_> {
             let mut should_rebuild = project_value.state.has_dirty_file_besides(&change.requested_file)
                 || !project_value.state.build_preferences.equal(&bucket_build_preferences_from_user_preferences(&self.user_preferences));
             if !should_rebuild && project_value.state.new_program_structure > newProgramStructure::False {
-                if !set_equals(project_value.resolved_package_names.as_ref(), resolved_package_names.as_ref()) || has_new_non_node_modules_files(program, &project_value) {
+                if !set_equals(project_value.resolved_package_names.as_ref(), resolved_package_names.as_ref()) || has_new_non_node_modules_files(&program, &project_value) {
                     should_rebuild = true;
                 } else {
                     project.change(|b| b.state.new_program_structure = newProgramStructure::False);
@@ -1342,7 +1342,7 @@ impl registryBuilder<'_> {
 }
 
 // registry.go:1131
-fn has_new_non_node_modules_files(program: &'static Program, bucket: &RegistryBucket) -> bool {
+fn has_new_non_node_modules_files(program: &ProgramLease, bucket: &RegistryBucket) -> bool {
     if bucket.state.new_program_structure != newProgramStructure::DifferentFileNames {
         return false;
     }
@@ -1358,7 +1358,7 @@ fn has_new_non_node_modules_files(program: &'static Program, bucket: &RegistryBu
 }
 
 // registry.go:1146
-fn is_ignored_file(program: &'static Program, file: P<SourceFile>) -> bool {
+fn is_ignored_file(program: &ProgramLease, file: P<SourceFile>) -> bool {
     program.is_source_file_default_library(file.path()) || program.is_global_typings_file(file.file_name())
 }
 
@@ -1498,7 +1498,7 @@ impl registryBuilder<'_> {
         let program = self.host.get_program_for_project(project_id).unwrap();
         let project_root_path = (self.base.to_path)(program.get_current_directory());
         let symlink_cache = Some(program.get_symlink_cache());
-        let mut pool = create_checker_pool(program);
+        let mut pool = create_checker_pool(&program);
         // Go map (random iteration order).
         let mut exports: FxHashMap<Path, Vec<Arc<Export>>> = FxHashMap::default();
         let mut skipped_file_count = 0;
@@ -1506,7 +1506,7 @@ impl registryBuilder<'_> {
         let mut combined_used_checker = 0;
 
         for &file in program.get_source_files() {
-            if file.is_content_mapper_supplemental() || is_ignored_file(program, file) {
+            if file.is_content_mapper_supplemental() || is_ignored_file(&program, file) {
                 continue;
             }
             if file_exclude_patterns.as_ref().is_some_and(|p| p.match_string(file.file_name())) {

@@ -1,7 +1,7 @@
 use rustc_hash::FxHashSet;
 use tsrs_ast::{self as ast, Kind, Node, SourceFile, Symbol, SymbolFlags};
 use tsrs_checker::{Checker, ContextFlags, Type, TypeExt as _};
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 use tsrs_core::context::Context;
 use tsrs_core::{P, TextRange};
 use tsrs_lsproto as lsproto;
@@ -51,7 +51,7 @@ impl LanguageService {
     pub(crate) fn provide_definition_at_position(
         &self,
         ctx: &Context,
-        program: &'static Program,
+        program: &ProgramLease,
         file: P<SourceFile>,
         text_pos: u32,
         client_supports_link: bool,
@@ -154,7 +154,7 @@ impl LanguageService {
     fn provide_type_definition_at_position(
         &self,
         ctx: &Context,
-        program: &'static Program,
+        program: &ProgramLease,
         file: P<SourceFile>,
         text_pos: u32,
         client_supports_link: bool,

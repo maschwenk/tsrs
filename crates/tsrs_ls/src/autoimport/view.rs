@@ -6,7 +6,7 @@ use std::sync::Arc;
 use rustc_hash::FxHashMap;
 use tsrs_ast::SourceFile;
 use tsrs_checker::Checker;
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 use tsrs_core::collections::{new_set_from_items, Set};
 use tsrs_core::tspath::Path;
 use tsrs_core::{LanguageVariant, Tristate, P};
@@ -25,7 +25,7 @@ pub struct View {
     pub(crate) registry: Option<Arc<Registry>>,
     pub(crate) importing_file: P<SourceFile>,
     pub(crate) importing_file_path: Path,
-    pub(crate) program: &'static Program,
+    pub(crate) program: ProgramLease,
     // Go shares the `*checker.Checker` between the caller, the view and the import adder built from it. The caller
     // holds the checker's pool lease for the whole request and keeps using it while the view is alive, so the view
     // keeps the checker's address (see `checker()`).
@@ -45,7 +45,7 @@ pub fn new_view(
     registry: Option<Arc<Registry>>,
     importing_file: P<SourceFile>,
     project_id: ProjectID,
-    program: &'static Program,
+    program: &ProgramLease,
     type_checker: &mut Checker,
     preferences: modulespecifiers::UserPreferences,
 ) -> View {
@@ -57,7 +57,7 @@ pub fn new_view(
         registry,
         importing_file,
         importing_file_path,
-        program,
+        program: program.clone(),
         checker: NonNull::from(type_checker),
         project_id,
         preferences,
@@ -88,7 +88,7 @@ impl View {
     pub(crate) fn get_allowed_endings(&self) -> &[ModuleSpecifierEnding] {
         self.allowed_endings.get_or_init(|| {
             let resolution_mode = self.program.get_default_resolution_mode_for_file(self.importing_file);
-            modulespecifiers::get_allowed_endings_in_preferred_order(&self.preferences, self.program, &self.program.options(), self.importing_file, "", resolution_mode)
+            modulespecifiers::get_allowed_endings_in_preferred_order(&self.preferences, self.program.program(), &self.program.options(), self.importing_file, "", resolution_mode)
         })
     }
 

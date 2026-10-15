@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, Kind, Symbol, SymbolFlags};
 use tsrs_checker::{self as checker, Checker};
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 use tsrs_core::collections::{new_set_with_size_hint, Set};
 use tsrs_core::context::Context;
 use tsrs_core::stringutil::{self, Rune};
@@ -145,7 +145,7 @@ pub(crate) fn get_default_like_export_name_from_declaration(symbol: P<Symbol>) -
 }
 
 // util.go:146
-pub(crate) fn get_resolved_package_names(ctx: &Context, program: &'static Program) -> Set<String> {
+pub(crate) fn get_resolved_package_names(ctx: &Context, program: &ProgramLease) -> Set<String> {
     let raw_names = program.resolved_package_names();
     let unresolved_package_names = program.unresolved_package_names();
 
@@ -184,7 +184,7 @@ pub(crate) fn get_resolved_package_names(ctx: &Context, program: &'static Progra
 // from a program's project references to the provided map.
 // This is used during node_modules bucket building to redirect extraction
 // from output files to source files when the output is from a project reference.
-pub(crate) fn add_project_reference_output_mappings(program: &'static Program, result: &mut FxHashMap<Path, String>) {
+pub(crate) fn add_project_reference_output_mappings(program: &ProgramLease, result: &mut FxHashMap<Path, String>) {
     let refs = program.get_resolved_project_references();
     for r in refs {
         let Some(r) = r else {
@@ -204,20 +204,20 @@ pub(crate) fn add_project_reference_output_mappings(program: &'static Program, r
 // util.go:203
 // Go's pool hands out up to GOMAXPROCS checkers to the extraction goroutines; extraction runs sequentially here,
 // so the pool holds the one checker the first request creates.
-pub(crate) struct checkerPool {
-    program: &'static dyn checker::Program,
-    checker: Option<Box<Checker>>,
+pub(crate) struct checkerPool<'a> {
+    program: &'a ProgramLease,
+    checker: Option<tsrs_compiler::ProgramChecker<'a>>,
     created: usize,
 }
 
-pub(crate) fn create_checker_pool(program: &'static dyn checker::Program) -> checkerPool {
+pub(crate) fn create_checker_pool(program: &ProgramLease) -> checkerPool<'_> {
     checkerPool { program, checker: None, created: 0 }
 }
 
-impl checkerPool {
+impl checkerPool<'_> {
     pub(crate) fn get_checker(&mut self) -> &mut Checker {
         if self.checker.is_none() {
-            self.checker = Some(checker::new_checker(self.program));
+            self.checker = Some(self.program.new_checker());
             self.created += 1;
         }
         self.checker.as_mut().unwrap()

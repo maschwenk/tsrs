@@ -195,7 +195,7 @@ pub struct Project {
     pub command_line: Option<P<ParsedCommandLine>>,
     // Go: `commandLineWithTypingsFiles` + `commandLineWithTypingsFilesOnce`.
     pub(crate) command_line_with_typings_files: Arc<OnceLock<P<ParsedCommandLine>>>,
-    pub program: Option<&'static Program>,
+    pub(crate) program: Option<&'static Program>,
     // The kind of update that was performed on the program last time it was updated.
     pub program_update_kind: ProgramUpdateKind,
     // The ID of the snapshot that created the program stored in this project.
@@ -380,12 +380,18 @@ pub fn new_project(id: ID, kind: Kind, current_directory: &str, builder: &Projec
 
 // The result of `CreateProgram`.
 pub struct CreateProgramResult {
-    pub program: &'static Program,
+    pub(crate) program: &'static Program,
     pub update_kind: ProgramUpdateKind,
     // Go reads the pool back with `program.GetCheckerPool().(*checkerPool)`; the program keeps the pool behind
     // `dyn CheckerPool`, so the factory hands the concrete pool out here.
     pub(crate) checker_pool: Option<Arc<checkerPool>>,
     pub(crate) owner: Arc<programOwner>,
+}
+
+impl CreateProgramResult {
+    pub fn get_program(&self) -> tsrs_compiler::ProgramLease {
+        self.owner.lease()
+    }
 }
 
 impl Project {
@@ -435,8 +441,8 @@ impl Project {
     }
 
     // project.go:357
-    pub fn get_program(&self) -> Option<&'static Program> {
-        self.program
+    pub fn get_program(&self) -> Option<tsrs_compiler::ProgramLease> {
+        self.program_owner.as_ref().map(programOwner::lease)
     }
 
     // project.go:361
@@ -786,8 +792,8 @@ impl ls::Project for Project {
         self.id_string()
     }
 
-    fn get_program(&self) -> Option<&'static Program> {
-        self.program
+    fn get_program(&self) -> Option<tsrs_compiler::ProgramLease> {
+        Project::get_program(self)
     }
 
     fn has_file(&self, file_name: &str) -> bool {

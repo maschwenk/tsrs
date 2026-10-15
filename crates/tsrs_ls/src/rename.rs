@@ -3,7 +3,7 @@ use std::collections::hash_map::Entry;
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, Kind, Node, SourceFile, Symbol, SymbolFlags};
 use tsrs_checker::{Checker, Type};
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::context::Context;
 use tsrs_core::{tspath, TextRange, Tristate, P};
@@ -201,7 +201,7 @@ impl LanguageService {
     // getRenameInfoForNode performs detailed validation for a rename operation on a specific node.
     // Go returns `(info, ok)`.
     // rename.go:168
-    pub(crate) fn get_rename_info_for_node(&self, ctx: &Context, new_name: &str, node: P<Node>, source_file: P<SourceFile>, program: &'static Program) -> Option<RenameInfo> {
+    pub(crate) fn get_rename_info_for_node(&self, ctx: &Context, new_name: &str, node: P<Node>, source_file: P<SourceFile>, program: &ProgramLease) -> Option<RenameInfo> {
         let mut ch = program.get_type_checker(ctx);
         let ch: &mut Checker = &mut ch;
 
@@ -264,7 +264,7 @@ impl LanguageService {
         node: P<Node>,
         symbol: P<Symbol>,
         ch: &mut Checker,
-        program: &'static Program,
+        program: &ProgramLease,
     ) -> Option<&'static Message> {
         if let Some(result) = symbol.declarations().iter().find_map(|&declaration| {
             if is_defined_in_library_file(program, declaration) {
@@ -291,7 +291,7 @@ impl LanguageService {
 
 // isDefinedInLibraryFile checks if a declaration is from a default library file (e.g., lib.d.ts).
 // rename.go:249
-fn is_defined_in_library_file(program: &'static Program, declaration: P<Node>) -> bool {
+fn is_defined_in_library_file(program: &ProgramLease, declaration: P<Node>) -> bool {
     let decl_source_file = ast::get_source_file_of_node(declaration).unwrap();
     program.is_source_file_default_library(decl_source_file.path()) && tspath::is_declaration_file_name(decl_source_file.file_name())
 }

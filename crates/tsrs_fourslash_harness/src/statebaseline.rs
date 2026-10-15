@@ -10,7 +10,6 @@ use std::collections::BTreeMap;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
-use tsrs_compiler::Program;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::json::Value;
 use tsrs_core::tspath;
@@ -60,11 +59,11 @@ pub(crate) fn new_state_baseline(fs_from_map: Arc<IoVFS<MapFS>>) -> StateBaselin
 }
 
 // Go `projectInfo = *compiler.Program` (nil = no program).
-type projectInfo = Option<&'static Program>;
+type projectInfo = Option<tsrs_compiler::ProgramLease>;
 
-fn same_program(a: projectInfo, b: projectInfo) -> bool {
+fn same_program(a: &projectInfo, b: &projectInfo) -> bool {
     match (a, b) {
-        (Some(a), Some(b)) => std::ptr::eq(a, b),
+        (Some(a), Some(b)) => std::ptr::eq(a.program(), b.program()),
         (None, None) => true,
         _ => false,
     }
@@ -312,11 +311,11 @@ impl FourslashTest {
             let program = project.get_program();
             let mut old_program: projectInfo = None;
             let id = project.id().0;
-            current_projects.insert(id.clone(), program);
+            current_projects.insert(id.clone(), program.clone());
             let project_change;
             if let Some(existing) = state_baseline.serialized_projects.get(&id) {
-                old_program = *existing;
-                if !same_program(old_program, program) {
+                old_program.clone_from(existing);
+                if !same_program(&old_program, &program) {
                     project_change = "*modified*";
                     projects_diff_table.set_has_change();
                 } else {
@@ -329,13 +328,13 @@ impl FourslashTest {
 
             let mut out = format!("  [{id}] {project_change}\n");
             let mut sub_diff = diffTable::new(options);
-            if let Some(program) = program {
+            if let Some(program) = &program {
                 for &file in program.get_source_files() {
                     let mut file_diff = "";
                     // No need to write "*new*" for files as its obvious
                     let file_name = file.file_name();
                     if project_change == "*modified*" {
-                        match old_program {
+                        match &old_program {
                             None => {
                                 if !is_lib_file(file_name) {
                                     file_diff = "*new*";
@@ -353,10 +352,10 @@ impl FourslashTest {
                     }
                 }
             }
-            if !same_program(old_program, program) {
+            if !same_program(&old_program, &program) {
                 if let Some(old_program) = old_program {
                     for &file in old_program.get_source_files() {
-                        if program.is_none_or(|p| p.get_source_file_by_path(file.path()).is_none()) {
+                        if program.as_ref().is_none_or(|p| p.get_source_file_by_path(file.path()).is_none()) {
                             sub_diff.add(file.file_name(), "*deleted*");
                         }
                     }

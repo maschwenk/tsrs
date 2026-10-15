@@ -170,7 +170,7 @@ impl LanguageService {
         let declaration_file_name = outputpaths::get_output_declaration_file_name_worker(
             file_name,
             &program.options(),
-            program,
+            program.program(),
         );
         let position_mapper = self.get_document_position_mapper(&declaration_file_name);
         let document_pos = position_mapper

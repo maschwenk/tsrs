@@ -622,7 +622,7 @@ fn should_update_project_on_package_json_change() {
     session.did_open_file(&ctx(), index_uri.clone(), 1, files[2].1.to_string(), lsproto::LanguageKind::TypeScript);
 
     // Verify initial state: #utils resolves to utils.ts, so utils.ts is in the program
-    let program = session.get_language_service(&ctx(), &index_uri).unwrap().get_program();
+    let program = session.get_language_service(&ctx(), &index_uri).unwrap().get_program().clone();
     assert_eq!(program.get_semantic_diagnostics(&ctx(), None).len(), 0, "should have no diagnostics with correct package.json");
 
     // Now change the package.json to point #utils at a non-existent file
@@ -644,6 +644,6 @@ fn should_update_project_on_package_json_change() {
         &[lsproto::FileEvent { uri: uri("file:///home/projects/myproject/package.json"), type_: lsproto::FileChangeType::Changed }],
     );
 
-    let updated_program = session.get_language_service(&ctx(), &index_uri).unwrap().get_program();
+    let updated_program = session.get_language_service(&ctx(), &index_uri).unwrap().get_program().clone();
     assert_eq!(updated_program.get_semantic_diagnostics(&ctx(), None).len(), 1, "should have diagnostics after package.json change");
 }

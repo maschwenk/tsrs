@@ -1,7 +1,6 @@
 use std::sync::{Arc, Mutex};
 
 use tsrs_ast::{SourceFile, SourceFileParseOptions};
-use tsrs_compiler::Program;
 use tsrs_core::collections::SyncMap;
 use tsrs_core::tspath::{self, Path};
 use tsrs_core::{alloc_str, P};
@@ -105,7 +104,7 @@ impl ResolutionHost for autoImportRegistryCloneHost {
 
 impl RegistryCloneHost for autoImportRegistryCloneHost {
     // autoimport.go:99
-    fn get_default_project(&self, path: &Path) -> (Option<ProjectID>, Option<&'static Program>) {
+    fn get_default_project(&self, path: &Path) -> (Option<ProjectID>, Option<tsrs_compiler::ProgramLease>) {
         let Some(project) = self.project_collection.get_default_project(path) else {
             return (None, None);
         };
@@ -113,7 +112,7 @@ impl RegistryCloneHost for autoImportRegistryCloneHost {
     }
 
     // autoimport.go:139
-    fn get_program_for_project(&self, project_id: &ProjectID) -> Option<&'static Program> {
+    fn get_program_for_project(&self, project_id: &ProjectID) -> Option<tsrs_compiler::ProgramLease> {
         let id = ID(project_id.0.clone());
         let project = self.project_collection.get_project(&id)?;
         project.get_program()

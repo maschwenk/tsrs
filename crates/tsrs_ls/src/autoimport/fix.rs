@@ -618,7 +618,7 @@ impl View {
             })];
         }
 
-        let import_kind = get_import_kind(self.importing_file, export, self.program, false /*forceImportKeyword*/);
+        let import_kind = get_import_kind(self.importing_file, export, &self.program, false /*forceImportKeyword*/);
         let add_as_type_only = get_add_as_type_only(is_valid_type_only_use_site, export, &self.program.options());
 
         let mut name = export.name().to_string();
@@ -673,7 +673,7 @@ impl View {
     fn try_use_existing_namespace_import(&self, export: &Export, usage_position: Option<lsproto::Position>) -> Option<Fix> {
         let usage_position = usage_position?;
 
-        if get_import_kind(self.importing_file, export, self.program, false /*forceImportKeyword*/) != lsproto::ImportKind::Named {
+        if get_import_kind(self.importing_file, export, &self.program, false /*forceImportKeyword*/) != lsproto::ImportKind::Named {
             return None;
         }
 
@@ -749,7 +749,7 @@ impl View {
             return None;
         }
 
-        let import_kind = get_import_kind(self.importing_file, export, self.program, false /*forceImportKeyword*/);
+        let import_kind = get_import_kind(self.importing_file, export, &self.program, false /*forceImportKeyword*/);
         if import_kind == lsproto::ImportKind::CommonJS || import_kind == lsproto::ImportKind::Namespace {
             return None;
         }

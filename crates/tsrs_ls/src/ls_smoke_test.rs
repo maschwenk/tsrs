@@ -85,7 +85,7 @@ fn setup_with(files: &[(&str, &str)], vs: bool) -> (LanguageService, Context) {
         fs_for_lines.read_file(file_name).map(|text| compute_lsp_line_starts(&text))
     });
     let host = Arc::new(TestHost { fs, converters });
-    let ls = new_language_service(ProjectID("/tsconfig.json".to_string()), program, host, "/index.ts");
+    let ls = new_language_service(ProjectID("/tsconfig.json".to_string()), tsrs_compiler::ProgramLease::from_static(program), host, "/index.ts");
     let mut caps = lsproto::ResolvedClientCapabilities::default();
     caps.text_document.hover.content_format = vec![lsproto::MarkupKind::Markdown];
     caps.text_document.definition.link_support = true;

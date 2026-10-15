@@ -15,16 +15,16 @@
 //   this acquisition only).
 // Outside a transport request (tests, in-process callers) it is a plain blocking lock.
 //
-// The gate map is keyed by the program's address. Entries are only created and used while the
-// requesting snapshot keeps that program alive, and an entry is removed as soon as no lease or waiter
-// refers to it, so a key never outlives its program while in use. Keys never leave this module.
+// The gate map is keyed by the program's address. Waiters borrow a ProgramLease and acquired gates retain
+// one until after their map entry is removed. An entry is removed as soon as no lease or waiter refers
+// to it, so a key never outlives its program while in use. Keys never leave this module.
 
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
 use rustc_hash::FxHashMap;
 use tsrs_api_transport::{ContentionWait, Holder};
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 
 use super::host::{CheckerError, CheckerErrorKind, CheckerResult};
 
@@ -51,14 +51,15 @@ fn lock_gates() -> std::sync::MutexGuard<'static, Option<FxHashMap<usize, Arc<Ga
 pub(crate) struct ApiCheckerLease {
     key: usize,
     gate: Arc<Gate>,
+    _program: ProgramLease,
 }
 
 const RESOURCE: &str = "the program's API checker";
 
-pub(crate) fn acquire(program: &'static Program) -> CheckerResult<ApiCheckerLease> {
-    let key = std::ptr::from_ref::<Program>(program) as usize;
+pub(crate) fn acquire(program: &ProgramLease) -> CheckerResult<ApiCheckerLease> {
+    let key = std::ptr::from_ref(program.program()) as usize;
     let gate = Arc::clone(lock_gates().get_or_insert_with(FxHashMap::default).entry(key).or_default());
-    let lease = |gate: Arc<Gate>| ApiCheckerLease { key, gate };
+    let lease = |gate: Arc<Gate>| ApiCheckerLease { key, gate, _program: program.clone() };
     let result = (|| {
         let mut st = gate.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         // One contention state per acquisition (created on first contention, dropped when this
@@ -118,6 +119,6 @@ impl Drop for ApiCheckerLease {
 }
 
 #[cfg(test)]
-pub(crate) fn is_tracked(program: &'static Program) -> bool {
-    lock_gates().as_ref().is_some_and(|m| m.contains_key(&(std::ptr::from_ref::<Program>(program) as usize)))
+pub(crate) fn is_tracked(program: &ProgramLease) -> bool {
+    lock_gates().as_ref().is_some_and(|m| m.contains_key(&(std::ptr::from_ref(program.program()) as usize)))
 }

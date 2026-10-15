@@ -62,7 +62,8 @@ fn setup_checker_pool_session(opts: CheckerPoolOptions) -> (Arc<Session>, Arc<ch
 }
 
 fn program_of(session: &Session) -> &'static Program {
-    session.get_language_service(&Context::background(), &lsproto::DocumentUri("file:///src/index.ts".to_string())).unwrap().get_program()
+    // setup_checker_pool_session retains this project for the test pools' legacy construction path.
+    session.snapshot().project_collection.configured_project(&Path::from("/src/tsconfig.json")).unwrap().program.unwrap()
 }
 
 // checkerpool_test.go:55

@@ -123,7 +123,7 @@ impl CheckerHost for SessionHost<'_> {
         self.session.node_handle_from(node).map_err(from_api_error)
     }
 
-    fn resolve_node_handle(&self, program: &'static Program, handle: &str) -> CheckerResult<P<Node>> {
+    fn resolve_node_handle(&self, program: &Program, handle: &str) -> CheckerResult<P<Node>> {
         self.session.resolve_node_handle(program, handle).map_err(from_api_error)
     }
 

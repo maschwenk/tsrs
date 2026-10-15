@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 
 use tsrs_ast::{self as ast, FindAncestorResult, Kind, Node, NodeFactory, NodeFactoryHooks, NodeFlags, SourceFile, Symbol, SymbolFlags, TokenFlags};
 use tsrs_checker::{Checker, Flags, LiteralValue, TypeFlags};
-use tsrs_compiler::Program;
+use tsrs_compiler::ProgramLease;
 use tsrs_core::context::Context;
 use tsrs_core::{apply_bulk_edits, compare_text_ranges, goslices, tspath, CompilerOptions, TextChange, TextRange, P};
 use tsrs_lsproto as lsproto;
@@ -60,7 +60,7 @@ impl LanguageService {
     fn get_completion_item_details(
         &self,
         ctx: &Context,
-        program: &'static Program,
+        program: &ProgramLease,
         checker: &mut Checker,
         position: u32,
         file: P<SourceFile>,
@@ -1132,7 +1132,7 @@ impl LanguageService {
         file: P<SourceFile>,
         position: u32,
         options: P<CompilerOptions>,
-        program: &'static Program,
+        program: &ProgramLease,
         c: &mut Checker,
     ) -> Result<Option<lsproto::CompletionItem>, lsproto::Error> {
         let clauses = case_block.as_case_block().clauses.nodes();

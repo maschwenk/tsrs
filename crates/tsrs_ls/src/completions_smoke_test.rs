@@ -111,7 +111,7 @@ fn setup(spec: &Value) -> (LanguageService, Context, Vec<(String, String)>) {
     items.insert("js/ts".to_string(), field(spec, "preferences").clone());
     let preferences = parse_user_preferences(&items);
     let host = Arc::new(TestHost { fs, converters, preferences });
-    let ls = new_language_service(ProjectID("/tsconfig.json".to_string()), program, host, "/index.ts");
+    let ls = new_language_service(ProjectID("/tsconfig.json".to_string()), tsrs_compiler::ProgramLease::from_static(program), host, "/index.ts");
     let caps = lsproto::ClientCapabilities::from_json(field(spec, "capabilities")).unwrap();
     let ctx = lsproto::with_client_capabilities(&Context::background(), Arc::new(caps.resolve()));
     (ls, ctx, files)
