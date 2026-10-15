@@ -8659,89 +8659,106 @@ impl Node {
     }
 
     pub fn name(&self) -> Option<P<Node>> {
-        match self.data_tag() {
-            NodeDataTag::VariableDeclaration => Some(self.payload::<VariableDeclaration>().name()),
-            NodeDataTag::ParameterDeclaration => Some(self.payload::<ParameterDeclaration>().name()),
-            NodeDataTag::BindingElement => self.payload::<BindingElement>().name(),
-            NodeDataTag::FunctionDeclaration => self.payload::<FunctionDeclaration>().name(),
-            NodeDataTag::ClassDeclaration => self.payload::<ClassDeclaration>().name(),
-            NodeDataTag::ClassExpression => self.payload::<ClassExpression>().name(),
-            NodeDataTag::InterfaceDeclaration => Some(self.payload::<InterfaceDeclaration>().name()),
-            NodeDataTag::TypeAliasDeclaration => Some(self.payload::<TypeAliasDeclaration>().name()),
-            NodeDataTag::EnumMember => Some(self.payload::<EnumMember>().name()),
-            NodeDataTag::EnumDeclaration => Some(self.payload::<EnumDeclaration>().name()),
-            NodeDataTag::NamespaceImport => Some(self.payload::<NamespaceImport>().name()),
-            NodeDataTag::NamespaceExportDeclaration => Some(self.payload::<NamespaceExportDeclaration>().name()),
-            NodeDataTag::NamespaceExport => Some(self.payload::<NamespaceExport>().name()),
-            NodeDataTag::ExportSpecifier => Some(self.payload::<ExportSpecifier>().name()),
-            NodeDataTag::GetAccessorDeclaration => Some(self.payload::<GetAccessorDeclaration>().name()),
-            NodeDataTag::SetAccessorDeclaration => Some(self.payload::<SetAccessorDeclaration>().name()),
-            NodeDataTag::MethodSignatureDeclaration => Some(self.payload::<MethodSignatureDeclaration>().name()),
-            NodeDataTag::MethodDeclaration => Some(self.payload::<MethodDeclaration>().name()),
-            NodeDataTag::PropertySignatureDeclaration => Some(self.payload::<PropertySignatureDeclaration>().name()),
-            NodeDataTag::PropertyDeclaration => Some(self.payload::<PropertyDeclaration>().name()),
-            NodeDataTag::FunctionExpression => self.payload::<FunctionExpression>().name(),
-            NodeDataTag::PropertyAccessExpression => Some(self.payload::<PropertyAccessExpression>().name()),
-            NodeDataTag::MetaProperty => Some(self.payload::<MetaProperty>().name()),
-            NodeDataTag::PropertyAssignment => Some(self.payload::<PropertyAssignment>().name()),
-            NodeDataTag::ShorthandPropertyAssignment => Some(self.payload::<ShorthandPropertyAssignment>().name()),
-            NodeDataTag::ImportAttribute => self.payload::<ImportAttribute>().name(),
-            NodeDataTag::NamedTupleMember => Some(self.payload::<NamedTupleMember>().name()),
-            NodeDataTag::JsxNamespacedName => Some(self.payload::<JsxNamespacedName>().name()),
-            NodeDataTag::JsxAttribute => Some(self.payload::<JsxAttribute>().name()),
-            NodeDataTag::JSDocCallbackTag => self.payload::<JSDocCallbackTag>().name(),
-            NodeDataTag::JSDocTypedefTag => self.payload::<JSDocTypedefTag>().name(),
-            NodeDataTag::JSDocNameReference => Some(self.payload::<JSDocNameReference>().name()),
-            NodeDataTag::ModuleDeclaration => Some(self.payload::<ModuleDeclaration>().name()),
-            NodeDataTag::ImportEqualsDeclaration => Some(self.payload::<ImportEqualsDeclaration>().name()),
-            NodeDataTag::ImportClause => self.payload::<ImportClause>().name(),
-            NodeDataTag::ImportSpecifier => Some(self.payload::<ImportSpecifier>().name()),
-            NodeDataTag::JSDocLink => self.payload::<JSDocLink>().name(),
-            NodeDataTag::JSDocLinkPlain => self.payload::<JSDocLinkPlain>().name(),
-            NodeDataTag::JSDocLinkCode => self.payload::<JSDocLinkCode>().name(),
-            NodeDataTag::TypeParameterDeclaration => Some(self.payload::<TypeParameterDeclaration>().name()),
-            NodeDataTag::JSDocParameterOrPropertyTag => Some(self.payload::<JSDocParameterOrPropertyTag>().name()),
-            _ => None,
+        const OFFSETS: [(usize, bool); 194] = {
+            let mut offsets = [(0, false); 194];
+            offsets[NodeDataTag::VariableDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<VariableDeclaration>, data.name), false);
+            offsets[NodeDataTag::ParameterDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<ParameterDeclaration>, data.name), false);
+            offsets[NodeDataTag::BindingElement as usize] = (std::mem::offset_of!(NodeAlloc<BindingElement>, data.name), true);
+            offsets[NodeDataTag::FunctionDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<FunctionDeclaration>, data.name), true);
+            offsets[NodeDataTag::ClassDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<ClassDeclaration>, data.class_like_base.name), true);
+            offsets[NodeDataTag::ClassExpression as usize] = (std::mem::offset_of!(NodeAlloc<ClassExpression>, data.class_like_base.name), true);
+            offsets[NodeDataTag::InterfaceDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<InterfaceDeclaration>, data.name), false);
+            offsets[NodeDataTag::TypeAliasDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<TypeAliasDeclaration>, data.name), false);
+            offsets[NodeDataTag::EnumMember as usize] = (std::mem::offset_of!(NodeAlloc<EnumMember>, data.named_member_base.name), false);
+            offsets[NodeDataTag::EnumDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<EnumDeclaration>, data.name), false);
+            offsets[NodeDataTag::NamespaceImport as usize] = (std::mem::offset_of!(NodeAlloc<NamespaceImport>, data.name), false);
+            offsets[NodeDataTag::NamespaceExportDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<NamespaceExportDeclaration>, data.name), false);
+            offsets[NodeDataTag::NamespaceExport as usize] = (std::mem::offset_of!(NodeAlloc<NamespaceExport>, data.name), false);
+            offsets[NodeDataTag::ExportSpecifier as usize] = (std::mem::offset_of!(NodeAlloc<ExportSpecifier>, data.name), false);
+            offsets[NodeDataTag::GetAccessorDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<GetAccessorDeclaration>, data.named_member_base.name), false);
+            offsets[NodeDataTag::SetAccessorDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<SetAccessorDeclaration>, data.named_member_base.name), false);
+            offsets[NodeDataTag::MethodSignatureDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<MethodSignatureDeclaration>, data.named_member_base.name), false);
+            offsets[NodeDataTag::MethodDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<MethodDeclaration>, data.named_member_base.name), false);
+            offsets[NodeDataTag::PropertySignatureDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<PropertySignatureDeclaration>, data.named_member_base.name), false);
+            offsets[NodeDataTag::PropertyDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<PropertyDeclaration>, data.named_member_base.name), false);
+            offsets[NodeDataTag::FunctionExpression as usize] = (std::mem::offset_of!(NodeAlloc<FunctionExpression>, data.name), true);
+            offsets[NodeDataTag::PropertyAccessExpression as usize] = (std::mem::offset_of!(NodeAlloc<PropertyAccessExpression>, data.name), false);
+            offsets[NodeDataTag::MetaProperty as usize] = (std::mem::offset_of!(NodeAlloc<MetaProperty>, data.name), false);
+            offsets[NodeDataTag::PropertyAssignment as usize] = (std::mem::offset_of!(NodeAlloc<PropertyAssignment>, data.named_member_base.name), false);
+            offsets[NodeDataTag::ShorthandPropertyAssignment as usize] = (std::mem::offset_of!(NodeAlloc<ShorthandPropertyAssignment>, data.named_member_base.name), false);
+            offsets[NodeDataTag::ImportAttribute as usize] = (std::mem::offset_of!(NodeAlloc<ImportAttribute>, data.name), true);
+            offsets[NodeDataTag::NamedTupleMember as usize] = (std::mem::offset_of!(NodeAlloc<NamedTupleMember>, data.name), false);
+            offsets[NodeDataTag::JsxNamespacedName as usize] = (std::mem::offset_of!(NodeAlloc<JsxNamespacedName>, data.name), false);
+            offsets[NodeDataTag::JsxAttribute as usize] = (std::mem::offset_of!(NodeAlloc<JsxAttribute>, data.name), false);
+            offsets[NodeDataTag::JSDocCallbackTag as usize] = (std::mem::offset_of!(NodeAlloc<JSDocCallbackTag>, data.name), true);
+            offsets[NodeDataTag::JSDocTypedefTag as usize] = (std::mem::offset_of!(NodeAlloc<JSDocTypedefTag>, data.name), true);
+            offsets[NodeDataTag::JSDocNameReference as usize] = (std::mem::offset_of!(NodeAlloc<JSDocNameReference>, data.name), false);
+            offsets[NodeDataTag::ModuleDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<ModuleDeclaration>, data.name), false);
+            offsets[NodeDataTag::ImportEqualsDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<ImportEqualsDeclaration>, data.name), false);
+            offsets[NodeDataTag::ImportClause as usize] = (std::mem::offset_of!(NodeAlloc<ImportClause>, data.name), true);
+            offsets[NodeDataTag::ImportSpecifier as usize] = (std::mem::offset_of!(NodeAlloc<ImportSpecifier>, data.name), false);
+            offsets[NodeDataTag::JSDocLink as usize] = (std::mem::offset_of!(NodeAlloc<JSDocLink>, data.name), true);
+            offsets[NodeDataTag::JSDocLinkPlain as usize] = (std::mem::offset_of!(NodeAlloc<JSDocLinkPlain>, data.name), true);
+            offsets[NodeDataTag::JSDocLinkCode as usize] = (std::mem::offset_of!(NodeAlloc<JSDocLinkCode>, data.name), true);
+            offsets[NodeDataTag::TypeParameterDeclaration as usize] = (std::mem::offset_of!(NodeAlloc<TypeParameterDeclaration>, data.name), false);
+            offsets[NodeDataTag::JSDocParameterOrPropertyTag as usize] = (std::mem::offset_of!(NodeAlloc<JSDocParameterOrPropertyTag>, data.name), false);
+            offsets
+        };
+        let (offset, optional) = OFFSETS[self.data_tag() as usize];
+        if offset == 0 { return None; }
+        if optional {
+            // SAFETY: the tag selects this allocation's optional name field. Both allocation forms
+            // have the same data offset, and the arena keeps the field alive.
+            unsafe { *tsrs_core::ptr::arena_neighbor::<_, Option<P<Node>>>(self, offset as isize) }
+        } else {
+            // SAFETY: as above, but the selected field is a required name, stored as P<Node>.
+            Some(unsafe { *tsrs_core::ptr::arena_neighbor::<_, P<Node>>(self, offset as isize) })
         }
     }
 
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
-        match self.data_tag() {
-            NodeDataTag::VariableStatement => self.payload::<VariableStatement>().modifiers(),
-            NodeDataTag::ParameterDeclaration => self.payload::<ParameterDeclaration>().modifiers(),
-            NodeDataTag::MissingDeclaration => self.payload::<MissingDeclaration>().modifiers(),
-            NodeDataTag::FunctionDeclaration => self.payload::<FunctionDeclaration>().modifiers(),
-            NodeDataTag::ClassDeclaration => self.payload::<ClassDeclaration>().modifiers(),
-            NodeDataTag::ClassExpression => self.payload::<ClassExpression>().modifiers(),
-            NodeDataTag::InterfaceDeclaration => self.payload::<InterfaceDeclaration>().modifiers(),
-            NodeDataTag::TypeAliasDeclaration => self.payload::<TypeAliasDeclaration>().modifiers(),
-            NodeDataTag::EnumMember => self.payload::<EnumMember>().modifiers(),
-            NodeDataTag::EnumDeclaration => self.payload::<EnumDeclaration>().modifiers(),
-            NodeDataTag::ImportDeclaration => self.payload::<ImportDeclaration>().modifiers(),
-            NodeDataTag::ExportAssignment => self.payload::<ExportAssignment>().modifiers(),
-            NodeDataTag::NamespaceExportDeclaration => self.payload::<NamespaceExportDeclaration>().modifiers(),
-            NodeDataTag::ConstructorDeclaration => self.payload::<ConstructorDeclaration>().modifiers(),
-            NodeDataTag::GetAccessorDeclaration => self.payload::<GetAccessorDeclaration>().modifiers(),
-            NodeDataTag::SetAccessorDeclaration => self.payload::<SetAccessorDeclaration>().modifiers(),
-            NodeDataTag::IndexSignatureDeclaration => self.payload::<IndexSignatureDeclaration>().modifiers(),
-            NodeDataTag::MethodSignatureDeclaration => self.payload::<MethodSignatureDeclaration>().modifiers(),
-            NodeDataTag::MethodDeclaration => self.payload::<MethodDeclaration>().modifiers(),
-            NodeDataTag::PropertySignatureDeclaration => self.payload::<PropertySignatureDeclaration>().modifiers(),
-            NodeDataTag::PropertyDeclaration => self.payload::<PropertyDeclaration>().modifiers(),
-            NodeDataTag::ClassStaticBlockDeclaration => self.payload::<ClassStaticBlockDeclaration>().modifiers(),
-            NodeDataTag::BinaryExpression => self.payload::<BinaryExpression>().modifiers(),
-            NodeDataTag::ArrowFunction => self.payload::<ArrowFunction>().modifiers(),
-            NodeDataTag::FunctionExpression => self.payload::<FunctionExpression>().modifiers(),
-            NodeDataTag::PropertyAssignment => self.payload::<PropertyAssignment>().modifiers(),
-            NodeDataTag::ShorthandPropertyAssignment => self.payload::<ShorthandPropertyAssignment>().modifiers(),
-            NodeDataTag::FunctionTypeNode => self.payload::<FunctionTypeNode>().modifiers(),
-            NodeDataTag::ConstructorTypeNode => self.payload::<ConstructorTypeNode>().modifiers(),
-            NodeDataTag::ModuleDeclaration => self.payload::<ModuleDeclaration>().modifiers(),
-            NodeDataTag::ImportEqualsDeclaration => self.payload::<ImportEqualsDeclaration>().modifiers(),
-            NodeDataTag::ExportDeclaration => self.payload::<ExportDeclaration>().modifiers(),
-            NodeDataTag::TypeParameterDeclaration => self.payload::<TypeParameterDeclaration>().modifiers(),
-            _ => None,
-        }
+        const OFFSETS: [usize; 194] = {
+            let mut offsets = [0; 194];
+            offsets[NodeDataTag::VariableStatement as usize] = std::mem::offset_of!(NodeAlloc<VariableStatement>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::ParameterDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ParameterDeclaration>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::MissingDeclaration as usize] = std::mem::offset_of!(NodeAlloc<MissingDeclaration>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::FunctionDeclaration as usize] = std::mem::offset_of!(NodeAlloc<FunctionDeclaration>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::ClassDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ClassDeclaration>, data.class_like_base.modifiers_base.modifiers);
+            offsets[NodeDataTag::ClassExpression as usize] = std::mem::offset_of!(NodeAlloc<ClassExpression>, data.class_like_base.modifiers_base.modifiers);
+            offsets[NodeDataTag::InterfaceDeclaration as usize] = std::mem::offset_of!(NodeAlloc<InterfaceDeclaration>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::TypeAliasDeclaration as usize] = std::mem::offset_of!(NodeAlloc<TypeAliasDeclaration>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::EnumMember as usize] = std::mem::offset_of!(NodeAlloc<EnumMember>, data.named_member_base.modifiers_base.modifiers);
+            offsets[NodeDataTag::EnumDeclaration as usize] = std::mem::offset_of!(NodeAlloc<EnumDeclaration>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::ImportDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ImportDeclaration>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::ExportAssignment as usize] = std::mem::offset_of!(NodeAlloc<ExportAssignment>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::NamespaceExportDeclaration as usize] = std::mem::offset_of!(NodeAlloc<NamespaceExportDeclaration>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::ConstructorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ConstructorDeclaration>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::GetAccessorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<GetAccessorDeclaration>, data.named_member_base.modifiers_base.modifiers);
+            offsets[NodeDataTag::SetAccessorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<SetAccessorDeclaration>, data.named_member_base.modifiers_base.modifiers);
+            offsets[NodeDataTag::IndexSignatureDeclaration as usize] = std::mem::offset_of!(NodeAlloc<IndexSignatureDeclaration>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::MethodSignatureDeclaration as usize] = std::mem::offset_of!(NodeAlloc<MethodSignatureDeclaration>, data.named_member_base.modifiers_base.modifiers);
+            offsets[NodeDataTag::MethodDeclaration as usize] = std::mem::offset_of!(NodeAlloc<MethodDeclaration>, data.named_member_base.modifiers_base.modifiers);
+            offsets[NodeDataTag::PropertySignatureDeclaration as usize] = std::mem::offset_of!(NodeAlloc<PropertySignatureDeclaration>, data.named_member_base.modifiers_base.modifiers);
+            offsets[NodeDataTag::PropertyDeclaration as usize] = std::mem::offset_of!(NodeAlloc<PropertyDeclaration>, data.named_member_base.modifiers_base.modifiers);
+            offsets[NodeDataTag::ClassStaticBlockDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ClassStaticBlockDeclaration>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::BinaryExpression as usize] = std::mem::offset_of!(NodeAlloc<BinaryExpression>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::ArrowFunction as usize] = std::mem::offset_of!(NodeAlloc<ArrowFunction>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::FunctionExpression as usize] = std::mem::offset_of!(NodeAlloc<FunctionExpression>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::PropertyAssignment as usize] = std::mem::offset_of!(NodeAlloc<PropertyAssignment>, data.named_member_base.modifiers_base.modifiers);
+            offsets[NodeDataTag::ShorthandPropertyAssignment as usize] = std::mem::offset_of!(NodeAlloc<ShorthandPropertyAssignment>, data.named_member_base.modifiers_base.modifiers);
+            offsets[NodeDataTag::FunctionTypeNode as usize] = std::mem::offset_of!(NodeAlloc<FunctionTypeNode>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::ConstructorTypeNode as usize] = std::mem::offset_of!(NodeAlloc<ConstructorTypeNode>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::ModuleDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ModuleDeclaration>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::ImportEqualsDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ImportEqualsDeclaration>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::ExportDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ExportDeclaration>, data.modifiers_base.modifiers);
+            offsets[NodeDataTag::TypeParameterDeclaration as usize] = std::mem::offset_of!(NodeAlloc<TypeParameterDeclaration>, data.modifiers_base.modifiers);
+            offsets
+        };
+        let offset = OFFSETS[self.data_tag() as usize];
+        if offset == 0 { return None; }
+        // SAFETY: the tag selects the concrete allocation and its modifiers cell. Both allocation
+        // forms have the same data offset; read through OwnedCell to preserve its access checks.
+        unsafe { tsrs_core::ptr::arena_neighbor::<_, OwnedCell<Option<P<ModifierList>>>>(self, offset as isize) }.get()
     }
 
     pub(crate) fn set_modifiers_data(&self, modifiers: Option<P<ModifierList>>) {
@@ -8784,234 +8801,288 @@ impl Node {
     }
 
     pub(crate) fn flow_node_base(&self) -> Option<&'static FlowNodeBase> {
-        match self.data_tag() {
-            NodeDataTag::QualifiedName => Some(&self.payload::<QualifiedName>().flow_node_base),
-            NodeDataTag::EmptyStatement => Some(&self.payload::<EmptyStatement>().flow_node_base),
-            NodeDataTag::IfStatement => Some(&self.payload::<IfStatement>().flow_node_base),
-            NodeDataTag::DoStatement => Some(&self.payload::<DoStatement>().iteration_statement_base.flow_node_base),
-            NodeDataTag::WhileStatement => Some(&self.payload::<WhileStatement>().iteration_statement_base.flow_node_base),
-            NodeDataTag::ForStatement => Some(&self.payload::<ForStatement>().iteration_statement_base.flow_node_base),
-            NodeDataTag::ForInOrOfStatement => Some(&self.payload::<ForInOrOfStatement>().flow_node_base),
-            NodeDataTag::BreakStatement => Some(&self.payload::<BreakStatement>().flow_node_base),
-            NodeDataTag::ContinueStatement => Some(&self.payload::<ContinueStatement>().flow_node_base),
-            NodeDataTag::ReturnStatement => Some(&self.payload::<ReturnStatement>().flow_node_base),
-            NodeDataTag::WithStatement => Some(&self.payload::<WithStatement>().flow_node_base),
-            NodeDataTag::SwitchStatement => Some(&self.payload::<SwitchStatement>().flow_node_base),
-            NodeDataTag::ThrowStatement => Some(&self.payload::<ThrowStatement>().flow_node_base),
-            NodeDataTag::TryStatement => Some(&self.payload::<TryStatement>().flow_node_base),
-            NodeDataTag::DebuggerStatement => Some(&self.payload::<DebuggerStatement>().flow_node_base),
-            NodeDataTag::LabeledStatement => Some(&self.payload::<LabeledStatement>().flow_node_base),
-            NodeDataTag::ExpressionStatement => Some(&self.payload::<ExpressionStatement>().flow_node_base),
-            NodeDataTag::Block => Some(&self.payload::<Block>().flow_node_base),
-            NodeDataTag::VariableStatement => Some(&self.payload::<VariableStatement>().flow_node_base),
-            NodeDataTag::BindingElement => Some(&self.payload::<BindingElement>().flow_node_base),
-            NodeDataTag::MissingDeclaration => Some(&self.payload::<MissingDeclaration>().flow_node_base),
-            NodeDataTag::FunctionDeclaration => Some(&self.payload::<FunctionDeclaration>().flow_node_base),
-            NodeDataTag::ClassDeclaration => Some(&self.payload::<ClassDeclaration>().flow_node_base),
-            NodeDataTag::InterfaceDeclaration => Some(&self.payload::<InterfaceDeclaration>().flow_node_base),
-            NodeDataTag::TypeAliasDeclaration => Some(&self.payload::<TypeAliasDeclaration>().flow_node_base),
-            NodeDataTag::EnumDeclaration => Some(&self.payload::<EnumDeclaration>().flow_node_base),
-            NodeDataTag::ModuleBlock => Some(&self.payload::<ModuleBlock>().flow_node_base),
-            NodeDataTag::NotEmittedStatement => Some(&self.payload::<NotEmittedStatement>().flow_node_base),
-            NodeDataTag::ImportDeclaration => Some(&self.payload::<ImportDeclaration>().flow_node_base),
-            NodeDataTag::ExportAssignment => Some(&self.payload::<ExportAssignment>().flow_node_base),
-            NodeDataTag::NamespaceExportDeclaration => Some(&self.payload::<NamespaceExportDeclaration>().flow_node_base),
-            NodeDataTag::GetAccessorDeclaration => Some(&self.payload::<GetAccessorDeclaration>().flow_node_base),
-            NodeDataTag::SetAccessorDeclaration => Some(&self.payload::<SetAccessorDeclaration>().flow_node_base),
-            NodeDataTag::MethodDeclaration => Some(&self.payload::<MethodDeclaration>().flow_node_base),
-            NodeDataTag::KeywordExpression => Some(&self.payload::<KeywordExpression>().flow_node_base),
-            NodeDataTag::ArrowFunction => Some(&self.payload::<ArrowFunction>().flow_node_base),
-            NodeDataTag::FunctionExpression => Some(&self.payload::<FunctionExpression>().flow_node_base),
-            NodeDataTag::PropertyAccessExpression => Some(&self.payload::<PropertyAccessExpression>().flow_node_base),
-            NodeDataTag::ElementAccessExpression => Some(&self.payload::<ElementAccessExpression>().flow_node_base),
-            NodeDataTag::MetaProperty => Some(&self.payload::<MetaProperty>().flow_node_base),
-            NodeDataTag::ModuleDeclaration => Some(&self.payload::<ModuleDeclaration>().flow_node_base),
-            NodeDataTag::ImportEqualsDeclaration => Some(&self.payload::<ImportEqualsDeclaration>().flow_node_base),
-            NodeDataTag::ExportDeclaration => Some(&self.payload::<ExportDeclaration>().flow_node_base),
-            _ => None,
-        }
+        const OFFSETS: [usize; 194] = {
+            let mut offsets = [0; 194];
+            offsets[NodeDataTag::QualifiedName as usize] = std::mem::offset_of!(NodeAlloc<QualifiedName>, data.flow_node_base);
+            offsets[NodeDataTag::EmptyStatement as usize] = std::mem::offset_of!(NodeAlloc<EmptyStatement>, data.flow_node_base);
+            offsets[NodeDataTag::IfStatement as usize] = std::mem::offset_of!(NodeAlloc<IfStatement>, data.flow_node_base);
+            offsets[NodeDataTag::DoStatement as usize] = std::mem::offset_of!(NodeAlloc<DoStatement>, data.iteration_statement_base.flow_node_base);
+            offsets[NodeDataTag::WhileStatement as usize] = std::mem::offset_of!(NodeAlloc<WhileStatement>, data.iteration_statement_base.flow_node_base);
+            offsets[NodeDataTag::ForStatement as usize] = std::mem::offset_of!(NodeAlloc<ForStatement>, data.iteration_statement_base.flow_node_base);
+            offsets[NodeDataTag::ForInOrOfStatement as usize] = std::mem::offset_of!(NodeAlloc<ForInOrOfStatement>, data.flow_node_base);
+            offsets[NodeDataTag::BreakStatement as usize] = std::mem::offset_of!(NodeAlloc<BreakStatement>, data.flow_node_base);
+            offsets[NodeDataTag::ContinueStatement as usize] = std::mem::offset_of!(NodeAlloc<ContinueStatement>, data.flow_node_base);
+            offsets[NodeDataTag::ReturnStatement as usize] = std::mem::offset_of!(NodeAlloc<ReturnStatement>, data.flow_node_base);
+            offsets[NodeDataTag::WithStatement as usize] = std::mem::offset_of!(NodeAlloc<WithStatement>, data.flow_node_base);
+            offsets[NodeDataTag::SwitchStatement as usize] = std::mem::offset_of!(NodeAlloc<SwitchStatement>, data.flow_node_base);
+            offsets[NodeDataTag::ThrowStatement as usize] = std::mem::offset_of!(NodeAlloc<ThrowStatement>, data.flow_node_base);
+            offsets[NodeDataTag::TryStatement as usize] = std::mem::offset_of!(NodeAlloc<TryStatement>, data.flow_node_base);
+            offsets[NodeDataTag::DebuggerStatement as usize] = std::mem::offset_of!(NodeAlloc<DebuggerStatement>, data.flow_node_base);
+            offsets[NodeDataTag::LabeledStatement as usize] = std::mem::offset_of!(NodeAlloc<LabeledStatement>, data.flow_node_base);
+            offsets[NodeDataTag::ExpressionStatement as usize] = std::mem::offset_of!(NodeAlloc<ExpressionStatement>, data.flow_node_base);
+            offsets[NodeDataTag::Block as usize] = std::mem::offset_of!(NodeAlloc<Block>, data.flow_node_base);
+            offsets[NodeDataTag::VariableStatement as usize] = std::mem::offset_of!(NodeAlloc<VariableStatement>, data.flow_node_base);
+            offsets[NodeDataTag::BindingElement as usize] = std::mem::offset_of!(NodeAlloc<BindingElement>, data.flow_node_base);
+            offsets[NodeDataTag::MissingDeclaration as usize] = std::mem::offset_of!(NodeAlloc<MissingDeclaration>, data.flow_node_base);
+            offsets[NodeDataTag::FunctionDeclaration as usize] = std::mem::offset_of!(NodeAlloc<FunctionDeclaration>, data.flow_node_base);
+            offsets[NodeDataTag::ClassDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ClassDeclaration>, data.flow_node_base);
+            offsets[NodeDataTag::InterfaceDeclaration as usize] = std::mem::offset_of!(NodeAlloc<InterfaceDeclaration>, data.flow_node_base);
+            offsets[NodeDataTag::TypeAliasDeclaration as usize] = std::mem::offset_of!(NodeAlloc<TypeAliasDeclaration>, data.flow_node_base);
+            offsets[NodeDataTag::EnumDeclaration as usize] = std::mem::offset_of!(NodeAlloc<EnumDeclaration>, data.flow_node_base);
+            offsets[NodeDataTag::ModuleBlock as usize] = std::mem::offset_of!(NodeAlloc<ModuleBlock>, data.flow_node_base);
+            offsets[NodeDataTag::NotEmittedStatement as usize] = std::mem::offset_of!(NodeAlloc<NotEmittedStatement>, data.flow_node_base);
+            offsets[NodeDataTag::ImportDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ImportDeclaration>, data.flow_node_base);
+            offsets[NodeDataTag::ExportAssignment as usize] = std::mem::offset_of!(NodeAlloc<ExportAssignment>, data.flow_node_base);
+            offsets[NodeDataTag::NamespaceExportDeclaration as usize] = std::mem::offset_of!(NodeAlloc<NamespaceExportDeclaration>, data.flow_node_base);
+            offsets[NodeDataTag::GetAccessorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<GetAccessorDeclaration>, data.flow_node_base);
+            offsets[NodeDataTag::SetAccessorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<SetAccessorDeclaration>, data.flow_node_base);
+            offsets[NodeDataTag::MethodDeclaration as usize] = std::mem::offset_of!(NodeAlloc<MethodDeclaration>, data.flow_node_base);
+            offsets[NodeDataTag::KeywordExpression as usize] = std::mem::offset_of!(NodeAlloc<KeywordExpression>, data.flow_node_base);
+            offsets[NodeDataTag::ArrowFunction as usize] = std::mem::offset_of!(NodeAlloc<ArrowFunction>, data.flow_node_base);
+            offsets[NodeDataTag::FunctionExpression as usize] = std::mem::offset_of!(NodeAlloc<FunctionExpression>, data.flow_node_base);
+            offsets[NodeDataTag::PropertyAccessExpression as usize] = std::mem::offset_of!(NodeAlloc<PropertyAccessExpression>, data.flow_node_base);
+            offsets[NodeDataTag::ElementAccessExpression as usize] = std::mem::offset_of!(NodeAlloc<ElementAccessExpression>, data.flow_node_base);
+            offsets[NodeDataTag::MetaProperty as usize] = std::mem::offset_of!(NodeAlloc<MetaProperty>, data.flow_node_base);
+            offsets[NodeDataTag::ModuleDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ModuleDeclaration>, data.flow_node_base);
+            offsets[NodeDataTag::ImportEqualsDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ImportEqualsDeclaration>, data.flow_node_base);
+            offsets[NodeDataTag::ExportDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ExportDeclaration>, data.flow_node_base);
+            offsets
+        };
+        let offset = OFFSETS[self.data_tag() as usize];
+        if offset == 0 { return None; }
+        // SAFETY: the tag selects the concrete allocation and its embedded FlowNodeBase. Both
+        // allocation forms have the same data offset, and the arena keeps the field alive.
+        Some(unsafe { tsrs_core::ptr::arena_neighbor(self, offset as isize) })
     }
 
     pub fn declaration_data(&self) -> Option<&'static DeclarationBase> {
-        match self.data_tag() {
-            NodeDataTag::VariableDeclaration => Some(&self.payload::<VariableDeclaration>().declaration_base),
-            NodeDataTag::ParameterDeclaration => Some(&self.payload::<ParameterDeclaration>().declaration_base),
-            NodeDataTag::BindingElement => Some(&self.payload::<BindingElement>().declaration_base),
-            NodeDataTag::MissingDeclaration => Some(&self.payload::<MissingDeclaration>().declaration_base),
-            NodeDataTag::FunctionDeclaration => Some(&self.payload::<FunctionDeclaration>().declaration_base),
-            NodeDataTag::ClassDeclaration => Some(&self.payload::<ClassDeclaration>().declaration_base),
-            NodeDataTag::ClassExpression => Some(&self.payload::<ClassExpression>().declaration_base),
-            NodeDataTag::InterfaceDeclaration => Some(&self.payload::<InterfaceDeclaration>().declaration_base),
-            NodeDataTag::TypeAliasDeclaration => Some(&self.payload::<TypeAliasDeclaration>().declaration_base),
-            NodeDataTag::EnumMember => Some(&self.payload::<EnumMember>().declaration_base),
-            NodeDataTag::EnumDeclaration => Some(&self.payload::<EnumDeclaration>().declaration_base),
-            NodeDataTag::NotEmittedTypeElement => Some(&self.payload::<NotEmittedTypeElement>().declaration_base),
-            NodeDataTag::ImportDeclaration => Some(&self.payload::<ImportDeclaration>().declaration_base),
-            NodeDataTag::NamespaceImport => Some(&self.payload::<NamespaceImport>().declaration_base),
-            NodeDataTag::ExportAssignment => Some(&self.payload::<ExportAssignment>().declaration_base),
-            NodeDataTag::NamespaceExportDeclaration => Some(&self.payload::<NamespaceExportDeclaration>().declaration_base),
-            NodeDataTag::NamespaceExport => Some(&self.payload::<NamespaceExport>().declaration_base),
-            NodeDataTag::ExportSpecifier => Some(&self.payload::<ExportSpecifier>().declaration_base),
-            NodeDataTag::CallSignatureDeclaration => Some(&self.payload::<CallSignatureDeclaration>().declaration_base),
-            NodeDataTag::ConstructSignatureDeclaration => Some(&self.payload::<ConstructSignatureDeclaration>().declaration_base),
-            NodeDataTag::ConstructorDeclaration => Some(&self.payload::<ConstructorDeclaration>().declaration_base),
-            NodeDataTag::GetAccessorDeclaration => Some(&self.payload::<GetAccessorDeclaration>().declaration_base),
-            NodeDataTag::SetAccessorDeclaration => Some(&self.payload::<SetAccessorDeclaration>().declaration_base),
-            NodeDataTag::IndexSignatureDeclaration => Some(&self.payload::<IndexSignatureDeclaration>().declaration_base),
-            NodeDataTag::MethodSignatureDeclaration => Some(&self.payload::<MethodSignatureDeclaration>().declaration_base),
-            NodeDataTag::MethodDeclaration => Some(&self.payload::<MethodDeclaration>().declaration_base),
-            NodeDataTag::PropertySignatureDeclaration => Some(&self.payload::<PropertySignatureDeclaration>().declaration_base),
-            NodeDataTag::PropertyDeclaration => Some(&self.payload::<PropertyDeclaration>().declaration_base),
-            NodeDataTag::SemicolonClassElement => Some(&self.payload::<SemicolonClassElement>().declaration_base),
-            NodeDataTag::ClassStaticBlockDeclaration => Some(&self.payload::<ClassStaticBlockDeclaration>().declaration_base),
-            NodeDataTag::NoSubstitutionTemplateLiteral => Some(&self.payload::<NoSubstitutionTemplateLiteral>().declaration_base),
-            NodeDataTag::BinaryExpression => Some(&self.payload::<BinaryExpression>().declaration_base),
-            NodeDataTag::ArrowFunction => Some(&self.payload::<ArrowFunction>().declaration_base),
-            NodeDataTag::FunctionExpression => Some(&self.payload::<FunctionExpression>().declaration_base),
-            NodeDataTag::CallExpression => Some(&self.payload::<CallExpression>().declaration_base),
-            NodeDataTag::ObjectLiteralExpression => Some(&self.payload::<ObjectLiteralExpression>().declaration_base),
-            NodeDataTag::SpreadAssignment => Some(&self.payload::<SpreadAssignment>().declaration_base),
-            NodeDataTag::PropertyAssignment => Some(&self.payload::<PropertyAssignment>().declaration_base),
-            NodeDataTag::ShorthandPropertyAssignment => Some(&self.payload::<ShorthandPropertyAssignment>().declaration_base),
-            NodeDataTag::MappedTypeNode => Some(&self.payload::<MappedTypeNode>().declaration_base),
-            NodeDataTag::TypeLiteralNode => Some(&self.payload::<TypeLiteralNode>().declaration_base),
-            NodeDataTag::NamedTupleMember => Some(&self.payload::<NamedTupleMember>().declaration_base),
-            NodeDataTag::FunctionTypeNode => Some(&self.payload::<FunctionTypeNode>().declaration_base),
-            NodeDataTag::ConstructorTypeNode => Some(&self.payload::<ConstructorTypeNode>().declaration_base),
-            NodeDataTag::JsxAttributes => Some(&self.payload::<JsxAttributes>().declaration_base),
-            NodeDataTag::JsxAttribute => Some(&self.payload::<JsxAttribute>().declaration_base),
-            NodeDataTag::JsxSpreadAttribute => Some(&self.payload::<JsxSpreadAttribute>().declaration_base),
-            NodeDataTag::JSDocSignature => Some(&self.payload::<JSDocSignature>().declaration_base),
-            NodeDataTag::SourceFile => Some(&self.payload::<SourceFile>().declaration_base),
-            NodeDataTag::ModuleDeclaration => Some(&self.payload::<ModuleDeclaration>().declaration_base),
-            NodeDataTag::ImportEqualsDeclaration => Some(&self.payload::<ImportEqualsDeclaration>().declaration_base),
-            NodeDataTag::ExportDeclaration => Some(&self.payload::<ExportDeclaration>().declaration_base),
-            NodeDataTag::ImportClause => Some(&self.payload::<ImportClause>().declaration_base),
-            NodeDataTag::ImportSpecifier => Some(&self.payload::<ImportSpecifier>().declaration_base),
-            NodeDataTag::TypeParameterDeclaration => Some(&self.payload::<TypeParameterDeclaration>().declaration_base),
-            NodeDataTag::JSDocTypeLiteral => Some(&self.payload::<JSDocTypeLiteral>().declaration_base),
-            _ => None,
-        }
+        const OFFSETS: [usize; 194] = {
+            let mut offsets = [0; 194];
+            offsets[NodeDataTag::VariableDeclaration as usize] = std::mem::offset_of!(NodeAlloc<VariableDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::ParameterDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ParameterDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::BindingElement as usize] = std::mem::offset_of!(NodeAlloc<BindingElement>, data.declaration_base);
+            offsets[NodeDataTag::MissingDeclaration as usize] = std::mem::offset_of!(NodeAlloc<MissingDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::FunctionDeclaration as usize] = std::mem::offset_of!(NodeAlloc<FunctionDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::ClassDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ClassDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::ClassExpression as usize] = std::mem::offset_of!(NodeAlloc<ClassExpression>, data.declaration_base);
+            offsets[NodeDataTag::InterfaceDeclaration as usize] = std::mem::offset_of!(NodeAlloc<InterfaceDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::TypeAliasDeclaration as usize] = std::mem::offset_of!(NodeAlloc<TypeAliasDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::EnumMember as usize] = std::mem::offset_of!(NodeAlloc<EnumMember>, data.declaration_base);
+            offsets[NodeDataTag::EnumDeclaration as usize] = std::mem::offset_of!(NodeAlloc<EnumDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::NotEmittedTypeElement as usize] = std::mem::offset_of!(NodeAlloc<NotEmittedTypeElement>, data.declaration_base);
+            offsets[NodeDataTag::ImportDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ImportDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::NamespaceImport as usize] = std::mem::offset_of!(NodeAlloc<NamespaceImport>, data.declaration_base);
+            offsets[NodeDataTag::ExportAssignment as usize] = std::mem::offset_of!(NodeAlloc<ExportAssignment>, data.declaration_base);
+            offsets[NodeDataTag::NamespaceExportDeclaration as usize] = std::mem::offset_of!(NodeAlloc<NamespaceExportDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::NamespaceExport as usize] = std::mem::offset_of!(NodeAlloc<NamespaceExport>, data.declaration_base);
+            offsets[NodeDataTag::ExportSpecifier as usize] = std::mem::offset_of!(NodeAlloc<ExportSpecifier>, data.declaration_base);
+            offsets[NodeDataTag::CallSignatureDeclaration as usize] = std::mem::offset_of!(NodeAlloc<CallSignatureDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::ConstructSignatureDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ConstructSignatureDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::ConstructorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ConstructorDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::GetAccessorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<GetAccessorDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::SetAccessorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<SetAccessorDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::IndexSignatureDeclaration as usize] = std::mem::offset_of!(NodeAlloc<IndexSignatureDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::MethodSignatureDeclaration as usize] = std::mem::offset_of!(NodeAlloc<MethodSignatureDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::MethodDeclaration as usize] = std::mem::offset_of!(NodeAlloc<MethodDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::PropertySignatureDeclaration as usize] = std::mem::offset_of!(NodeAlloc<PropertySignatureDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::PropertyDeclaration as usize] = std::mem::offset_of!(NodeAlloc<PropertyDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::SemicolonClassElement as usize] = std::mem::offset_of!(NodeAlloc<SemicolonClassElement>, data.declaration_base);
+            offsets[NodeDataTag::ClassStaticBlockDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ClassStaticBlockDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::NoSubstitutionTemplateLiteral as usize] = std::mem::offset_of!(NodeAlloc<NoSubstitutionTemplateLiteral>, data.declaration_base);
+            offsets[NodeDataTag::BinaryExpression as usize] = std::mem::offset_of!(NodeAlloc<BinaryExpression>, data.declaration_base);
+            offsets[NodeDataTag::ArrowFunction as usize] = std::mem::offset_of!(NodeAlloc<ArrowFunction>, data.declaration_base);
+            offsets[NodeDataTag::FunctionExpression as usize] = std::mem::offset_of!(NodeAlloc<FunctionExpression>, data.declaration_base);
+            offsets[NodeDataTag::CallExpression as usize] = std::mem::offset_of!(NodeAlloc<CallExpression>, data.declaration_base);
+            offsets[NodeDataTag::ObjectLiteralExpression as usize] = std::mem::offset_of!(NodeAlloc<ObjectLiteralExpression>, data.declaration_base);
+            offsets[NodeDataTag::SpreadAssignment as usize] = std::mem::offset_of!(NodeAlloc<SpreadAssignment>, data.declaration_base);
+            offsets[NodeDataTag::PropertyAssignment as usize] = std::mem::offset_of!(NodeAlloc<PropertyAssignment>, data.declaration_base);
+            offsets[NodeDataTag::ShorthandPropertyAssignment as usize] = std::mem::offset_of!(NodeAlloc<ShorthandPropertyAssignment>, data.declaration_base);
+            offsets[NodeDataTag::MappedTypeNode as usize] = std::mem::offset_of!(NodeAlloc<MappedTypeNode>, data.declaration_base);
+            offsets[NodeDataTag::TypeLiteralNode as usize] = std::mem::offset_of!(NodeAlloc<TypeLiteralNode>, data.declaration_base);
+            offsets[NodeDataTag::NamedTupleMember as usize] = std::mem::offset_of!(NodeAlloc<NamedTupleMember>, data.declaration_base);
+            offsets[NodeDataTag::FunctionTypeNode as usize] = std::mem::offset_of!(NodeAlloc<FunctionTypeNode>, data.declaration_base);
+            offsets[NodeDataTag::ConstructorTypeNode as usize] = std::mem::offset_of!(NodeAlloc<ConstructorTypeNode>, data.declaration_base);
+            offsets[NodeDataTag::JsxAttributes as usize] = std::mem::offset_of!(NodeAlloc<JsxAttributes>, data.declaration_base);
+            offsets[NodeDataTag::JsxAttribute as usize] = std::mem::offset_of!(NodeAlloc<JsxAttribute>, data.declaration_base);
+            offsets[NodeDataTag::JsxSpreadAttribute as usize] = std::mem::offset_of!(NodeAlloc<JsxSpreadAttribute>, data.declaration_base);
+            offsets[NodeDataTag::JSDocSignature as usize] = std::mem::offset_of!(NodeAlloc<JSDocSignature>, data.declaration_base);
+            offsets[NodeDataTag::SourceFile as usize] = std::mem::offset_of!(NodeAlloc<SourceFile>, data.declaration_base);
+            offsets[NodeDataTag::ModuleDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ModuleDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::ImportEqualsDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ImportEqualsDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::ExportDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ExportDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::ImportClause as usize] = std::mem::offset_of!(NodeAlloc<ImportClause>, data.declaration_base);
+            offsets[NodeDataTag::ImportSpecifier as usize] = std::mem::offset_of!(NodeAlloc<ImportSpecifier>, data.declaration_base);
+            offsets[NodeDataTag::TypeParameterDeclaration as usize] = std::mem::offset_of!(NodeAlloc<TypeParameterDeclaration>, data.declaration_base);
+            offsets[NodeDataTag::JSDocTypeLiteral as usize] = std::mem::offset_of!(NodeAlloc<JSDocTypeLiteral>, data.declaration_base);
+            offsets
+        };
+        let offset = OFFSETS[self.data_tag() as usize];
+        if offset == 0 { return None; }
+        // SAFETY: the tag selects the concrete allocation and its embedded DeclarationBase. Both
+        // allocation forms have the same data offset, and the arena keeps the field alive.
+        Some(unsafe { tsrs_core::ptr::arena_neighbor(self, offset as isize) })
     }
 
     pub fn exportable_data(&self) -> Option<&'static ExportableBase> {
-        match self.data_tag() {
-            NodeDataTag::VariableDeclaration => Some(&self.payload::<VariableDeclaration>().exportable_base),
-            NodeDataTag::BindingElement => Some(&self.payload::<BindingElement>().exportable_base),
-            NodeDataTag::FunctionDeclaration => Some(&self.payload::<FunctionDeclaration>().exportable_base),
-            NodeDataTag::ClassDeclaration => Some(&self.payload::<ClassDeclaration>().class_like_base.exportable_base),
-            NodeDataTag::ClassExpression => Some(&self.payload::<ClassExpression>().class_like_base.exportable_base),
-            NodeDataTag::InterfaceDeclaration => Some(&self.payload::<InterfaceDeclaration>().exportable_base),
-            NodeDataTag::TypeAliasDeclaration => Some(&self.payload::<TypeAliasDeclaration>().exportable_base),
-            NodeDataTag::EnumDeclaration => Some(&self.payload::<EnumDeclaration>().exportable_base),
-            NodeDataTag::NamespaceImport => Some(&self.payload::<NamespaceImport>().exportable_base),
-            NodeDataTag::ExportSpecifier => Some(&self.payload::<ExportSpecifier>().exportable_base),
-            NodeDataTag::ModuleDeclaration => Some(&self.payload::<ModuleDeclaration>().exportable_base),
-            NodeDataTag::ImportEqualsDeclaration => Some(&self.payload::<ImportEqualsDeclaration>().exportable_base),
-            NodeDataTag::ImportClause => Some(&self.payload::<ImportClause>().exportable_base),
-            NodeDataTag::ImportSpecifier => Some(&self.payload::<ImportSpecifier>().exportable_base),
-            _ => None,
-        }
+        const OFFSETS: [usize; 194] = {
+            let mut offsets = [0; 194];
+            offsets[NodeDataTag::VariableDeclaration as usize] = std::mem::offset_of!(NodeAlloc<VariableDeclaration>, data.exportable_base);
+            offsets[NodeDataTag::BindingElement as usize] = std::mem::offset_of!(NodeAlloc<BindingElement>, data.exportable_base);
+            offsets[NodeDataTag::FunctionDeclaration as usize] = std::mem::offset_of!(NodeAlloc<FunctionDeclaration>, data.exportable_base);
+            offsets[NodeDataTag::ClassDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ClassDeclaration>, data.class_like_base.exportable_base);
+            offsets[NodeDataTag::ClassExpression as usize] = std::mem::offset_of!(NodeAlloc<ClassExpression>, data.class_like_base.exportable_base);
+            offsets[NodeDataTag::InterfaceDeclaration as usize] = std::mem::offset_of!(NodeAlloc<InterfaceDeclaration>, data.exportable_base);
+            offsets[NodeDataTag::TypeAliasDeclaration as usize] = std::mem::offset_of!(NodeAlloc<TypeAliasDeclaration>, data.exportable_base);
+            offsets[NodeDataTag::EnumDeclaration as usize] = std::mem::offset_of!(NodeAlloc<EnumDeclaration>, data.exportable_base);
+            offsets[NodeDataTag::NamespaceImport as usize] = std::mem::offset_of!(NodeAlloc<NamespaceImport>, data.exportable_base);
+            offsets[NodeDataTag::ExportSpecifier as usize] = std::mem::offset_of!(NodeAlloc<ExportSpecifier>, data.exportable_base);
+            offsets[NodeDataTag::ModuleDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ModuleDeclaration>, data.exportable_base);
+            offsets[NodeDataTag::ImportEqualsDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ImportEqualsDeclaration>, data.exportable_base);
+            offsets[NodeDataTag::ImportClause as usize] = std::mem::offset_of!(NodeAlloc<ImportClause>, data.exportable_base);
+            offsets[NodeDataTag::ImportSpecifier as usize] = std::mem::offset_of!(NodeAlloc<ImportSpecifier>, data.exportable_base);
+            offsets
+        };
+        let offset = OFFSETS[self.data_tag() as usize];
+        if offset == 0 { return None; }
+        // SAFETY: the tag selects the concrete allocation and its embedded ExportableBase. Both
+        // allocation forms have the same data offset, and the arena keeps the field alive.
+        Some(unsafe { tsrs_core::ptr::arena_neighbor(self, offset as isize) })
     }
 
     pub fn locals_container_data(&self) -> Option<&'static LocalsContainerBase> {
-        match self.data_tag() {
-            NodeDataTag::ForStatement => Some(&self.payload::<ForStatement>().locals_container_base),
-            NodeDataTag::ForInOrOfStatement => Some(&self.payload::<ForInOrOfStatement>().locals_container_base),
-            NodeDataTag::CaseBlock => Some(&self.payload::<CaseBlock>().locals_container_base),
-            NodeDataTag::CatchClause => Some(&self.payload::<CatchClause>().locals_container_base),
-            NodeDataTag::Block => Some(&self.payload::<Block>().locals_container_base),
-            NodeDataTag::FunctionDeclaration => Some(&self.payload::<FunctionDeclaration>().function_like_base.locals_container_base),
-            NodeDataTag::ClassDeclaration => Some(&self.payload::<ClassDeclaration>().class_like_base.locals_container_base),
-            NodeDataTag::ClassExpression => Some(&self.payload::<ClassExpression>().class_like_base.locals_container_base),
-            NodeDataTag::TypeAliasDeclaration => Some(&self.payload::<TypeAliasDeclaration>().locals_container_base),
-            NodeDataTag::CallSignatureDeclaration => Some(&self.payload::<CallSignatureDeclaration>().function_like_base.locals_container_base),
-            NodeDataTag::ConstructSignatureDeclaration => Some(&self.payload::<ConstructSignatureDeclaration>().function_like_base.locals_container_base),
-            NodeDataTag::ConstructorDeclaration => Some(&self.payload::<ConstructorDeclaration>().function_like_base.locals_container_base),
-            NodeDataTag::GetAccessorDeclaration => Some(&self.payload::<GetAccessorDeclaration>().function_like_base.locals_container_base),
-            NodeDataTag::SetAccessorDeclaration => Some(&self.payload::<SetAccessorDeclaration>().function_like_base.locals_container_base),
-            NodeDataTag::IndexSignatureDeclaration => Some(&self.payload::<IndexSignatureDeclaration>().function_like_base.locals_container_base),
-            NodeDataTag::MethodSignatureDeclaration => Some(&self.payload::<MethodSignatureDeclaration>().function_like_base.locals_container_base),
-            NodeDataTag::MethodDeclaration => Some(&self.payload::<MethodDeclaration>().function_like_base.locals_container_base),
-            NodeDataTag::ClassStaticBlockDeclaration => Some(&self.payload::<ClassStaticBlockDeclaration>().locals_container_base),
-            NodeDataTag::ArrowFunction => Some(&self.payload::<ArrowFunction>().function_like_base.locals_container_base),
-            NodeDataTag::FunctionExpression => Some(&self.payload::<FunctionExpression>().function_like_base.locals_container_base),
-            NodeDataTag::ConditionalTypeNode => Some(&self.payload::<ConditionalTypeNode>().locals_container_base),
-            NodeDataTag::MappedTypeNode => Some(&self.payload::<MappedTypeNode>().locals_container_base),
-            NodeDataTag::FunctionTypeNode => Some(&self.payload::<FunctionTypeNode>().function_like_base.locals_container_base),
-            NodeDataTag::ConstructorTypeNode => Some(&self.payload::<ConstructorTypeNode>().function_like_base.locals_container_base),
-            NodeDataTag::JSDocSignature => Some(&self.payload::<JSDocSignature>().function_like_base.locals_container_base),
-            NodeDataTag::SourceFile => Some(&self.payload::<SourceFile>().locals_container_base),
-            NodeDataTag::ModuleDeclaration => Some(&self.payload::<ModuleDeclaration>().locals_container_base),
-            _ => None,
-        }
+        const OFFSETS: [usize; 194] = {
+            let mut offsets = [0; 194];
+            offsets[NodeDataTag::ForStatement as usize] = std::mem::offset_of!(NodeAlloc<ForStatement>, data.locals_container_base);
+            offsets[NodeDataTag::ForInOrOfStatement as usize] = std::mem::offset_of!(NodeAlloc<ForInOrOfStatement>, data.locals_container_base);
+            offsets[NodeDataTag::CaseBlock as usize] = std::mem::offset_of!(NodeAlloc<CaseBlock>, data.locals_container_base);
+            offsets[NodeDataTag::CatchClause as usize] = std::mem::offset_of!(NodeAlloc<CatchClause>, data.locals_container_base);
+            offsets[NodeDataTag::Block as usize] = std::mem::offset_of!(NodeAlloc<Block>, data.locals_container_base);
+            offsets[NodeDataTag::FunctionDeclaration as usize] = std::mem::offset_of!(NodeAlloc<FunctionDeclaration>, data.function_like_base.locals_container_base);
+            offsets[NodeDataTag::ClassDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ClassDeclaration>, data.class_like_base.locals_container_base);
+            offsets[NodeDataTag::ClassExpression as usize] = std::mem::offset_of!(NodeAlloc<ClassExpression>, data.class_like_base.locals_container_base);
+            offsets[NodeDataTag::TypeAliasDeclaration as usize] = std::mem::offset_of!(NodeAlloc<TypeAliasDeclaration>, data.locals_container_base);
+            offsets[NodeDataTag::CallSignatureDeclaration as usize] = std::mem::offset_of!(NodeAlloc<CallSignatureDeclaration>, data.function_like_base.locals_container_base);
+            offsets[NodeDataTag::ConstructSignatureDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ConstructSignatureDeclaration>, data.function_like_base.locals_container_base);
+            offsets[NodeDataTag::ConstructorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ConstructorDeclaration>, data.function_like_base.locals_container_base);
+            offsets[NodeDataTag::GetAccessorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<GetAccessorDeclaration>, data.function_like_base.locals_container_base);
+            offsets[NodeDataTag::SetAccessorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<SetAccessorDeclaration>, data.function_like_base.locals_container_base);
+            offsets[NodeDataTag::IndexSignatureDeclaration as usize] = std::mem::offset_of!(NodeAlloc<IndexSignatureDeclaration>, data.function_like_base.locals_container_base);
+            offsets[NodeDataTag::MethodSignatureDeclaration as usize] = std::mem::offset_of!(NodeAlloc<MethodSignatureDeclaration>, data.function_like_base.locals_container_base);
+            offsets[NodeDataTag::MethodDeclaration as usize] = std::mem::offset_of!(NodeAlloc<MethodDeclaration>, data.function_like_base.locals_container_base);
+            offsets[NodeDataTag::ClassStaticBlockDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ClassStaticBlockDeclaration>, data.locals_container_base);
+            offsets[NodeDataTag::ArrowFunction as usize] = std::mem::offset_of!(NodeAlloc<ArrowFunction>, data.function_like_base.locals_container_base);
+            offsets[NodeDataTag::FunctionExpression as usize] = std::mem::offset_of!(NodeAlloc<FunctionExpression>, data.function_like_base.locals_container_base);
+            offsets[NodeDataTag::ConditionalTypeNode as usize] = std::mem::offset_of!(NodeAlloc<ConditionalTypeNode>, data.locals_container_base);
+            offsets[NodeDataTag::MappedTypeNode as usize] = std::mem::offset_of!(NodeAlloc<MappedTypeNode>, data.locals_container_base);
+            offsets[NodeDataTag::FunctionTypeNode as usize] = std::mem::offset_of!(NodeAlloc<FunctionTypeNode>, data.function_like_base.locals_container_base);
+            offsets[NodeDataTag::ConstructorTypeNode as usize] = std::mem::offset_of!(NodeAlloc<ConstructorTypeNode>, data.function_like_base.locals_container_base);
+            offsets[NodeDataTag::JSDocSignature as usize] = std::mem::offset_of!(NodeAlloc<JSDocSignature>, data.function_like_base.locals_container_base);
+            offsets[NodeDataTag::SourceFile as usize] = std::mem::offset_of!(NodeAlloc<SourceFile>, data.locals_container_base);
+            offsets[NodeDataTag::ModuleDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ModuleDeclaration>, data.locals_container_base);
+            offsets
+        };
+        let offset = OFFSETS[self.data_tag() as usize];
+        if offset == 0 { return None; }
+        // SAFETY: the tag selects the concrete allocation and its embedded LocalsContainerBase. Both
+        // allocation forms have the same data offset, and the arena keeps the field alive.
+        Some(unsafe { tsrs_core::ptr::arena_neighbor(self, offset as isize) })
     }
 
     pub fn function_like_data(&self) -> Option<&'static FunctionLikeBase> {
-        match self.data_tag() {
-            NodeDataTag::FunctionDeclaration => Some(&self.payload::<FunctionDeclaration>().function_like_base),
-            NodeDataTag::CallSignatureDeclaration => Some(&self.payload::<CallSignatureDeclaration>().function_like_base),
-            NodeDataTag::ConstructSignatureDeclaration => Some(&self.payload::<ConstructSignatureDeclaration>().function_like_base),
-            NodeDataTag::ConstructorDeclaration => Some(&self.payload::<ConstructorDeclaration>().function_like_base),
-            NodeDataTag::GetAccessorDeclaration => Some(&self.payload::<GetAccessorDeclaration>().function_like_base),
-            NodeDataTag::SetAccessorDeclaration => Some(&self.payload::<SetAccessorDeclaration>().function_like_base),
-            NodeDataTag::IndexSignatureDeclaration => Some(&self.payload::<IndexSignatureDeclaration>().function_like_base),
-            NodeDataTag::MethodSignatureDeclaration => Some(&self.payload::<MethodSignatureDeclaration>().function_like_base),
-            NodeDataTag::MethodDeclaration => Some(&self.payload::<MethodDeclaration>().function_like_base),
-            NodeDataTag::ArrowFunction => Some(&self.payload::<ArrowFunction>().function_like_base),
-            NodeDataTag::FunctionExpression => Some(&self.payload::<FunctionExpression>().function_like_base),
-            NodeDataTag::FunctionTypeNode => Some(&self.payload::<FunctionTypeNode>().function_like_base),
-            NodeDataTag::ConstructorTypeNode => Some(&self.payload::<ConstructorTypeNode>().function_like_base),
-            NodeDataTag::JSDocSignature => Some(&self.payload::<JSDocSignature>().function_like_base),
-            _ => None,
-        }
+        const OFFSETS: [usize; 194] = {
+            let mut offsets = [0; 194];
+            offsets[NodeDataTag::FunctionDeclaration as usize] = std::mem::offset_of!(NodeAlloc<FunctionDeclaration>, data.function_like_base);
+            offsets[NodeDataTag::CallSignatureDeclaration as usize] = std::mem::offset_of!(NodeAlloc<CallSignatureDeclaration>, data.function_like_base);
+            offsets[NodeDataTag::ConstructSignatureDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ConstructSignatureDeclaration>, data.function_like_base);
+            offsets[NodeDataTag::ConstructorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ConstructorDeclaration>, data.function_like_base);
+            offsets[NodeDataTag::GetAccessorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<GetAccessorDeclaration>, data.function_like_base);
+            offsets[NodeDataTag::SetAccessorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<SetAccessorDeclaration>, data.function_like_base);
+            offsets[NodeDataTag::IndexSignatureDeclaration as usize] = std::mem::offset_of!(NodeAlloc<IndexSignatureDeclaration>, data.function_like_base);
+            offsets[NodeDataTag::MethodSignatureDeclaration as usize] = std::mem::offset_of!(NodeAlloc<MethodSignatureDeclaration>, data.function_like_base);
+            offsets[NodeDataTag::MethodDeclaration as usize] = std::mem::offset_of!(NodeAlloc<MethodDeclaration>, data.function_like_base);
+            offsets[NodeDataTag::ArrowFunction as usize] = std::mem::offset_of!(NodeAlloc<ArrowFunction>, data.function_like_base);
+            offsets[NodeDataTag::FunctionExpression as usize] = std::mem::offset_of!(NodeAlloc<FunctionExpression>, data.function_like_base);
+            offsets[NodeDataTag::FunctionTypeNode as usize] = std::mem::offset_of!(NodeAlloc<FunctionTypeNode>, data.function_like_base);
+            offsets[NodeDataTag::ConstructorTypeNode as usize] = std::mem::offset_of!(NodeAlloc<ConstructorTypeNode>, data.function_like_base);
+            offsets[NodeDataTag::JSDocSignature as usize] = std::mem::offset_of!(NodeAlloc<JSDocSignature>, data.function_like_base);
+            offsets
+        };
+        let offset = OFFSETS[self.data_tag() as usize];
+        if offset == 0 { return None; }
+        // SAFETY: the tag selects the concrete allocation and its embedded FunctionLikeBase. Both
+        // allocation forms have the same data offset, and the arena keeps the field alive.
+        Some(unsafe { tsrs_core::ptr::arena_neighbor(self, offset as isize) })
     }
 
     pub fn class_like_data(&self) -> Option<&'static ClassLikeBase> {
-        match self.data_tag() {
-            NodeDataTag::ClassDeclaration => Some(&self.payload::<ClassDeclaration>().class_like_base),
-            NodeDataTag::ClassExpression => Some(&self.payload::<ClassExpression>().class_like_base),
-            _ => None,
-        }
+        const OFFSETS: [usize; 194] = {
+            let mut offsets = [0; 194];
+            offsets[NodeDataTag::ClassDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ClassDeclaration>, data.class_like_base);
+            offsets[NodeDataTag::ClassExpression as usize] = std::mem::offset_of!(NodeAlloc<ClassExpression>, data.class_like_base);
+            offsets
+        };
+        let offset = OFFSETS[self.data_tag() as usize];
+        if offset == 0 { return None; }
+        // SAFETY: the tag selects the concrete allocation and its embedded ClassLikeBase. Both
+        // allocation forms have the same data offset, and the arena keeps the field alive.
+        Some(unsafe { tsrs_core::ptr::arena_neighbor(self, offset as isize) })
     }
 
     pub fn body_data(&self) -> Option<&'static BodyBase> {
-        match self.data_tag() {
-            NodeDataTag::FunctionDeclaration => Some(&self.payload::<FunctionDeclaration>().body_base),
-            NodeDataTag::ConstructorDeclaration => Some(&self.payload::<ConstructorDeclaration>().body_base),
-            NodeDataTag::GetAccessorDeclaration => Some(&self.payload::<GetAccessorDeclaration>().body_base),
-            NodeDataTag::SetAccessorDeclaration => Some(&self.payload::<SetAccessorDeclaration>().body_base),
-            NodeDataTag::MethodDeclaration => Some(&self.payload::<MethodDeclaration>().body_base),
-            NodeDataTag::ArrowFunction => Some(&self.payload::<ArrowFunction>().body_base),
-            NodeDataTag::FunctionExpression => Some(&self.payload::<FunctionExpression>().body_base),
-            NodeDataTag::ModuleDeclaration => Some(&self.payload::<ModuleDeclaration>().body_base),
-            _ => None,
-        }
+        const OFFSETS: [usize; 194] = {
+            let mut offsets = [0; 194];
+            offsets[NodeDataTag::FunctionDeclaration as usize] = std::mem::offset_of!(NodeAlloc<FunctionDeclaration>, data.body_base);
+            offsets[NodeDataTag::ConstructorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ConstructorDeclaration>, data.body_base);
+            offsets[NodeDataTag::GetAccessorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<GetAccessorDeclaration>, data.body_base);
+            offsets[NodeDataTag::SetAccessorDeclaration as usize] = std::mem::offset_of!(NodeAlloc<SetAccessorDeclaration>, data.body_base);
+            offsets[NodeDataTag::MethodDeclaration as usize] = std::mem::offset_of!(NodeAlloc<MethodDeclaration>, data.body_base);
+            offsets[NodeDataTag::ArrowFunction as usize] = std::mem::offset_of!(NodeAlloc<ArrowFunction>, data.body_base);
+            offsets[NodeDataTag::FunctionExpression as usize] = std::mem::offset_of!(NodeAlloc<FunctionExpression>, data.body_base);
+            offsets[NodeDataTag::ModuleDeclaration as usize] = std::mem::offset_of!(NodeAlloc<ModuleDeclaration>, data.body_base);
+            offsets
+        };
+        let offset = OFFSETS[self.data_tag() as usize];
+        if offset == 0 { return None; }
+        // SAFETY: the tag selects the concrete allocation and its embedded BodyBase. Both
+        // allocation forms have the same data offset, and the arena keeps the field alive.
+        Some(unsafe { tsrs_core::ptr::arena_neighbor(self, offset as isize) })
     }
 
     pub fn literal_like_data(&self) -> Option<&'static LiteralLikeNodeBase> {
-        match self.data_tag() {
-            NodeDataTag::StringLiteral => Some(&self.payload::<StringLiteral>().literal_like_node_base),
-            NodeDataTag::NumericLiteral => Some(&self.payload::<NumericLiteral>().literal_like_node_base),
-            NodeDataTag::BigIntLiteral => Some(&self.payload::<BigIntLiteral>().literal_like_node_base),
-            NodeDataTag::RegularExpressionLiteral => Some(&self.payload::<RegularExpressionLiteral>().literal_like_node_base),
-            NodeDataTag::NoSubstitutionTemplateLiteral => Some(&self.payload::<NoSubstitutionTemplateLiteral>().template_literal_like_node_base.literal_like_node_base),
-            NodeDataTag::TemplateHead => Some(&self.payload::<TemplateHead>().template_literal_like_node_base.literal_like_node_base),
-            NodeDataTag::TemplateMiddle => Some(&self.payload::<TemplateMiddle>().template_literal_like_node_base.literal_like_node_base),
-            NodeDataTag::TemplateTail => Some(&self.payload::<TemplateTail>().template_literal_like_node_base.literal_like_node_base),
-            NodeDataTag::JsxText => Some(&self.payload::<JsxText>().literal_like_node_base),
-            _ => None,
-        }
+        const OFFSETS: [usize; 194] = {
+            let mut offsets = [0; 194];
+            offsets[NodeDataTag::StringLiteral as usize] = std::mem::offset_of!(NodeAlloc<StringLiteral>, data.literal_like_node_base);
+            offsets[NodeDataTag::NumericLiteral as usize] = std::mem::offset_of!(NodeAlloc<NumericLiteral>, data.literal_like_node_base);
+            offsets[NodeDataTag::BigIntLiteral as usize] = std::mem::offset_of!(NodeAlloc<BigIntLiteral>, data.literal_like_node_base);
+            offsets[NodeDataTag::RegularExpressionLiteral as usize] = std::mem::offset_of!(NodeAlloc<RegularExpressionLiteral>, data.literal_like_node_base);
+            offsets[NodeDataTag::NoSubstitutionTemplateLiteral as usize] = std::mem::offset_of!(NodeAlloc<NoSubstitutionTemplateLiteral>, data.template_literal_like_node_base.literal_like_node_base);
+            offsets[NodeDataTag::TemplateHead as usize] = std::mem::offset_of!(NodeAlloc<TemplateHead>, data.template_literal_like_node_base.literal_like_node_base);
+            offsets[NodeDataTag::TemplateMiddle as usize] = std::mem::offset_of!(NodeAlloc<TemplateMiddle>, data.template_literal_like_node_base.literal_like_node_base);
+            offsets[NodeDataTag::TemplateTail as usize] = std::mem::offset_of!(NodeAlloc<TemplateTail>, data.template_literal_like_node_base.literal_like_node_base);
+            offsets[NodeDataTag::JsxText as usize] = std::mem::offset_of!(NodeAlloc<JsxText>, data.literal_like_node_base);
+            offsets
+        };
+        let offset = OFFSETS[self.data_tag() as usize];
+        if offset == 0 { return None; }
+        // SAFETY: the tag selects the concrete allocation and its embedded LiteralLikeNodeBase. Both
+        // allocation forms have the same data offset, and the arena keeps the field alive.
+        Some(unsafe { tsrs_core::ptr::arena_neighbor(self, offset as isize) })
     }
 
     pub fn template_literal_like_data(&self) -> Option<&'static TemplateLiteralLikeNodeBase> {
-        match self.data_tag() {
-            NodeDataTag::NoSubstitutionTemplateLiteral => Some(&self.payload::<NoSubstitutionTemplateLiteral>().template_literal_like_node_base),
-            NodeDataTag::TemplateHead => Some(&self.payload::<TemplateHead>().template_literal_like_node_base),
-            NodeDataTag::TemplateMiddle => Some(&self.payload::<TemplateMiddle>().template_literal_like_node_base),
-            NodeDataTag::TemplateTail => Some(&self.payload::<TemplateTail>().template_literal_like_node_base),
-            _ => None,
-        }
+        const OFFSETS: [usize; 194] = {
+            let mut offsets = [0; 194];
+            offsets[NodeDataTag::NoSubstitutionTemplateLiteral as usize] = std::mem::offset_of!(NodeAlloc<NoSubstitutionTemplateLiteral>, data.template_literal_like_node_base);
+            offsets[NodeDataTag::TemplateHead as usize] = std::mem::offset_of!(NodeAlloc<TemplateHead>, data.template_literal_like_node_base);
+            offsets[NodeDataTag::TemplateMiddle as usize] = std::mem::offset_of!(NodeAlloc<TemplateMiddle>, data.template_literal_like_node_base);
+            offsets[NodeDataTag::TemplateTail as usize] = std::mem::offset_of!(NodeAlloc<TemplateTail>, data.template_literal_like_node_base);
+            offsets
+        };
+        let offset = OFFSETS[self.data_tag() as usize];
+        if offset == 0 { return None; }
+        // SAFETY: the tag selects the concrete allocation and its embedded TemplateLiteralLikeNodeBase. Both
+        // allocation forms have the same data offset, and the arena keeps the field alive.
+        Some(unsafe { tsrs_core::ptr::arena_neighbor(self, offset as isize) })
     }
 
 }

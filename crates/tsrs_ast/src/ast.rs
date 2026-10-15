@@ -790,42 +790,42 @@ impl Node {
     }
 
     pub fn expression(&self) -> Option<P<Node>> {
-        match self.kind() {
-            Kind::PropertyAccessExpression => Some(self.as_property_access_expression().expression),
-            Kind::ElementAccessExpression => Some(self.as_element_access_expression().expression),
-            Kind::ParenthesizedExpression => Some(self.as_parenthesized_expression().expression.get()),
-            Kind::CallExpression => Some(self.as_call_expression().expression),
-            Kind::NewExpression => Some(self.as_new_expression().expression),
-            Kind::ExpressionWithTypeArguments => Some(self.as_expression_with_type_arguments().expression),
-            Kind::ComputedPropertyName => Some(self.as_computed_property_name().expression),
-            Kind::NonNullExpression => Some(self.as_non_null_expression().expression),
-            Kind::TypeAssertionExpression => Some(self.as_type_assertion().expression),
-            Kind::AsExpression => Some(self.as_as_expression().expression),
-            Kind::SatisfiesExpression => Some(self.as_satisfies_expression().expression),
-            Kind::TypeOfExpression => Some(self.as_type_of_expression().expression),
-            Kind::SpreadAssignment => Some(self.as_spread_assignment().expression),
-            Kind::SpreadElement => Some(self.as_spread_element().expression),
-            Kind::TemplateSpan => Some(self.as_template_span().expression),
-            Kind::DeleteExpression => Some(self.as_delete_expression().expression),
-            Kind::VoidExpression => Some(self.as_void_expression().expression),
-            Kind::AwaitExpression => Some(self.as_await_expression().expression),
-            Kind::YieldExpression => self.as_yield_expression().expression,
-            Kind::PartiallyEmittedExpression => Some(self.as_partially_emitted_expression().expression),
-            Kind::IfStatement => Some(self.as_if_statement().expression),
-            Kind::DoStatement => Some(self.as_do_statement().expression),
-            Kind::WhileStatement => Some(self.as_while_statement().expression),
-            Kind::WithStatement => Some(self.as_with_statement().expression),
-            Kind::ForInStatement | Kind::ForOfStatement => Some(self.as_for_in_or_of_statement().expression),
-            Kind::SwitchStatement => Some(self.as_switch_statement().expression),
-            Kind::CaseClause => self.as_case_or_default_clause().expression,
-            Kind::ExpressionStatement => Some(self.as_expression_statement().expression),
-            Kind::ReturnStatement => self.as_return_statement().expression.get(),
-            Kind::ThrowStatement => Some(self.as_throw_statement().expression),
-            Kind::ExternalModuleReference => Some(self.as_external_module_reference().expression),
-            Kind::ExportAssignment => Some(self.as_export_assignment().expression.get()),
-            Kind::Decorator => Some(self.as_decorator().expression),
-            Kind::JsxExpression => self.as_jsx_expression().expression,
-            Kind::JsxSpreadAttribute => Some(self.as_jsx_spread_attribute().expression),
+        match self.data_tag() {
+            NodeDataTag::PropertyAccessExpression => Some(self.as_property_access_expression().expression),
+            NodeDataTag::ElementAccessExpression => Some(self.as_element_access_expression().expression),
+            NodeDataTag::ParenthesizedExpression => Some(self.as_parenthesized_expression().expression.get()),
+            NodeDataTag::CallExpression => Some(self.as_call_expression().expression),
+            NodeDataTag::NewExpression => Some(self.as_new_expression().expression),
+            NodeDataTag::ExpressionWithTypeArguments => Some(self.as_expression_with_type_arguments().expression),
+            NodeDataTag::ComputedPropertyName => Some(self.as_computed_property_name().expression),
+            NodeDataTag::NonNullExpression => Some(self.as_non_null_expression().expression),
+            NodeDataTag::TypeAssertion => Some(self.as_type_assertion().expression),
+            NodeDataTag::AsExpression => Some(self.as_as_expression().expression),
+            NodeDataTag::SatisfiesExpression => Some(self.as_satisfies_expression().expression),
+            NodeDataTag::TypeOfExpression => Some(self.as_type_of_expression().expression),
+            NodeDataTag::SpreadAssignment => Some(self.as_spread_assignment().expression),
+            NodeDataTag::SpreadElement => Some(self.as_spread_element().expression),
+            NodeDataTag::TemplateSpan => Some(self.as_template_span().expression),
+            NodeDataTag::DeleteExpression => Some(self.as_delete_expression().expression),
+            NodeDataTag::VoidExpression => Some(self.as_void_expression().expression),
+            NodeDataTag::AwaitExpression => Some(self.as_await_expression().expression),
+            NodeDataTag::YieldExpression => self.as_yield_expression().expression,
+            NodeDataTag::PartiallyEmittedExpression => Some(self.as_partially_emitted_expression().expression),
+            NodeDataTag::IfStatement => Some(self.as_if_statement().expression),
+            NodeDataTag::DoStatement => Some(self.as_do_statement().expression),
+            NodeDataTag::WhileStatement => Some(self.as_while_statement().expression),
+            NodeDataTag::WithStatement => Some(self.as_with_statement().expression),
+            NodeDataTag::ForInOrOfStatement if matches!(self.kind(), Kind::ForInStatement | Kind::ForOfStatement) => Some(self.as_for_in_or_of_statement().expression),
+            NodeDataTag::SwitchStatement => Some(self.as_switch_statement().expression),
+            NodeDataTag::CaseOrDefaultClause if self.kind() == Kind::CaseClause => self.as_case_or_default_clause().expression,
+            NodeDataTag::ExpressionStatement => Some(self.as_expression_statement().expression),
+            NodeDataTag::ReturnStatement => self.as_return_statement().expression.get(),
+            NodeDataTag::ThrowStatement => Some(self.as_throw_statement().expression),
+            NodeDataTag::ExternalModuleReference => Some(self.as_external_module_reference().expression),
+            NodeDataTag::ExportAssignment => Some(self.as_export_assignment().expression.get()),
+            NodeDataTag::Decorator => Some(self.as_decorator().expression),
+            NodeDataTag::JsxExpression => self.as_jsx_expression().expression,
+            NodeDataTag::JsxSpreadAttribute => Some(self.as_jsx_spread_attribute().expression),
             _ => panic!("Unhandled case in Node.Expression: {:?}", self.kind()),
         }
     }
@@ -967,32 +967,32 @@ impl Node {
 
     /// Go `Type()`.
     pub fn type_node(&self) -> Option<P<Node>> {
-        match self.kind() {
-            Kind::VariableDeclaration => self.as_variable_declaration().type_.get(),
-            Kind::Parameter => self.as_parameter_declaration().type_.get(),
-            Kind::PropertySignature => self.as_property_signature_declaration().type_.get(),
-            Kind::PropertyDeclaration => self.as_property_declaration().type_.get(),
-            Kind::PropertyAssignment => self.as_property_assignment().type_.get(),
-            Kind::ShorthandPropertyAssignment => self.as_shorthand_property_assignment().type_.get(),
-            Kind::TypePredicate => self.as_type_predicate_node().type_,
-            Kind::ParenthesizedType => Some(self.as_parenthesized_type_node().type_),
-            Kind::TypeOperator => Some(self.as_type_operator_node().type_),
-            Kind::MappedType => self.as_mapped_type_node().type_,
-            Kind::TypeAssertionExpression => Some(self.as_type_assertion().type_),
-            Kind::AsExpression => Some(self.as_as_expression().type_),
-            Kind::SatisfiesExpression => Some(self.as_satisfies_expression().type_),
-            Kind::TypeAliasDeclaration | Kind::JSTypeAliasDeclaration => self.as_type_alias_declaration().type_.get(),
-            Kind::NamedTupleMember => Some(self.as_named_tuple_member().type_),
-            Kind::OptionalType => Some(self.as_optional_type_node().type_),
-            Kind::RestType => Some(self.as_rest_type_node().type_),
-            Kind::TemplateLiteralTypeSpan => Some(self.as_template_literal_type_span().type_),
-            Kind::JSDocTypeExpression => Some(self.as_jsdoc_type_expression().type_),
-            Kind::JSDocParameterTag | Kind::JSDocPropertyTag => self.as_jsdoc_parameter_or_property_tag().type_expression,
-            Kind::JSDocNullableType => Some(self.as_jsdoc_nullable_type().type_),
-            Kind::JSDocNonNullableType => Some(self.as_jsdoc_non_nullable_type().type_),
-            Kind::JSDocOptionalType => Some(self.as_jsdoc_optional_type().type_),
-            Kind::ExportAssignment => self.as_export_assignment().type_.get(),
-            Kind::BinaryExpression => self.as_binary_expression().type_.get(),
+        match self.data_tag() {
+            NodeDataTag::VariableDeclaration => self.as_variable_declaration().type_.get(),
+            NodeDataTag::ParameterDeclaration => self.as_parameter_declaration().type_.get(),
+            NodeDataTag::PropertySignatureDeclaration => self.as_property_signature_declaration().type_.get(),
+            NodeDataTag::PropertyDeclaration => self.as_property_declaration().type_.get(),
+            NodeDataTag::PropertyAssignment => self.as_property_assignment().type_.get(),
+            NodeDataTag::ShorthandPropertyAssignment => self.as_shorthand_property_assignment().type_.get(),
+            NodeDataTag::TypePredicateNode => self.as_type_predicate_node().type_,
+            NodeDataTag::ParenthesizedTypeNode => Some(self.as_parenthesized_type_node().type_),
+            NodeDataTag::TypeOperatorNode => Some(self.as_type_operator_node().type_),
+            NodeDataTag::MappedTypeNode => self.as_mapped_type_node().type_,
+            NodeDataTag::TypeAssertion => Some(self.as_type_assertion().type_),
+            NodeDataTag::AsExpression => Some(self.as_as_expression().type_),
+            NodeDataTag::SatisfiesExpression => Some(self.as_satisfies_expression().type_),
+            NodeDataTag::TypeAliasDeclaration => self.as_type_alias_declaration().type_.get(),
+            NodeDataTag::NamedTupleMember => Some(self.as_named_tuple_member().type_),
+            NodeDataTag::OptionalTypeNode => Some(self.as_optional_type_node().type_),
+            NodeDataTag::RestTypeNode => Some(self.as_rest_type_node().type_),
+            NodeDataTag::TemplateLiteralTypeSpan => Some(self.as_template_literal_type_span().type_),
+            NodeDataTag::JSDocTypeExpression => Some(self.as_jsdoc_type_expression().type_),
+            NodeDataTag::JSDocParameterOrPropertyTag => self.as_jsdoc_parameter_or_property_tag().type_expression,
+            NodeDataTag::JSDocNullableType => Some(self.as_jsdoc_nullable_type().type_),
+            NodeDataTag::JSDocNonNullableType => Some(self.as_jsdoc_non_nullable_type().type_),
+            NodeDataTag::JSDocOptionalType => Some(self.as_jsdoc_optional_type().type_),
+            NodeDataTag::ExportAssignment => self.as_export_assignment().type_.get(),
+            NodeDataTag::BinaryExpression => self.as_binary_expression().type_.get(),
             _ => {
                 if let Some(func_like) = self.function_like_data() {
                     return func_like.type_.get();
@@ -1026,17 +1026,17 @@ impl Node {
     }
 
     pub fn initializer(&self) -> Option<P<Node>> {
-        match self.kind() {
-            Kind::VariableDeclaration => self.as_variable_declaration().initializer.get(),
-            Kind::Parameter => self.as_parameter_declaration().initializer(),
-            Kind::BindingElement => self.as_binding_element().initializer(),
-            Kind::PropertyDeclaration => self.as_property_declaration().initializer.get(),
-            Kind::PropertySignature => self.as_property_signature_declaration().initializer(),
-            Kind::PropertyAssignment => Some(self.as_property_assignment().initializer.get()),
-            Kind::EnumMember => self.as_enum_member().initializer,
-            Kind::ForStatement => self.as_for_statement().initializer,
-            Kind::ForInStatement | Kind::ForOfStatement => Some(self.as_for_in_or_of_statement().initializer),
-            Kind::JsxAttribute => self.as_jsx_attribute().initializer,
+        match self.data_tag() {
+            NodeDataTag::VariableDeclaration => self.as_variable_declaration().initializer.get(),
+            NodeDataTag::ParameterDeclaration => self.as_parameter_declaration().initializer(),
+            NodeDataTag::BindingElement => self.as_binding_element().initializer(),
+            NodeDataTag::PropertyDeclaration => self.as_property_declaration().initializer.get(),
+            NodeDataTag::PropertySignatureDeclaration => self.as_property_signature_declaration().initializer(),
+            NodeDataTag::PropertyAssignment => Some(self.as_property_assignment().initializer.get()),
+            NodeDataTag::EnumMember => self.as_enum_member().initializer,
+            NodeDataTag::ForStatement => self.as_for_statement().initializer,
+            NodeDataTag::ForInOrOfStatement if matches!(self.kind(), Kind::ForInStatement | Kind::ForOfStatement) => Some(self.as_for_in_or_of_statement().initializer),
+            NodeDataTag::JsxAttribute => self.as_jsx_attribute().initializer,
             _ => panic!("Unhandled case in Node.Initializer"),
         }
     }
@@ -1257,26 +1257,26 @@ impl Node {
     }
 
     pub fn postfix_token(&self) -> Option<P<Node>> {
-        match self.kind() {
-            Kind::MethodDeclaration => self.as_method_declaration().postfix_token(),
-            Kind::ShorthandPropertyAssignment => self.as_shorthand_property_assignment().postfix_token(),
-            Kind::MethodSignature => self.as_method_signature_declaration().postfix_token(),
-            Kind::PropertySignature => self.as_property_signature_declaration().postfix_token(),
-            Kind::PropertyAssignment => self.as_property_assignment().postfix_token(),
-            Kind::PropertyDeclaration => self.as_property_declaration().postfix_token(),
-            Kind::EnumMember => self.as_enum_member().postfix_token(),
-            Kind::GetAccessor => self.as_get_accessor_declaration().postfix_token(),
-            Kind::SetAccessor => self.as_set_accessor_declaration().postfix_token(),
+        match self.data_tag() {
+            NodeDataTag::MethodDeclaration => self.as_method_declaration().postfix_token(),
+            NodeDataTag::ShorthandPropertyAssignment => self.as_shorthand_property_assignment().postfix_token(),
+            NodeDataTag::MethodSignatureDeclaration => self.as_method_signature_declaration().postfix_token(),
+            NodeDataTag::PropertySignatureDeclaration => self.as_property_signature_declaration().postfix_token(),
+            NodeDataTag::PropertyAssignment => self.as_property_assignment().postfix_token(),
+            NodeDataTag::PropertyDeclaration => self.as_property_declaration().postfix_token(),
+            NodeDataTag::EnumMember => self.as_enum_member().postfix_token(),
+            NodeDataTag::GetAccessorDeclaration => self.as_get_accessor_declaration().postfix_token(),
+            NodeDataTag::SetAccessorDeclaration => self.as_set_accessor_declaration().postfix_token(),
             _ => None,
         }
     }
 
     pub fn question_token(&self) -> Option<P<Node>> {
-        match self.kind() {
-            Kind::Parameter => return self.as_parameter_declaration().question_token.get(),
-            Kind::ConditionalExpression => return Some(self.as_conditional_expression().question_token),
-            Kind::MappedType => return self.as_mapped_type_node().question_token,
-            Kind::NamedTupleMember => return self.as_named_tuple_member().question_token,
+        match self.data_tag() {
+            NodeDataTag::ParameterDeclaration => return self.as_parameter_declaration().question_token.get(),
+            NodeDataTag::ConditionalExpression => return Some(self.as_conditional_expression().question_token),
+            NodeDataTag::MappedTypeNode => return self.as_mapped_type_node().question_token,
+            NodeDataTag::NamedTupleMember => return self.as_named_tuple_member().question_token,
             _ => {}
         }
         let postfix = self.postfix_token();
@@ -2818,6 +2818,75 @@ mod tests {
         let f = NodeFactory::default();
         let a = f.new_identifier("a");
         a.as_binary_expression();
+    }
+
+    #[test]
+    fn accessor_cells_and_rare_tails() {
+        let f = NodeFactory::default();
+        let name = f.new_identifier("x");
+        let value = f.new_identifier("value");
+        let type_node = f.new_identifier("T");
+        let question = f.new_token(Kind::QuestionToken);
+        let modifiers = f.new_modifier_list(vec![f.new_token(Kind::ExportKeyword)]);
+
+        for initializer in [None, Some(value)] {
+            let parameter = f.new_parameter_declaration(None, None, name, Some(question), None, initializer);
+            assert_eq!(parameter.name(), Some(name));
+            assert_eq!(parameter.initializer(), initializer);
+            assert_eq!(parameter.question_token(), Some(question));
+            parameter.set_type(Some(type_node));
+            parameter.set_modifiers(Some(modifiers));
+            assert_eq!(parameter.type_node(), Some(type_node));
+            assert_eq!(parameter.modifiers(), Some(modifiers));
+            assert_eq!(
+                std::ptr::from_ref(parameter.declaration_data().unwrap()),
+                std::ptr::from_ref(&parameter.as_parameter_declaration().declaration_base),
+            );
+        }
+
+        let declaration = f.new_variable_declaration(name, None, None, None);
+        declaration.set_initializer(value);
+        assert_eq!(declaration.initializer(), Some(value));
+        let statement = f.new_return_statement(None);
+        assert_eq!(statement.expression(), None);
+        statement.set_expression(value);
+        assert_eq!(statement.expression(), Some(value));
+
+        for name in [None, Some(name)] {
+            let function = f.new_function_declaration(None, None, name, None, None, None, None, None);
+            assert_eq!(function.name(), name);
+            function.set_type(Some(type_node));
+            assert_eq!(function.type_node(), Some(type_node));
+            assert_eq!(
+                std::ptr::from_ref(function.function_like_data().unwrap()),
+                std::ptr::from_ref(&function.as_function_declaration().function_like_base),
+            );
+        }
+        assert_eq!(value.name(), None);
+        assert_eq!(value.modifiers(), None);
+        assert!(value.declaration_data().is_none());
+    }
+
+    #[test]
+    fn shared_payload_accessors() {
+        let f = NodeFactory::default();
+        let value = f.new_identifier("value");
+        let initializer = f.new_identifier("key");
+        for kind in [Kind::ForInStatement, Kind::ForOfStatement] {
+            let statement = f.new_for_in_or_of_statement(kind, None, initializer, value, f.new_empty_statement());
+            assert_eq!(statement.expression(), Some(value));
+            assert_eq!(statement.initializer(), Some(initializer));
+        }
+        let clause = f.new_case_or_default_clause(Kind::CaseClause, Some(value), f.new_node_list(vec![]));
+        assert_eq!(clause.expression(), Some(value));
+    }
+
+    #[test]
+    #[should_panic(expected = "Unhandled case in Node.Expression")]
+    fn default_clause_has_no_expression_accessor() {
+        let f = NodeFactory::default();
+        let clause = f.new_case_or_default_clause(Kind::DefaultClause, None, f.new_node_list(vec![]));
+        clause.expression();
     }
 
     #[test]

@@ -820,21 +820,45 @@ function genNodeImpl() {
     // Name() / Modifiers()
     const withField = (fieldName: string) =>
         nodes.filter(n => n.name !== "SourceFile" && promoted(layouts.get(n.name)!).some(f => f.name === fieldName));
+    // A match of constant offsets is lowered back to a jump table by LLVM. An explicit constant array
+    // keeps dispatch a data lookup; Rust computes each offset for the target's actual field layout.
+    const offsetTable = (entries: [string, string][], tuple = false) => {
+        w(`        const OFFSETS: [${tuple ? "(usize, bool)" : "usize"}; ${nodes.length + EXTRA_DATA.length}] = {`);
+        w(`            let mut offsets = [${tuple ? "(0, false)" : "0"}; ${nodes.length + EXTRA_DATA.length}];`);
+        for (const [name, value] of entries) w(`            offsets[NodeDataTag::${name} as usize] = ${value};`);
+        w(`            offsets`);
+        w(`        };`);
+        w(`        let ${tuple ? "(offset, optional)" : "offset"} = OFFSETS[self.data_tag() as usize];`);
+    };
     w(`    pub fn name(&self) -> Option<P<Node>> {`);
-    w(`        match self.data_tag() {`);
-    for (const n of withField("name")) {
+    offsetTable(withField("name").map(n => {
         const f = findFlat(layouts.get(n.name)!, "name");
-        w(arm(n.name, f.ty.startsWith("Option") ? `d.${f.rust}()` : `Some(d.${f.rust}())`));
-    }
-    w(`            _ => None,`);
+        if (f.cell || f.rare || !["P<Node>", "Option<P<Node>>"].includes(f.ty)) {
+            throw new Error(`name offset needs an immutable inline node field: ${n.name}`);
+        }
+        return [n.name, `(std::mem::offset_of!(NodeAlloc<${n.name}>, data.${f.path}), ${f.ty.startsWith("Option")})`];
+    }), true);
+    w(`        if offset == 0 { return None; }`);
+    w(`        if optional {`);
+    w(`            // SAFETY: the tag selects this allocation's optional name field. Both allocation forms`);
+    w(`            // have the same data offset, and the arena keeps the field alive.`);
+    w(`            unsafe { *tsrs_core::ptr::arena_neighbor::<_, Option<P<Node>>>(self, offset as isize) }`);
+    w(`        } else {`);
+    w(`            // SAFETY: as above, but the selected field is a required name, stored as P<Node>.`);
+    w(`            Some(unsafe { *tsrs_core::ptr::arena_neighbor::<_, P<Node>>(self, offset as isize) })`);
     w(`        }`);
     w(`    }`);
     w();
     w(`    pub fn modifiers(&self) -> Option<P<ModifierList>> {`);
-    w(`        match self.data_tag() {`);
-    for (const n of withField("modifiers")) w(arm(n.name, `d.modifiers()`));
-    w(`            _ => None,`);
-    w(`        }`);
+    offsetTable(withField("modifiers").map(n => {
+        const f = findFlat(layouts.get(n.name)!, "modifiers");
+        if (!f.cell || f.rare || f.ty !== "Option<P<ModifierList>>") throw new Error(`unexpected modifiers field: ${n.name}`);
+        return [n.name, `std::mem::offset_of!(NodeAlloc<${n.name}>, data.${f.path})`];
+    }));
+    w(`        if offset == 0 { return None; }`);
+    w(`        // SAFETY: the tag selects the concrete allocation and its modifiers cell. Both allocation`);
+    w(`        // forms have the same data offset; read through OwnedCell to preserve its access checks.`);
+    w(`        unsafe { tsrs_core::ptr::arena_neighbor::<_, OwnedCell<Option<P<ModifierList>>>>(self, offset as isize) }.get()`);
     w(`    }`);
     w();
     w(`    pub(crate) fn set_modifiers_data(&self, modifiers: Option<P<ModifierList>>) {`);
@@ -860,14 +884,17 @@ function genNodeImpl() {
     ];
     for (const [fn, base] of baseAccessors) {
         w(`    ${fn === "flow_node_base" ? "pub(crate)" : "pub"} fn ${fn}(&self) -> Option<&'static ${base}> {`);
-        w(`        match self.data_tag() {`);
+        const entries: [string, string][] = [];
         for (const n of nodes) {
             if (HAND_WRITTEN_DATA.has(n.name)) continue;
             const p = basePath(layouts.get(n.name)!, base);
-            if (p) w(arm(n.name, `Some(&d.${p})`));
+            if (p) entries.push([n.name, `std::mem::offset_of!(NodeAlloc<${n.name}>, data.${p})`]);
         }
-        w(`            _ => None,`);
-        w(`        }`);
+        offsetTable(entries);
+        w(`        if offset == 0 { return None; }`);
+        w(`        // SAFETY: the tag selects the concrete allocation and its embedded ${base}. Both`);
+        w(`        // allocation forms have the same data offset, and the arena keeps the field alive.`);
+        w(`        Some(unsafe { tsrs_core::ptr::arena_neighbor(self, offset as isize) })`);
         w(`    }`);
         w();
     }

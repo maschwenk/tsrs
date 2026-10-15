@@ -140,6 +140,12 @@ with the switch off, which is why it is not in the default build.
 
 ## Measured and rejected (do not redo)
 
+- Whole-worker outlining of `instantiate_type_worker` ([xctrace investigation, 2026-10-15](perf-xctrace-2026-10-15.md)):
+  fresh CPU traces showed instruction-delivery pressure and an 11,616-byte inlined wrapper. Keeping the worker out
+  of line shrank the wrapper to 3,132 bytes, but three-pair Mac single-threaded instructions changed +0.09% on
+  vscode, -0.10% on Compiler-Unions and +0.44% on t3code-server; default peak RSS changed less than 0.7% and default
+  wall medians were unchanged. Reverted. A narrower measured change is needed before revisiting this.
+
 - Unicode normalization library cleanup ([rust-stdlib-normalization.md](rust-stdlib-normalization.md)), applied at
   the user's request: unicode-normalization 0.1.25 matches the existing Unicode 17 NFD output. Five-pair Mac
   screening on Compiler/Compiler-Unions: -0.017% to -0.011% single instructions, -0.198% to -0.056% default RSS;
