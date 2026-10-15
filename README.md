@@ -63,15 +63,15 @@ We thank the following organizations and contributors:
 <p>
   <a href="https://depot.dev">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/maschwenk/tsrs/main/assets/sponsors/depot-dark.svg">
-      <img alt="Depot" src="https://raw.githubusercontent.com/maschwenk/tsrs/main/assets/sponsors/depot-light.svg" height="32">
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/maschwenk/tsrs/maschwenk/readme-sponsor-logos/assets/sponsors/depot-dark.svg">
+      <img alt="Depot" src="https://raw.githubusercontent.com/maschwenk/tsrs/maschwenk/readme-sponsor-logos/assets/sponsors/depot-light.svg" height="32">
     </picture>
   </a>
   &nbsp;&nbsp;&nbsp;&nbsp;
   <a href="https://www.owner.com">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/maschwenk/tsrs/main/assets/sponsors/owner-dark.svg">
-      <img alt="Owner.com" src="https://raw.githubusercontent.com/maschwenk/tsrs/main/assets/sponsors/owner-light.svg" height="32">
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/maschwenk/tsrs/maschwenk/readme-sponsor-logos/assets/sponsors/owner-dark.svg">
+      <img alt="Owner.com" src="https://raw.githubusercontent.com/maschwenk/tsrs/maschwenk/readme-sponsor-logos/assets/sponsors/owner-light.svg" height="32">
     </picture>
   </a>
 </p>
