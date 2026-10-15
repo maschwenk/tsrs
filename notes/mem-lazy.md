@@ -41,7 +41,7 @@ retained memory, see below).
 ## Measuring where objects come from: `-p tsrs_checker --features tsrs_checker/site-counts`
 
 `CARGO_TARGET_DIR=$PWD/target/sc cargo build --release -p tsrs_cli -p tsrs_checker --features tsrs_checker/site-counts` builds a `tsrs` that
-prints creation-site tables at exit (`tsrs_core::sitecount`; `TSRS_SITE_COUNTS_TOP=N` rows per kind). Compiled out
+prints creation-site tables at exit (`tsrs_checker::sitecount`; `TSRS_SITE_COUNTS_TOP=N` rows per kind). Compiled out
 otherwise. The constructors are `#[track_caller]` under the feature, so each row is the code that asked for the
 object: `symbol`, `type` (labelled by kind), `signature`, `mapper` (labelled by mapper kind), `links` (new link
 slots by link type), `instantiation` (by kind of the instantiated type), and:

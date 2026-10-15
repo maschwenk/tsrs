@@ -29,7 +29,3 @@ tsrs_printer.workspace = true
 tsrs_transformers.workspace = true
 rustc-hash.workspace = true
 rayon.workspace = true
-
-[features]
-# TSRS_ASSIGNMENT_STATS also attributes checker-created types/symbols to files.
-assignment-stats = ["tsrs_checker/assignment-stats"]

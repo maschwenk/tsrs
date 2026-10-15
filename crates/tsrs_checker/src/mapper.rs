@@ -473,7 +473,7 @@ impl Checker {
 
 #[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_inference_type_mapper(n: P<InferenceContext>, fixing: bool) -> P<TypeMapper> {
-    tsrs_core::sitecount::hit("mapper", "inference");
+    crate::sitecount::hit("mapper", "inference");
     P::new_recycled(TypeMapper { first: tagged(n, TAG_INFERENCE), second: std::cell::Cell::new(MapperWord::from(fixing)) })
 }
 
@@ -511,13 +511,13 @@ pub(crate) fn append_type_mapping(mapper: Option<P<TypeMapper>>, source: P<Type>
 
 #[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_simple_type_mapper(source: P<Type>, target: P<Type>) -> P<TypeMapper> {
-    tsrs_core::sitecount::hit("mapper", "simple");
+    crate::sitecount::hit("mapper", "simple");
     P::new_recycled(TypeMapper { first: tagged(source, TAG_SIMPLE), second: std::cell::Cell::new(tagged(target, 0)) })
 }
 
 #[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_array_type_mapper(sources: &'static [P<Type>], targets: &'static [P<Type>]) -> P<TypeMapper> {
-    tsrs_core::sitecount::hit("mapper", "array");
+    crate::sitecount::hit("mapper", "array");
     match (pack_slice(sources), pack_slice(targets)) {
         (Some(first), Some(second)) => P::new_recycled(TypeMapper { first: first | TAG_ARRAY, second: std::cell::Cell::new(second) }),
         _ => TypeMapper::alloc_rare(RareTypeMapper::Array { sources, targets }),
@@ -526,7 +526,7 @@ pub(crate) fn new_array_type_mapper(sources: &'static [P<Type>], targets: &'stat
 
 #[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_array_to_single_type_mapper(sources: &'static [P<Type>], target: P<Type>) -> P<TypeMapper> {
-    tsrs_core::sitecount::hit("mapper", "array_to_single");
+    crate::sitecount::hit("mapper", "array_to_single");
     match pack_slice(sources) {
         Some(first) => P::new_recycled(TypeMapper { first: first | TAG_ARRAY_TO_SINGLE, second: std::cell::Cell::new(tagged(target, 0)) }),
         None => TypeMapper::alloc_rare(RareTypeMapper::ArrayToSingle { sources, target }),
@@ -535,24 +535,24 @@ pub(crate) fn new_array_to_single_type_mapper(sources: &'static [P<Type>], targe
 
 #[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_deferred_type_mapper(sources: &'static [P<Type>], targets: Vec<Box<dyn Fn(&mut Checker) -> P<Type>>>) -> P<TypeMapper> {
-    tsrs_core::sitecount::hit("mapper", "deferred");
+    crate::sitecount::hit("mapper", "deferred");
     TypeMapper::alloc_rare(RareTypeMapper::Deferred(DeferredTypeMapper { sources, targets }))
 }
 
 #[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_function_type_mapper(f: fn(&mut Checker, P<Type>) -> P<Type>) -> P<TypeMapper> {
-    tsrs_core::sitecount::hit("mapper", "function");
+    crate::sitecount::hit("mapper", "function");
     TypeMapper::alloc_rare(RareTypeMapper::Function(f))
 }
 
 #[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_merged_type_mapper(m1: P<TypeMapper>, m2: P<TypeMapper>) -> P<TypeMapper> {
-    tsrs_core::sitecount::hit("mapper", "merged");
+    crate::sitecount::hit("mapper", "merged");
     P::new_recycled(TypeMapper { first: tagged(m1, TAG_MERGED), second: std::cell::Cell::new(tagged(m2, 0)) })
 }
 
 #[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_composite_type_mapper(m1: P<TypeMapper>, m2: P<TypeMapper>) -> P<TypeMapper> {
-    tsrs_core::sitecount::hit("mapper", "composite");
+    crate::sitecount::hit("mapper", "composite");
     P::new_recycled(TypeMapper { first: tagged(m1, TAG_COMPOSITE), second: std::cell::Cell::new(tagged(m2, 0)) })
 }

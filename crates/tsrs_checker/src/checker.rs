@@ -1227,7 +1227,7 @@ pub struct Checker {
     pub(crate) last_emit_module_format: Option<(P<SourceFile>, ModuleKind)>,
     /// Instrumentation (feature `assignment-stats`): every type / symbol this checker created.
     #[cfg(feature = "assignment-stats")]
-    pub stats_created: (Vec<P<Type>>, Vec<P<Symbol>>),
+    pub(crate) stats_created: (Vec<P<Type>>, Vec<P<Symbol>>),
     pub context_free_types: FxHashMap<P<Node>, P<Type>>,
     pub any_type: P<Type>,
     pub auto_type: P<Type>,
@@ -3115,6 +3115,27 @@ impl Checker {
     pub fn clear_relation_caches(&self) {
         for r in [self.subtype_relation, self.strict_subtype_relation, self.assignable_relation, self.comparable_relation, self.identity_relation] {
             r.clear();
+        }
+    }
+
+    /// Objects recorded for assignment statistics, or `None` without the `assignment-stats` feature.
+    #[inline]
+    #[cfg_attr(
+        feature = "assignment-stats",
+        expect(clippy::unnecessary_wraps, reason = "The optional instrumentation API returns None when recording is compiled out.")
+    )]
+    #[cfg_attr(
+        not(feature = "assignment-stats"),
+        expect(clippy::unused_self, reason = "Recorded objects belong to this checker when instrumentation is enabled.")
+    )]
+    pub fn stats_created(&self) -> Option<(&[P<Type>], &[P<Symbol>])> {
+        #[cfg(feature = "assignment-stats")]
+        {
+            Some((&self.stats_created.0, &self.stats_created.1))
+        }
+        #[cfg(not(feature = "assignment-stats"))]
+        {
+            None
         }
     }
 }

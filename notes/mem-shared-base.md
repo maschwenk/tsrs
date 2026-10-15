@@ -27,7 +27,7 @@ sentence of "Verdict") still stands.
 
 ## 1. The measurement: a cross-checker duplication census
 
-`cargo build --release -p tsrs_cli --features tsrs_compiler/assignment-stats`, run with `TSRS_ASSIGNMENT_STATS=dup` and
+`cargo build --release -p tsrs_cli -p tsrs_checker --features tsrs_checker/assignment-stats`, run with `TSRS_ASSIGNMENT_STATS=dup` and
 `--extendedDiagnostics` (crates/tsrs_checker/src/dupstats.rs, crates/tsrs_compiler/src/checkerpool_dupstats.rs;
 compiled out otherwise). After checking, every type, checker-created symbol, signature and relation-cache entry of
 every checker gets a checker-independent fingerprint (xxh3-128 over a key):

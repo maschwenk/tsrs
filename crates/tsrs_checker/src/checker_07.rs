@@ -1667,7 +1667,7 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_symbol(&mut self, flags: SymbolFlags, name: &'static str) -> P<Symbol> {
         self.symbol_count += 1;
-        tsrs_core::sitecount::hit("symbol", "");
+        crate::sitecount::hit("symbol", "");
         let s = Symbol::new(flags | SymbolFlags::Transient, name);
         if self.seed_mode {
             // Shared graph: a fork must never write an id into a frozen symbol.

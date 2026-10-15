@@ -27,7 +27,7 @@ declaration-heavy projects with >= 4 checkers, a 101% load cap) in program order
   value/declared-type links in that checker, split into own / foreign source / declaration / lib, and the
   per-category histogram of files touched by exactly n checkers. It reads the checkers' link stores after
   checking; no checker code runs.
-- Feature `assignment-stats` (`cargo build -p tsrs_cli --features tsrs_compiler/assignment-stats`): the checker records every
+- Feature `assignment-stats` (`cargo build -p tsrs_cli -p tsrs_checker --features tsrs_checker/assignment-stats`): the checker records every
   type/symbol it creates (`Checker::stats_created`, compiled out otherwise), and the report attributes them to the
   file of the first declaration of the type's (alias) symbol, per checker and per package.
 - `TSRS_ASSIGNMENT_DUMP=<prefix>` writes the assignment inputs (`<prefix>.files.tsv`: checked, declaration, node

@@ -113,7 +113,6 @@ pub(crate) fn report(program: &'static Program, pool: &crate::checkerpool::check
         *work[idx].lock().unwrap() = w;
         *counters[idx].lock().unwrap() = (c.symbol_count as u64, c.type_count as u64, c.total_instantiation_count as u64);
     });
-    #[cfg(feature = "assignment-stats")]
     let created = created_by_file(program, pool);
     let work: Vec<Vec<u64>> = work.into_iter().map(|w| w.into_inner().unwrap()).collect();
     let counters: Vec<(u64, u64, u64)> = counters.into_iter().map(|c| c.into_inner().unwrap()).collect();
@@ -217,19 +216,20 @@ pub(crate) fn report(program: &'static Program, pool: &crate::checkerpool::check
         grand_max as f64 / 1e6,
         if grand_max == 0 { 0.0 } else { grand_sum as f64 / grand_max as f64 }
     );
-    #[cfg(feature = "assignment-stats")]
-    report_created(&mut out, program, state, &categories, &created);
+    if let Some(created) = created {
+        report_created(&mut out, program, state, &categories, &created);
+    }
     out
 }
 
 // created[c] = (types per file index, symbols per file index, types without a file, symbols without a file):
 // a checker-created type is attributed to the first declaration of its symbol (or alias symbol), a
 // checker-created symbol to its first declaration.
-#[cfg(feature = "assignment-stats")]
 type Created = (Vec<u64>, Vec<u64>, u64, u64);
 
-#[cfg(feature = "assignment-stats")]
-fn created_by_file(program: &'static Program, pool: &crate::checkerpool::checkerPool) -> Vec<Created> {
+fn created_by_file(program: &'static Program, pool: &crate::checkerpool::checkerPool) -> Option<Vec<Created>> {
+    // All checkers share the build's instrumentation setting. Skip attribution when recording is disabled.
+    pool.get_checker_non_exclusive().stats_created()?;
     let files = &program.files;
     let index: rustc_hash::FxHashMap<P<SourceFile>, usize> = files.iter().enumerate().map(|(i, &f)| (f, i)).collect();
     let file_of = |symbol: Option<P<tsrs_ast::Symbol>>| -> Option<usize> {
@@ -239,17 +239,18 @@ fn created_by_file(program: &'static Program, pool: &crate::checkerpool::checker
     let k = pool.checker_count();
     let result: Vec<Mutex<Created>> = std::iter::repeat_with(|| Mutex::new((Vec::new(), Vec::new(), 0, 0))).take(k).collect();
     pool.for_each_checker_parallel(|idx, c| {
+        let (created_types, created_symbols) = c.stats_created().expect("recording is enabled for every checker");
         let mut types = vec![0u64; files.len()];
         let mut symbols = vec![0u64; files.len()];
         let (mut no_type_file, mut no_symbol_file) = (0, 0);
-        for &t in &c.stats_created.0 {
+        for &t in created_types {
             let symbol = t.symbol().or_else(|| t.alias()?.symbol.get());
             match file_of(symbol) {
                 Some(i) => types[i] += 1,
                 None => no_type_file += 1,
             }
         }
-        for &s in &c.stats_created.1 {
+        for &s in created_symbols {
             match file_of(Some(s)) {
                 Some(i) => symbols[i] += 1,
                 None => no_symbol_file += 1,
@@ -257,10 +258,9 @@ fn created_by_file(program: &'static Program, pool: &crate::checkerpool::checker
         }
         *result[idx].lock().unwrap() = (types, symbols, no_type_file, no_symbol_file);
     });
-    result.into_iter().map(|r| r.into_inner().unwrap()).collect()
+    Some(result.into_iter().map(|r| r.into_inner().unwrap()).collect())
 }
 
-#[cfg(feature = "assignment-stats")]
 fn package_of(name: &str, project_dir: &str) -> String {
     if let Some(pos) = name.rfind("/node_modules/") {
         let rest = &name[pos + "/node_modules/".len()..];
@@ -280,7 +280,6 @@ fn package_of(name: &str, project_dir: &str) -> String {
     "other".to_string()
 }
 
-#[cfg(feature = "assignment-stats")]
 fn report_created(out: &mut String, program: &'static Program, state: &crate::checkerpool::poolState, categories: &[Category], created: &[Created]) {
     let files = &program.files;
     let k = created.len();

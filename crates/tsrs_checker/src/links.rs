@@ -126,7 +126,7 @@ impl<K: 'static, V: Default + LinkCopy + 'static> LinkStore<K, V> {
     #[cfg_attr(feature = "site-counts", track_caller)]
     #[inline(never)]
     fn create(&mut self, key: PKey) -> P<V> {
-        tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
+        crate::sitecount::hit("links", std::any::type_name::<V>());
         let index = self.len;
         self.slots.insert_unique(Self::hash(key), LinkSlot { key, index }, |slot| Self::hash(slot.key));
         if (index as usize).is_multiple_of(LINK_CHUNK) {
@@ -278,7 +278,7 @@ impl<K: 'static, V: KeyedLinks + Default + LinkCopy + 'static> KeyedLinkStore<K,
     #[cfg_attr(feature = "site-counts", track_caller)]
     #[inline(never)]
     fn create(&mut self, key: PKey) -> P<V> {
-        tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
+        crate::sitecount::hit("links", std::any::type_name::<V>());
         let index = self.len;
         if (index as usize).is_multiple_of(LINK_CHUNK) {
             self.chunks.push(PSlot::first(alloc_vec(std::iter::repeat_with(|| PSlot(V::default())).take(LINK_CHUNK).collect())));
@@ -343,7 +343,7 @@ impl SymbolReferenceLinkStore {
         let slot = match self.slots.entry(Self::hash(key), |s| s.key == key, |s| Self::hash(s.key)) {
             hashbrown::hash_table::Entry::Occupied(slot) => slot.into_mut(),
             hashbrown::hash_table::Entry::Vacant(slot) => {
-                tsrs_core::sitecount::hit("links", "SymbolReferenceLinks");
+                crate::sitecount::hit("links", "SymbolReferenceLinks");
                 slot.insert(ReferenceKindsSlot { key, kinds: SymbolFlags::None }).into_mut()
             }
         };
@@ -533,7 +533,7 @@ impl<V: Default + LinkCopy + 'static> IdLinkStore<V> {
     #[inline(never)]
     #[cfg_attr(feature = "site-counts", track_caller)]
     fn create(&mut self, id: u64) -> P<V> {
-        tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
+        crate::sitecount::hit("links", std::any::type_name::<V>());
         let slot = self.len;
         if (slot as usize).is_multiple_of(ID_LINK_CHUNK) {
             self.chunks.push(PSlot::first(alloc_vec(std::iter::repeat_with(|| PSlot(V::default())).take(ID_LINK_CHUNK).collect())));
@@ -698,7 +698,7 @@ impl<V: Default + LinkCopy + 'static> InlineIdStore<V> {
     #[inline(never)]
     #[cfg_attr(feature = "site-counts", track_caller)]
     fn create(&mut self, id: u64) -> &'static V {
-        tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
+        crate::sitecount::hit("links", std::any::type_name::<V>());
         let Ok(id) = u32::try_from(id) else {
             let parent = self.parent;
             return self

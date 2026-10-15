@@ -271,10 +271,11 @@ performance measurements). Features live on the crate that controls the instrume
 | Creation-site counters | `-p tsrs_checker --features tsrs_checker/site-counts` |
 | Checker work census | `-p tsrs_checker --features tsrs_checker/work-census` |
 | AST sizing | `--features tsrs_ast/ast-sizing` |
-| Checker assignment statistics | `--features tsrs_compiler/assignment-stats` |
+| Checker assignment statistics | `-p tsrs_checker --features tsrs_checker/assignment-stats` |
 | Shared checker graph | `--features tsrs_core/shared-graph` |
 
-The CLI aliases for these features and the compiler's `site-counts` / `work-census` / `ast-sizing` aliases have been removed.
+The CLI and compiler aliases for these features have been removed. Creation-site counters also live entirely in
+`tsrs_checker`; the `tsrs_core/site-counts` feature has been removed.
 Selecting `tsrs_checker` alongside `tsrs_cli` lets Cargo enable its features without a direct CLI dependency.
 The `alloc-profile` and `system-alloc` CLI features still control the executable's allocator.
 

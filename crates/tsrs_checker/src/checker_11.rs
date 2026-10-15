@@ -1073,7 +1073,7 @@ impl Checker {
         let key = if let Some(index) = index {
             let key = active_mapper_cache_key(t, alias);
             if let Some(cached_type) = self.active_type_mappers_caches[index].get(&key) {
-                tsrs_core::sitecount::hit("active mapper cache (instantiateTypeWithAlias)", "hit");
+                crate::sitecount::hit("active mapper cache (instantiateTypeWithAlias)", "hit");
                 return cached_type;
             }
             Some(key)
@@ -1082,7 +1082,7 @@ impl Checker {
             debug_assert!(self.active_type_mappers_caches.last().is_some_and(super::packedmap::PackedMap::is_empty));
             None
         };
-        tsrs_core::sitecount::hit(
+        crate::sitecount::hit(
             "active mapper cache (instantiateTypeWithAlias)",
             if index.is_none() {
                 "miss (new mapper)"
@@ -1092,7 +1092,7 @@ impl Checker {
         );
         self.total_instantiation_count += 1;
         self.instantiation_count += 1;
-        tsrs_core::sitecount::hit("instantiation", type_kind_label(t.flags(), t.object_flags()));
+        crate::sitecount::hit("instantiation", type_kind_label(t.flags(), t.object_flags()));
         self.instantiation_stack.push(t);
         let result = self.instantiate_type_worker(t, m, alias);
         match key {

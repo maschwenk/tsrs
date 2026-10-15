@@ -2700,9 +2700,9 @@ impl Checker {
                     *parent += delta;
                 }
             });
-            tsrs_core::sitecount::hit("first-resolve", label);
+            crate::sitecount::hit("first-resolve", label);
             for _ in 0..(delta - inner) {
-                tsrs_core::sitecount::hit("first-resolve-created", label);
+                crate::sitecount::hit("first-resolve-created", label);
             }
             return r;
         }

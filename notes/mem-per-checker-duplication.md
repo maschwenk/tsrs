@@ -147,7 +147,7 @@ of 20 B). Keeping the scratch local frees it with no output change. Spawned as i
 ## 3. Who declared it
 
 Temporary instrumentation (not committed): `TSRS_ASSIGNMENT_STATS=classes` in
-crates/tsrs_compiler/src/checkerpool_stats.rs (`--features tsrs_compiler/assignment-stats`, which records every type and symbol a
+crates/tsrs_compiler/src/checkerpool_stats.rs (`-p tsrs_checker --features tsrs_checker/assignment-stats`, which records every type and symbol a
 checker creates). Each created type is classed by the declaration of its alias symbol or symbol (lib, node_modules,
 workspace = outside the tsconfig's directory and not in node_modules, project = inside it, none) and by whether
 everything it is built from is declared in lib or node_modules or has no declaration ("library-only"): alias type
@@ -388,7 +388,7 @@ not tsgo's) and frees scratch; it does not size its thread count per project.
 cargo build --release --locked -p tsrs_cli
 CARGO_TARGET_DIR=target/alloc-profile cargo build --release --locked -p tsrs_cli --features alloc-profile
 CARGO_TARGET_DIR=target/census cargo build --release --locked -p tsrs_cli --features alloc-profile,tsrs_core/plain-ptrs
-CARGO_TARGET_DIR=target/astats cargo build --release --locked -p tsrs_cli --features tsrs_compiler/assignment-stats
+CARGO_TARGET_DIR=target/astats cargo build --release --locked -p tsrs_cli -p tsrs_checker --features tsrs_checker/assignment-stats
 cd bench/.work/solutions/<project>
 /usr/bin/time -l tsrs -p <tsconfig> --noEmit --incremental false --pretty false --extendedDiagnostics --checkers N
 TSRS_ALLOC_PROFILE_TOP=60 target/alloc-profile/release/tsrs ... --checkers {1,16}   # 2a, 2b

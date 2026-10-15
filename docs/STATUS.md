@@ -707,7 +707,7 @@ The private monorepo (go -> locality, same commit 52ef5a9, medians of 3): 4 chec
 -4% to -13% peak, faster at every count; 3 checkers with locality beat Go's 4 on both axes) in the notes.
 Single-threaded unchanged (no assignment with one checker). Of the remaining multi-checker excess, most is library instantiations (zod,
 MikroORM, lib) that every checker needs. Measurements, duplication breakdown, instrumentation
-(`TSRS_ASSIGNMENT_STATS`, feature `tsrs_compiler/assignment-stats`): `notes/mem-assignment.md`.
+(`TSRS_ASSIGNMENT_STATS`, feature `tsrs_checker/assignment-stats`): `notes/mem-assignment.md`.
 
 ## 2026-10-01: data-layout pass (peak memory)
 

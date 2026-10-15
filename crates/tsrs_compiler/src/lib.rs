@@ -31,6 +31,7 @@ mod modulespecifiers_oracle_test;
 
 pub use checkerpool::{assignment_stats_enabled, checker_count_upper_bound, set_checker_assignment_from_cli, set_checker_cost_cache_from_cli, parse_memory_size, set_max_memory_from_cli, use_go_default_checker_count, Checker, CheckerHandle, CheckerPool, Context, PooledChecker};
 pub use emitter::EmitOnly;
+pub use tsrs_checker::sitecount::dump as dump_site_counts;
 pub use programlike::{get_diagnostics_of_any_program_like, ProgramLike};
 pub use program_emit::{combine_emit_results, handle_no_emit_options, EmitOptions, EmitResult, SourceMapEmitResult, WriteFile, WriteFileData};
 pub use file_include::FileIncludeReason;

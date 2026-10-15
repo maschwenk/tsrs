@@ -1822,7 +1822,7 @@ impl Checker {
         #[cfg(feature = "site-counts")]
         {
             self.inst_symbol_sites.insert(result, std::panic::Location::caller());
-            tsrs_core::sitecount::hit("inst-symbol-created", "");
+            crate::sitecount::hit("inst-symbol-created", "");
         }
         let result_links = self.value_symbol_links.get(result);
         result_links.set_target(Some(symbol));
@@ -2151,7 +2151,7 @@ impl Checker {
         self.get_constraint_type_from_mapped_type(t);
         let mapped_type = t.as_mapped_type().target.get().unwrap_or(t);
         if self.get_name_type_from_mapped_type(mapped_type).is_some() {
-            tsrs_core::sitecount::hit("mapped-table-refused", "name-type");
+            crate::sitecount::hit("mapped-table-refused", "name-type");
             return None;
         }
         let should_link_prop_declarations = self.get_mapped_type_name_type_kind(mapped_type) != MappedTypeNameTypeKind::Remapping;
@@ -2159,7 +2159,7 @@ impl Checker {
         let modifiers_type = self.get_apparent_type(modifiers_type_of_mapped);
         if !modifiers_type.flags().intersects(TypeFlags::Object) || t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
             #[cfg(feature = "site-counts")]
-            tsrs_core::sitecount::hit(
+            crate::sitecount::hit(
                 "mapped-table-refused",
                 if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) { "resolved-meanwhile" } else { type_kind_label(modifiers_type.flags(), modifiers_type.object_flags_lazy()) },
             );

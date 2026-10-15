@@ -14,8 +14,6 @@ workspace = true
 checked-cells = []
 # Per-call-site arena profile and a counting allocator for executables to install (src/alloc_profile.rs).
 alloc-profile = ["dep:mimalloc-safe"]
-# Creation-site counters for checker objects (src/sitecount.rs).
-site-counts = []
 # Opt out of Unix pointer compression (build.rs; for comparisons: `--features tsrs_core/plain-ptrs`).
 plain-ptrs = []
 # The shared type graph (src/sharedgraph.rs, on with TSRS_SHARED_GRAPH=1). Without it every frozen-object test is a

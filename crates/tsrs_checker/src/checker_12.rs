@@ -1940,7 +1940,7 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_type<T: TypePayload>(&mut self, flags: TypeFlags, object_flags: ObjectFlags, data: T) -> P<Type> {
         self.type_count += 1;
-        tsrs_core::sitecount::hit("type", type_kind_label(flags, object_flags));
+        crate::sitecount::hit("type", type_kind_label(flags, object_flags));
         let t = Type::alloc(
             flags,
             object_flags & !(ObjectFlags::CouldContainTypeVariablesComputed | ObjectFlags::CouldContainTypeVariables | ObjectFlags::MembersResolved | ObjectFlags::WeakTypeMemo),
@@ -2247,7 +2247,7 @@ impl Checker {
         min_argument_count: usize,
     ) -> P<Signature> {
         self.signature_count += 1;
-        tsrs_core::sitecount::hit("signature", "");
+        crate::sitecount::hit("signature", "");
         let sig = P::new(Signature::default());
         sig.id.set(SignatureId(self.signature_count));
         sig.flags.set(flags);
@@ -2720,7 +2720,7 @@ impl Checker {
     }
 }
 
-/// Kind of a type for the creation-site counters (`tsrs_core::sitecount`).
+/// Kind of a type for the creation-site counters (`crate::sitecount`).
 pub(crate) fn type_kind_label(flags: TypeFlags, object_flags: ObjectFlags) -> &'static str {
     if flags.intersects(TypeFlags::Object) {
         if object_flags.intersects(ObjectFlags::ClassOrInterface) {
