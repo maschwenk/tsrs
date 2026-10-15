@@ -604,7 +604,7 @@ fn replaced_api_checker_makes_old_handles_stale() {
     let id = num(&t, "id") as u32;
     let checker_id = h.registry.project_checker_id(&h.project);
     assert_ne!(checker_id, 0);
-    h.registry.resolve_type(&h.project, id, Some(checker_id)).unwrap();
+    assert!(h.registry.resolve_type(&h.project, id, Some(checker_id)).is_ok());
     let err = h.registry.resolve_type(&h.project, id, Some(checker_id + 1)).unwrap_err();
     assert!(err.message.contains("stale"), "{err}");
 }

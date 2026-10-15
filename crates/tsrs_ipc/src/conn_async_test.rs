@@ -528,8 +528,7 @@ fn close_unblocks_the_read_loop() {
     host.closer.close().unwrap();
 
     mapper_handler.release.open();
-    // Require termination; a response racing with shutdown may fail to write.
-    let _ = mapper.run.recv_timeout(PATIENCE).unwrap();
+    assert!(mapper.run.recv_timeout(PATIENCE).is_ok());
 }
 
 // The bounded wait for the initialize request: the call gives up with context.DeadlineExceeded, the late response

@@ -193,7 +193,6 @@ iter_on_single_items = "warn"
 unused_peekable = "warn"
 suspicious_operation_groupings = "warn"
 return_and_then = "warn"
-assertions_on_result_states = "warn"
 
 # A `.clone()` that remains is a real copy.
 redundant_clone = "deny"

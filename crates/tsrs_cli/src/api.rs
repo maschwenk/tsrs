@@ -481,7 +481,7 @@ mod tests {
         }
 
         assert_eq!(call(&s, "disposeBuildOrchestrator", &format!("{{\"buildOrchestratorID\":{id}}}")), Value::Bool(true));
-        s.handle_request("build", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).unwrap_err();
+        assert!(s.handle_request("build", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
@@ -635,11 +635,8 @@ mod memory_tests {
         let grown = rss_kib().saturating_sub(before);
         eprintln!("failed build x{n}: rss grew {grown} KiB");
         assert!(grown < (n as u64) * 256, "rss grew {grown} KiB over {n} failed builds");
-        #[expect(clippy::assertions_on_result_states, reason = "Assert cleanup succeeds after failed builds; the response value is irrelevant.")]
-        {
-            assert!(s.handle_request("cleanBuild", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).is_ok());
-            assert!(s.handle_request("disposeBuildOrchestrator", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).is_ok());
-        }
+        assert!(s.handle_request("cleanBuild", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).is_ok());
+        assert!(s.handle_request("disposeBuildOrchestrator", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

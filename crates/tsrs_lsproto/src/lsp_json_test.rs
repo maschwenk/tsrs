@@ -250,22 +250,22 @@ fn test_unmarshal_ignores_unknown_fields() {
 // lsp_json_test.go:467
 #[test]
 fn test_unmarshal_rejects_wrong_types() {
-    unmarshal_str::<Location>("[]").unwrap_err();
-    unmarshal_str::<Location>(r#""not an object""#).unwrap_err();
-    unmarshal_str::<Location>("42").unwrap_err();
-    unmarshal_str::<Location>("null").unwrap_err();
-    unmarshal_str::<FoldingRange>("true").unwrap_err();
+    assert!(unmarshal_str::<Location>("[]").is_err());
+    assert!(unmarshal_str::<Location>(r#""not an object""#).is_err());
+    assert!(unmarshal_str::<Location>("42").is_err());
+    assert!(unmarshal_str::<Location>("null").is_err());
+    assert!(unmarshal_str::<FoldingRange>("true").is_err());
 }
 
 // lsp_json_test.go:511
 #[test]
 fn test_unmarshal_union_type_wrong_kind() {
-    unmarshal_str::<IntegerOrString>("true").unwrap_err();
-    unmarshal_str::<IntegerOrString>("null").unwrap_err();
-    unmarshal_str::<IntegerOrString>("{}").unwrap_err();
-    unmarshal_str::<IntegerOrString>("[]").unwrap_err();
-    unmarshal_str::<StringOrInlayHintLabelParts>("42").unwrap_err();
-    unmarshal_str::<StringOrInlayHintLabelParts>("true").unwrap_err();
+    assert!(unmarshal_str::<IntegerOrString>("true").is_err());
+    assert!(unmarshal_str::<IntegerOrString>("null").is_err());
+    assert!(unmarshal_str::<IntegerOrString>("{}").is_err());
+    assert!(unmarshal_str::<IntegerOrString>("[]").is_err());
+    assert!(unmarshal_str::<StringOrInlayHintLabelParts>("42").is_err());
+    assert!(unmarshal_str::<StringOrInlayHintLabelParts>("true").is_err());
 }
 
 // lsp_json_test.go:557
@@ -283,7 +283,7 @@ fn test_unmarshal_boolean_union_types() {
     assert!(v.boolean.is_none());
     assert!(v.hover_options.is_some());
 
-    unmarshal_str::<BooleanOrHoverOptions>(r#""nope""#).unwrap_err();
+    assert!(unmarshal_str::<BooleanOrHoverOptions>(r#""nope""#).is_err());
 }
 
 // lsp_json_test.go:597
@@ -356,10 +356,10 @@ fn test_unmarshal_discriminator_union() {
     assert_eq!(v.title, "Indexing");
 
     // invalid discriminator
-    unmarshal_str::<WorkDoneProgressBeginOrReportOrEnd>(r#"{"kind": "invalid"}"#).unwrap_err();
+    assert!(unmarshal_str::<WorkDoneProgressBeginOrReportOrEnd>(r#"{"kind": "invalid"}"#).is_err());
 
     // non-string discriminator
-    unmarshal_str::<WorkDoneProgressBeginOrReportOrEnd>(r#"{"kind": null}"#).unwrap_err();
+    assert!(unmarshal_str::<WorkDoneProgressBeginOrReportOrEnd>(r#"{"kind": null}"#).is_err());
 
     // missing discriminator
     let err = error_text::<WorkDoneProgressBeginOrReportOrEnd>(r#"{"message": "missing kind"}"#);
@@ -511,8 +511,8 @@ fn test_marshal_omits_zero_optional_fields() {
 fn test_literal_types() {
     assert_eq!(marshal(&StringLiteralCreate).unwrap(), r#""create""#);
     unmarshal_str::<StringLiteralCreate>(r#""create""#).unwrap();
-    unmarshal_str::<StringLiteralCreate>(r#""delete""#).unwrap_err();
-    unmarshal_str::<StringLiteralCreate>("42").unwrap_err();
+    assert!(unmarshal_str::<StringLiteralCreate>(r#""delete""#).is_err());
+    assert!(unmarshal_str::<StringLiteralCreate>("42").is_err());
 }
 
 // lsp_json_test.go:936

@@ -161,7 +161,7 @@ fn sync_nested_request_gets_a_deliberate_error_not_a_hang() {
         w.write_tuple(MessageType::Request, b"needsLock", b"").unwrap();
         assert_eq!(recv(), (MessageType::Response, "needsLock".into(), "1".into()));
         drop(w);
-        run.join().unwrap().unwrap();
+        assert!(run.join().unwrap().is_ok());
     });
 }
 
@@ -209,7 +209,7 @@ fn async_nested_request_gets_a_deliberate_error_after_the_grace_period_not_a_han
         w.write_frame(format!(r#"{{"jsonrpc":"2.0","id":{},"result":"done"}}"#, call["id"]).as_bytes()).unwrap();
         assert_eq!(json(&mut r), serde_json::json!({"jsonrpc": "2.0", "id": 1, "result": "done"}));
         drop(w);
-        run.join().unwrap().unwrap();
+        assert!(run.join().unwrap().is_ok());
     });
 }
 
@@ -225,7 +225,7 @@ fn async_plain_contention_waits_instead_of_failing() {
         assert_eq!(got[0]["result"], "held");
         assert_eq!(got[1]["result"], 0, "{got:?}");
         drop(w);
-        run.join().unwrap().unwrap();
+        assert!(run.join().unwrap().is_ok());
     });
 }
 
@@ -263,7 +263,7 @@ fn closing_while_a_handler_waits_on_a_callback_is_bounded() {
         drop(r);
         let _ = run.join().unwrap();
         // The lock was released on the way out: nothing stays wedged.
-        drop(session.registry.try_lock().unwrap());
+        assert!(session.registry.try_lock().is_ok());
     });
 }
 
@@ -287,7 +287,7 @@ fn async_unrelated_slow_callback_does_not_reject_ordinary_contention() {
         w.write_frame(format!(r#"{{"jsonrpc":"2.0","id":{},"result":"late"}}"#, call["id"]).as_bytes()).unwrap();
         assert_eq!(json(&mut r)["result"], "late");
         drop(w);
-        run.join().unwrap().unwrap();
+        assert!(run.join().unwrap().is_ok());
     });
 }
 
@@ -320,7 +320,7 @@ fn async_unrelated_attributed_callback_longer_than_grace_does_not_reject_a_waite
         w.write_frame(format!(r#"{{"jsonrpc":"2.0","id":{},"result":"late"}}"#, call["id"]).as_bytes()).unwrap();
         assert_eq!(json(&mut r)["result"], "late");
         drop(w);
-        run.join().unwrap().unwrap();
+        assert!(run.join().unwrap().is_ok());
     });
 }
 
@@ -346,7 +346,7 @@ fn async_unattributed_callback_longer_than_grace_rejects_after_grace_documented_
         w.write_frame(format!(r#"{{"jsonrpc":"2.0","id":{},"result":"late"}}"#, call["id"]).as_bytes()).unwrap();
         assert_eq!(json(&mut r)["result"], "late");
         drop(w);
-        run.join().unwrap().unwrap();
+        assert!(run.join().unwrap().is_ok());
     });
 }
 
@@ -367,7 +367,7 @@ fn genuine_reentry_through_a_worker_callback_still_fails_boundedly() {
         w.write_frame(format!(r#"{{"jsonrpc":"2.0","id":{},"result":"ok"}}"#, call["id"]).as_bytes()).unwrap();
         assert_eq!(json(&mut r)["result"], "ok");
         drop(w);
-        run.join().unwrap().unwrap();
+        assert!(run.join().unwrap().is_ok());
     });
     bounded("sync worker re-entry", || {
         let (server_r, client_w) = std::io::pipe().unwrap();
@@ -389,7 +389,7 @@ fn genuine_reentry_through_a_worker_callback_still_fails_boundedly() {
         w.write_tuple(MessageType::CallResponse, b"cb", b"\"ok\"").unwrap();
         assert_eq!(r.read_tuple().unwrap().msg_type, MessageType::Response);
         drop(w);
-        run.join().unwrap().unwrap();
+        assert!(run.join().unwrap().is_ok());
     });
 }
 
@@ -415,7 +415,7 @@ fn sequential_acquisitions_do_not_inherit_a_previous_wait() {
         w.write_frame(format!(r#"{{"jsonrpc":"2.0","id":{},"result":"late"}}"#, call["id"]).as_bytes()).unwrap();
         assert_eq!(json(&mut r)["result"], "late");
         drop(w);
-        run.join().unwrap().unwrap();
+        assert!(run.join().unwrap().is_ok());
     });
 }
 
@@ -436,6 +436,6 @@ fn scoped_worker_callback_is_attributed_and_does_not_reject_an_unrelated_waiter(
         w.write_frame(format!(r#"{{"jsonrpc":"2.0","id":{},"result":"late"}}"#, call["id"]).as_bytes()).unwrap();
         assert_eq!(json(&mut r)["result"], "late");
         drop(w);
-        run.join().unwrap().unwrap();
+        assert!(run.join().unwrap().is_ok());
     });
 }

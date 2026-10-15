@@ -203,7 +203,7 @@ impl Async {
 
     fn finish(self) {
         drop(self.w);
-        self.run.join().unwrap().unwrap();
+        assert!(self.run.join().unwrap().is_ok());
     }
 }
 
@@ -405,7 +405,7 @@ fn sync_genuine_reentry_fails_immediately_and_lease_free_requests_proceed() {
         w.write_tuple(MessageType::Request, b"getTypeAtPosition", needs.as_bytes()).unwrap();
         assert_eq!(recv().0, MessageType::Response);
         drop(w);
-        run.join().unwrap().unwrap();
+        assert!(run.join().unwrap().is_ok());
     });
 }
 
@@ -451,6 +451,6 @@ fn sync_nested_request_reads_its_own_exact_uint64_literals() {
         w.write_tuple(MessageType::CallResponse, b"cbOnly", b"null").unwrap();
         assert_eq!(recv().0, MessageType::Response);
         drop(w);
-        run.join().unwrap().unwrap();
+        assert!(run.join().unwrap().is_ok());
     });
 }

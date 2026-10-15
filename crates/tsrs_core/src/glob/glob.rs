@@ -369,7 +369,7 @@ mod tests {
         assert_eq!(parse("[a]").unwrap_err(), ERR_BAD_RANGE);
         assert_eq!(parse("[").unwrap_err(), ERR_BAD_RANGE);
         assert_eq!(parse("[a-").unwrap_err(), ERR_BAD_RANGE);
-        parse("a,b}").unwrap();
+        assert!(parse("a,b}").is_ok());
     }
 
     #[test]

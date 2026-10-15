@@ -98,7 +98,7 @@ fn request_and_response_messages_marshal_like_the_protocol() {
         r#"{"jsonrpc":"2.0","id":2,"result":true}"#
     );
     // A value json cannot encode fails the marshal instead of writing a broken frame.
-    jsonrpc::marshal_request_message(None, "m", Some(&Value::Number(f64::NAN))).unwrap_err();
+    assert!(jsonrpc::marshal_request_message(None, "m", Some(&Value::Number(f64::NAN))).is_err());
 }
 
 #[test]
@@ -253,5 +253,5 @@ fn message_unmarshal_errors() {
     for input in [r#"{"a":1,"a":2}"#, "{", r#"{"id":1} x"#, "\u{feff}{}"] {
         assert!(Message::unmarshal(input.as_bytes()).is_err(), "{input}");
     }
-    Message::unmarshal(b"{\"id\":\"\xff\"}").unwrap_err();
+    assert!(Message::unmarshal(b"{\"id\":\"\xff\"}").is_err());
 }
