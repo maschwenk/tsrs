@@ -7,12 +7,13 @@ Bun binary is given, with `bun check`, and reports wall time, peak memory and th
 The Depot CI workflow `.depot/workflows/bench.yml` runs it after pushes to `main` that change the Rust source or build
 inputs. It measures every project on the fixed-spec 8-vCPU machine in four modes and on a 16-vCPU machine in two
 (with bun check); `bench/results/<date>-<commit>.md` has every table. [The latest results](RESULTS.md) show the
-16-vCPU machine's default-mode tables (each compiler at its own thread count, tsgo, tsrs and bun check side by side)
-and the 8-vCPU machine's `--checkers 4` and `--checkers 8` tables (both compilers at tsgo's default and at tsrs's
-8-vCPU default).
+16-vCPU machine's tables, in the default mode (each compiler at its own thread count) and with `--checkers 16`, with
+tsgo, tsrs and bun check side by side, and the 8-vCPU machine's `--checkers 4` and `--checkers 8` tables (both
+compilers at tsgo's default and at tsrs's 8-vCPU default).
 
-The [README chart](large-projects.svg) compares TypeScript 7 and tsrs on VS Code, T3 Code and MUI docs using those
-`wide` measurements and the PGO-optimized `dist` build. The results commit step runs `bench/publish.py` to generate
+The [README chart](large-projects.svg) compares TypeScript 7 and tsrs on VS Code, T3 Code and MUI docs using the
+16-vCPU `checkers16` measurements (both compilers at 16 checker threads; at their defaults tsrs would run 16 there and
+tsgo 4) and the PGO-optimized `dist` build. The chart names the setting under its title. The results commit step runs `bench/publish.py` to generate
 the tables and a light and a dark SVG together ([`large-projects-dark.svg`](large-projects-dark.svg)); README.md
 shows the one matching the reader's GitHub theme, links to stable paths and is not rewritten by CI. The cards share the same
 time and memory scales; shorter bars are better. Error comparisons, all modes and raw measurements are in the report.

@@ -11,7 +11,7 @@ counts and instruction counts.
 
 ## Benchmark: tsrs vs tsgo 7.0.2 vs bun check
 
-Time and peak memory to type-check each project (`-p <project> --noEmit`) on Depot CI `depot-ubuntu-24.04-16` (16 vCPU, 63 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor). Median of 10 interleaved runs (3 for tsgo).
+Time and peak memory to type-check each project (`-p <project> --noEmit`) on Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor); the `--checkers 16` and default mode on the wider machine tables on Depot CI `depot-ubuntu-24.04-16` (16 vCPU, 63 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor). Median of 10 interleaved runs (3 for tsgo) in the default mode on the wider machine and `--checkers 16` tables; median of 5 interleaved runs (3 for tsgo) in the `--checkers 8` table.
 
 - **tsrs**: commit `359f7f762479`, PGO-optimized `dist` build, built like the npm release binaries.
 - **tsgo**: npm `typescript@7.0.2`, the official Go compiler. tsrs ports a later 7.1-dev commit (`b85298b6`).
@@ -19,7 +19,7 @@ Time and peak memory to type-check each project (`-p <project> --noEmit`) on Dep
 
 Projects: vscode, xstate-main, webpack, mui-docs, Compiler, Compiler-Unions are from [microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), the suite the TypeScript team benchmarks tsgo on; the other 11 are large open-source applications.
 
-### Default settings on 16 vCPUs
+### Default settings on 16 vCPUs, on Depot CI `depot-ubuntu-24.04-16` (16 vCPU, 63 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor)
 
 No thread flags: tsgo runs 4 checker threads; tsrs runs 16 (its default: all cores up to 16, then half the cores, at most 32; fewer on small projects); bun check runs one thread per core.
 
@@ -69,6 +69,106 @@ No thread flags: tsgo runs 4 checker threads; tsrs runs 16 (its default: all cor
 
 **Errors.** tsgo and tsrs report the same errors on 9 of 17 projects. The other 8 differ only because TypeScript changed between 7.0.2 and the 7.1-dev commit tsrs ports: `typescript@7.1.0-dev.20260930.4`, built from that commit, reports exactly tsrs's errors (tsgo / tsrs): vscode 359 / 371, webpack 848 / 840, supabase-studio 0 / 9, t3code-server 5 / 6, next-packages-next 6 / 5, next-root 441 / 438, nuxt 3 / 4, drizzle-orm 10845 / 10846. bun check, which follows TypeScript 7.0 like tsgo, differs from tsgo on webpack (837 errors, tsgo 848).
 
+### `--checkers 16`, on Depot CI `depot-ubuntu-24.04-16` (16 vCPU, 63 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor)
+
+16 checker threads each; bun check gets `--threads 16`.
+
+**Wall time**
+
+| project | tsgo | tsrs | bun check | tsrs vs tsgo | tsrs vs bun |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| mui-docs | 12.29 s | 0.75 s | 5.67 s | **16.34x faster** | 7.54x faster |
+| next-packages-next | 2.76 s | 0.22 s | 0.42 s | **12.58x faster** | 1.91x faster |
+| mikro-orm | 9.87 s | 0.80 s | 2.17 s | **12.36x faster** | 2.72x faster |
+| supabase-studio | 6.20 s | 0.61 s | 1.63 s | **10.13x faster** | 2.66x faster |
+| formbricks-web | 5.93 s | 0.60 s | 1.01 s | **9.86x faster** | 1.68x faster |
+| t3code-server | 14.88 s | 1.52 s | 2.95 s | **9.80x faster** | 1.94x faster |
+| storybook | 1.53 s | 0.16 s | 0.31 s | **9.68x faster** | 1.94x faster |
+| cal-diy | 5.39 s | 0.57 s | 1.45 s | **9.52x faster** | 2.55x faster |
+| playwright | 1.22 s | 0.13 s | 0.24 s | **9.36x faster** | 1.83x faster |
+| drizzle-orm | 1.87 s | 0.21 s | 0.49 s | **8.71x faster** | 2.27x faster |
+| xstate-main | 0.74 s | 0.09 s | 0.16 s | **8.51x faster** | 1.86x faster |
+| webpack | 1.06 s | 0.13 s | 0.24 s | **8.14x faster** | 1.86x faster |
+| vscode | 6.58 s | 0.81 s | 1.51 s | **8.12x faster** | 1.86x faster |
+| next-root | 1.23 s | 0.18 s | 0.31 s | **6.70x faster** | 1.70x faster |
+| nuxt | 1.19 s | 0.18 s | 0.46 s | **6.48x faster** | 2.52x faster |
+| Compiler-Unions | 0.40 s | 0.10 s | 0.20 s | 4.12x faster | 2.05x faster |
+| Compiler | 0.25 s | 0.07 s | 0.11 s | 3.68x faster | 1.55x faster |
+
+**Peak memory**
+
+| project | tsgo | tsrs | bun check | tsrs vs tsgo | tsrs vs bun |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| mui-docs | 14.11 GiB | 1.60 GiB | 8.48 GiB | **8.80x less** | 5.29x less |
+| next-packages-next | 2.43 GiB | 692 MiB | 752 MiB | 3.60x less | 1.09x less |
+| mikro-orm | 11.97 GiB | 1.97 GiB | 1.39 GiB | **6.08x less** | 1.41x more |
+| supabase-studio | 8.62 GiB | 1.69 GiB | 1.22 GiB | **5.10x less** | 1.38x more |
+| formbricks-web | 9.54 GiB | 2.00 GiB | 1.66 GiB | **4.77x less** | 1.20x more |
+| t3code-server | 10.73 GiB | 2.12 GiB | 1.11 GiB | **5.07x less** | 1.91x more |
+| storybook | 2.21 GiB | 520 MiB | 621 MiB | **4.36x less** | 1.20x less |
+| cal-diy | 8.59 GiB | 1.88 GiB | 1.32 GiB | **4.57x less** | 1.43x more |
+| playwright | 1.89 GiB | 495 MiB | 489 MiB | 3.92x less | 1.01x more |
+| drizzle-orm | 2.67 GiB | 816 MiB | 733 MiB | 3.35x less | 1.11x more |
+| xstate-main | 1.14 GiB | 340 MiB | 396 MiB | 3.44x less | 1.16x less |
+| webpack | 1.77 GiB | 537 MiB | 501 MiB | 3.38x less | 1.07x more |
+| vscode | 9.07 GiB | 2.09 GiB | 1.88 GiB | **4.34x less** | 1.11x more |
+| next-root | 1.64 GiB | 485 MiB | 566 MiB | 3.46x less | 1.17x less |
+| nuxt | 1.78 GiB | 518 MiB | 553 MiB | 3.52x less | 1.07x less |
+| Compiler-Unions | 306 MiB | 134 MiB | 211 MiB | 2.29x less | 1.58x less |
+| Compiler | 272 MiB | 133 MiB | 197 MiB | 2.04x less | 1.48x less |
+
+**Errors.** tsgo and tsrs report the same errors on 10 of 17 projects. 6 others differ only because TypeScript changed between 7.0.2 and the 7.1-dev commit tsrs ports: `typescript@7.1.0-dev.20260930.4`, built from that commit, reports exactly tsrs's errors (tsgo / tsrs): vscode 359 / 371, webpack 848 / 840, supabase-studio 0 / 9, t3code-server 5 / 6, next-packages-next 6 / 5, next-root 441 / 438. **Same count, different locations (a tsrs bug):** drizzle-orm (10846). bun check, which follows TypeScript 7.0 like tsgo, differs from tsgo on webpack (837 errors, tsgo 848), nuxt (3 errors, tsgo 4), drizzle-orm (10845 errors, tsgo 10846).
+
+### `--checkers 8`
+
+8 checker threads each (tsrs's default on 8 vCPUs).
+
+**Wall time**
+
+| project | tsgo | tsrs | tsrs vs tsgo |
+| --- | ---: | ---: | ---: |
+| mui-docs | 15.56 s | 0.98 s | **15.89x faster** |
+| next-packages-next | 3.45 s | 0.33 s | **10.59x faster** |
+| t3code-server | 15.16 s | 1.59 s | **9.56x faster** |
+| mikro-orm | 10.76 s | 1.17 s | **9.24x faster** |
+| storybook | 1.84 s | 0.20 s | **9.14x faster** |
+| drizzle-orm | 2.16 s | 0.24 s | **8.85x faster** |
+| supabase-studio | 7.72 s | 0.88 s | **8.83x faster** |
+| formbricks-web | 7.56 s | 0.89 s | **8.50x faster** |
+| cal-diy | 6.93 s | 0.82 s | **8.46x faster** |
+| playwright | 1.25 s | 0.17 s | **7.48x faster** |
+| xstate-main | 0.90 s | 0.12 s | **7.46x faster** |
+| next-root | 1.56 s | 0.22 s | **7.08x faster** |
+| webpack | 1.43 s | 0.21 s | **6.86x faster** |
+| nuxt | 1.54 s | 0.23 s | **6.81x faster** |
+| vscode | 8.91 s | 1.44 s | **6.17x faster** |
+| Compiler-Unions | 0.41 s | 0.10 s | 4.29x faster |
+| Compiler | 0.28 s | 0.07 s | 4.13x faster |
+
+**Peak memory**
+
+| project | tsgo | tsrs | tsrs vs tsgo |
+| --- | ---: | ---: | ---: |
+| mui-docs | 13.75 GiB | 1.32 GiB | **10.43x less** |
+| next-packages-next | 2.03 GiB | 598 MiB | 3.48x less |
+| t3code-server | 8.49 GiB | 1.52 GiB | **5.58x less** |
+| mikro-orm | 9.02 GiB | 1.61 GiB | **5.59x less** |
+| storybook | 1.86 GiB | 440 MiB | **4.33x less** |
+| drizzle-orm | 2.21 GiB | 572 MiB | 3.96x less |
+| supabase-studio | 6.79 GiB | 1.38 GiB | **4.92x less** |
+| formbricks-web | 7.39 GiB | 1.67 GiB | **4.42x less** |
+| cal-diy | 6.19 GiB | 1.42 GiB | **4.37x less** |
+| playwright | 1.42 GiB | 391 MiB | 3.71x less |
+| xstate-main | 965 MiB | 271 MiB | 3.57x less |
+| next-root | 1.47 GiB | 420 MiB | 3.59x less |
+| webpack | 1.41 GiB | 441 MiB | 3.28x less |
+| nuxt | 1.54 GiB | 420 MiB | 3.75x less |
+| vscode | 8.31 GiB | 1.92 GiB | **4.33x less** |
+| Compiler-Unions | 269 MiB | 102 MiB | 2.63x less |
+| Compiler | 255 MiB | 100 MiB | 2.56x less |
+
+**Errors.** tsgo and tsrs report the same errors on 9 of 17 projects. The other 8 differ only because TypeScript changed between 7.0.2 and the 7.1-dev commit tsrs ports: `typescript@7.1.0-dev.20260930.4`, built from that commit, reports exactly tsrs's errors (tsgo / tsrs): vscode 359 / 371, webpack 848 / 840, supabase-studio 0 / 9, t3code-server 5 / 6, next-packages-next 6 / 5, next-root 441 / 438, nuxt 3 / 4, drizzle-orm 10846 / 10846.
+
 Rows are sorted by speedup over tsgo. Wall time is the process's wall clock; peak memory is its maximum resident set size. Bold marks a win over tsgo of at least 5x in time or 4x in memory.
 
 ### Watch mode (vscode)
@@ -93,7 +193,7 @@ Shared CI machines vary by a few percent between runs of the same code; the sing
 ## README chart
 
 The [chart](large-projects.svg) compares TypeScript 7 and tsrs on VS Code, T3 Code and MUI docs using the latest
-`wide` results above. CI redraws it with the summary tables. File counts come from tsrs and include libraries and
+`--checkers 16` results above: both compilers at 16 checker threads on the 16-vCPU machine. CI redraws it with the summary tables. File counts come from tsrs and include libraries and
 dependencies. All three cards share a time scale and a memory scale; shorter bars are better. Ratios use unrounded
 medians. The SVG metadata records the measured commit, date, hardware and repetition counts.
 
