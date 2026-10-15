@@ -73,8 +73,8 @@ clippy cannot express:
   a protected borrow for the whole call (`noalias readonly`), so writing the free-list link into it is undefined
   behaviour; LLVM deleted that write in `panic = "abort"` builds and every such build crashed
   (`notes/fix-arena-recycle-uaf.md`). Take the block as a `P<T>`, an address or a raw slice (`*const [T]`). No
-  baseline. The CI job `arena-safety` adds Miri on the arena tests and the conformance suite on a `panic = "abort"`
-  build for the forms a source check cannot see.
+  baseline. The main-only `Miri` workflow's `arena-safety` job runs the full compiler and conformance suite under Miri
+  for the forms a source check cannot see.
 
 Test files, the generated fourslash crate and generated files are not scanned.
 

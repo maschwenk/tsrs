@@ -1,0 +1,91 @@
+# Depot CI workflow: runs the full compiler and conformance suite under Miri after changes land on main. Pull request
+# 367 is allowed while the workflow is introduced so its first result is visible before merge; every other pull
+# request skips the job. Security: read-only token, no secrets.
+
+name: Miri
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Superseded runs on the rollout pull request are expensive and no longer useful. Every push to main still completes.
+concurrency:
+  group: miri-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Pinned so that a Miri change cannot turn main red on its own.
+  RUSTUP_TOOLCHAIN: nightly-2026-10-04
+
+jobs:
+  # plain-ptrs replaces the compressed handles because Miri does not support their 32 GiB PROT_NONE reservation.
+  # The runner detects Miri and stays in-process because the interpreter cannot follow its normal subprocess workers.
+  arena-safety:
+    if: github.event_name == 'push' || github.event.pull_request.number == 367
+    runs-on: depot-ubuntu-24.04-8
+    timeout-minutes: 360
+    strategy:
+      # Keep every shard running so a failure in one part of the suite does not hide findings in another.
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]
+    steps:
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore TypeScript testdata
+        id: ts-ref
+        uses: actions/cache/restore@v4
+        with:
+          path: ts-ref/tsc/testdata
+          key: ts-ref-testdata-${{ steps.ts.outputs.commit }}
+
+      - name: Check out TypeScript testdata
+        if: steps.ts-ref.outputs.cache-hit != 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          sparse-checkout: tsc/testdata
+          persist-credentials: false
+
+      - name: Save TypeScript testdata
+        if: matrix.shard == 0 && steps.ts-ref.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ts-ref/tsc/testdata
+          key: ${{ steps.ts-ref.outputs.cache-primary-key }}
+
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          components: miri rust-src
+          # Every shard restores the same cache; only one should try to save it on a miss.
+          save-cache: ${{ matrix.shard == 0 }}
+          cache-key: miri
+
+      # Discovery expands every test's option matrix. Do that at native speed, then deterministically split the
+      # expanded variants so each one reaches exactly one in-process Miri worker.
+      - name: Build test manifest
+        run: |
+          cargo run --quiet --locked -p tsrs_testrunner -- __manifest --suite all --shard "${{ matrix.shard }}/32" > "$RUNNER_TEMP/tsrs-miri-items.tsv"
+          wc -l "$RUNNER_TEMP/tsrs-miri-items.tsv"
+
+      - name: Miri
+        # The arena leaks its chunks by design. Test fixtures also require host filesystem access. Miri adds random
+        # error to float results by default, which would make number output differ from the conformance baselines.
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-ignore-leaks -Zmiri-deterministic-floats
+        run: >-
+          cargo miri run --locked -p tsrs_testrunner --features tsrs_core/plain-ptrs -- __worker
+          < "$RUNNER_TEMP/tsrs-miri-items.tsv"

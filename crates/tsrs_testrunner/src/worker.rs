@@ -281,11 +281,16 @@ pub fn worker_main() {
                     continue;
                 }
                 let item = parse_item_line(&line);
-                let _ = writeln!(stdout, "{}", json!({"start": i}));
+                let _ = writeln!(stdout, "{}", json!({"start": i, "id": item.id()}));
                 let _ = stdout.flush();
                 let r = run_item(&table, &item);
-                write_artifacts(&item, &r);
-                write_extra_artifacts(&item, &r);
+                // Miri checks memory safety, not baseline output. Avoid interpreting four or more filesystem
+                // operations per test; the native runner remains responsible for writing result artifacts.
+                #[cfg(not(miri))]
+                {
+                    write_artifacts(&item, &r);
+                    write_extra_artifacts(&item, &r);
+                }
                 let mut v = json!({"i": i, "class": r.class.as_str(), "ms": r.ms as u64});
                 for (ext, _) in EXTRA_KINDS {
                     if let Some(e) = extra_result(&r, ext) {

@@ -183,7 +183,8 @@ What maintainers must configure before the first release:
 `.depot/workflows/ci.yml` (Depot CI; pushes to main, pull requests into main, manual dispatch): `cargo check
 --workspace` with warnings denied, `cargo test` for the fast crates, a release build, the conformance and fourslash
 gates, the determinism gate, a pnpm install smoke test of the packed tarballs, the WebAssembly build and differential
-gate, the lint ratchet, and the skip-marker, generated-code and arena-safety jobs.
+gate, the lint ratchet, and the skip-marker and generated-code jobs. `.depot/workflows/miri.yml` runs the full compiler
+and conformance suite under Miri only after a push lands on `main`.
 
 ## Adopting it in a pnpm workspace
 
