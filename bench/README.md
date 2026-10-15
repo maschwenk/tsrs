@@ -163,7 +163,9 @@ tsrs's errors (the table's errors paragraph names such projects).
 - Per project: one untimed warm-up run (tsgo), then N reps (default 3); within a rep the two modes and the two
   compilers alternate, and the compiler order flips every rep. Tables report medians.
 - Wall: process wall clock measured by the harness. Peak: max RSS from `wait4` rusage (the number `/usr/bin/time -v`
-  prints). The JSON also has the `--extendedDiagnostics` check/total time, "Memory used", files, symbols, types and
+  prints). Both come from `bench/measure.py`, a small process that starts the compiler: on Linux a child's peak
+  starts at its parent's size, so peaks below the runner's own size (up to about 566 MiB) used to read as that size.
+  Results before 2026-10-15 have that floor; it shows as bun check and tsrs reading the same peak on small projects. The JSON also has the `--extendedDiagnostics` check/total time, "Memory used", files, symbols, types and
   instantiations of every run. tsrs's default-mode counters are lower than tsgo's by design (lazy members); compare
   counters in `--singleThreaded` runs or with `--noLazyMembers`.
 - Each mode gets two tables, wall time and peak memory, with the same rows in the same order: sorted by the speedup
@@ -310,6 +312,11 @@ once the four application projects were in; `measure-watch` since 2026-10-13):
    compares that project only with runs on the same model. A run started from a branch
    (`depot ci run --workflow .depot/workflows/bench.yml`) ends with the `bench-result` artifact: nothing is committed
    or commented.
+
+**Pull requests**: adding the `bench` label to a pull request runs the whole bench on its head commit and commits the
+merged result to its branch as `bench/pr-results/<date>-<commit>.{json,md}`. Nothing goes into `bench/results/`,
+`bench/RESULTS.md` or the chart, and no regression comment is made. Only adding the label starts it, so to bench a
+later commit, remove the label and add it again. Delete `bench/pr-results/` before the pull request merges.
 
 **Fixed machine spec**: `depot-ubuntu-24.04-8`, 8 vCPU, 32 GB RAM, Linux x86_64, for every run, so numbers are
 comparable over time (the 16-vCPU sections: `depot-ubuntu-24.04-16`, 16 vCPU, checked by their own jobs). Sizing: the largest peak measured is tsgo's default mode on vscode and mui-docs (7.5 GiB on an
