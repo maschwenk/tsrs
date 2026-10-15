@@ -77,6 +77,11 @@ the generated shards from 163,056 to 132,781 lines and their `go::run` closures 
 crate rebuild fell from 6.14 s to 4.03 s (-34%): frontend 4.82 s to 3.31 s, code generation 1.32 s to 0.72 s. The
 suite took 5.9 s before and 5.5 s after; all three result hashes above remained identical.
 
+The same helper now also runs the canonical `t.Parallel()` prologue, and the generator passes the one-use content
+literal directly instead of declaring a local constant. That removes another 8,649 generated lines (132,781 to
+124,132). A warm paired isolated crate rebuild fell from 3.81 s to 3.65 s (-4.2%): frontend 3.11 s to 2.96 s and
+code generation 0.70 s to 0.69 s. The suite took 4.8 s; all three result hashes above remained identical.
+
 For correctness CI, `lto = false` still ran ThinLTO within every optimized crate. On the same 12-core arm64 host and
 commit, a clean `ci` build of `tsrs`, `tsrs-test` and `tsrs-fourslash` took 43.81 s with that setting and
 34.57 s with `lto = "off"`, a 21.1% reduction. Keeping 16 codegen units was faster than raising it to 256 (37.32 s)

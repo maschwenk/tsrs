@@ -29,8 +29,9 @@ at the time all 4,484 constant contents produced the same files, markers, ranges
   `MarkerOrRange` -> enum. `x.(bool)` -> `x.assert_bool()`.
 - `defer CALL` -> the rest of the block runs under `go::run` (catch_unwind), then CALL, then `go::resume`;
   `defer testutil.RecoverAndFail(t, msg)` -> `testutil::recover_and_fail(t, msg, result)`.
-- The canonical test wrapper (`RecoverAndFail`, constant content, `NewFourslash` with default capabilities, `done`)
-  calls one non-generic `fourslash::run_generated_test` helper. Variations keep the general defer lowering above.
+- The canonical test wrapper (`Parallel`, `RecoverAndFail`, constant content, `NewFourslash` with default
+  capabilities, `done`) passes the one-use content literal to one non-generic `fourslash::run_generated_test`
+  helper. Variations keep the general defer lowering above.
 - Closures that use the FourslashTest receive it as first parameter (PORTING.md callback rule): harness callbacks
   (`GoToEachMarker`), local closures; harness-returned closures (`done`, `reset`, `VerifyCompletionsResult`
   fields) are `Box<dyn FnOnce(&mut FourslashTest, &T, ..)>` and called as `done(&mut *f, t)`.

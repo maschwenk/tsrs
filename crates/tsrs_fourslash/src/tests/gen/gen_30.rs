@@ -5,8 +5,7 @@ use crate::tests::prelude::*;
 
 // underscoreTypings02_test.go:10
 pub fn test_underscore_typings02(t: &T) {
-    t.parallel();
-    let content: &str = r"// @strict: false
+    fourslash::run_generated_test(t, r"// @strict: false
 // @module: CommonJS
 interface Dictionary<T> {
     [x: string]: T;
@@ -23,8 +22,7 @@ interface ChainedDictionary<T> extends ChainedObject<Dictionary<>> {
 export interface ChainedArray<T> extends ChainedObject<Array<T>> {
     groupBy(): ChainedDictionary<any[]>;
     groupBy(propertyName): ChainedDictionary<any[]>;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_position(t, 0);
         f.verify_number_of_errors_in_current_file(t, 2);
     });
@@ -37,8 +35,7 @@ use crate::tests::prelude::*;
 
 // unreachableCodeAfterEdit_test.go:10
 pub fn test_unreachable_code_after_edit(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowUnreachableCode: false
+    fourslash::run_generated_test(t, r"// @allowUnreachableCode: false
 // @lib: es2015
 // @Filename: /base/browser/browser.ts
 export const isStandalone = true;
@@ -63,8 +60,7 @@ export class TransparentCrypto implements ISecretStorageCrypto {
     async unseal(data: string): Promise<string> {
         return data;
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_number_of_errors_in_current_file(t, 0);
         f.go_to_marker(t, "before");
         f.insert(t, r"throw new Error('foo');
@@ -83,9 +79,7 @@ use crate::tests::prelude::*;
 
 // unreachableCodeDiagnostics_test.go:10
 pub fn test_unreachable_code_diagnostics(t: &T) {
-    t.parallel();
-    let content: &str = "// @allowUnreachableCode: false\nthrow new Error();\n\t\n(() => {})();\n\t";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "// @allowUnreachableCode: false\nthrow new Error();\n\t\n(() => {})();\n\t", |f, t| {
         f.verify_baseline_non_suggestion_diagnostics(t);
     });
 }
@@ -97,13 +91,11 @@ use crate::tests::prelude::*;
 
 // unreachableStatementNodeReuse_test.go:10
 pub fn test_unreachable_statement_node_reuse(t: &T) {
-    t.parallel();
-    let content: &str = r"function test() {
+    fourslash::run_generated_test(t, r"function test() {
 	return/*a*/abc();
 	return;
 }
-function abc() { }";
-    fourslash::run_generated_test(t, content, |f, t| {
+function abc() { }", |f, t| {
         f.verify_number_of_errors_in_current_file(t, 1);
         f.go_to_marker(t, "a");
         f.insert(t, " ");
@@ -118,13 +110,11 @@ use crate::tests::prelude::*;
 
 // unusedClassInNamespace1_test.go:10
 pub fn test_unused_class_in_namespace1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 [| namespace greeter {
   class class1 {
   }
-} |]";
-    fourslash::run_generated_test(t, content, |f, t| {
+} |]", |f, t| {
         f.verify_range_after_code_fix(t, r"namespace greeter {
 }", false, 0, 0);
     });
@@ -137,8 +127,7 @@ use crate::tests::prelude::*;
 
 // unusedClassInNamespace3_test.go:10
 pub fn test_unused_class_in_namespace3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 // @noUnusedParameters:true
  [| namespace Validation {
     class c1 {
@@ -152,8 +141,7 @@ pub fn test_unused_class_in_namespace3(t: &T) {
     class c3 extends c1 {
 
     }
-} |]";
-    fourslash::run_generated_test(t, content, |f, t| {
+} |]", |f, t| {
         f.verify_range_after_code_fix(t, r"namespace Validation {
     class c1 {
     }
@@ -171,8 +159,7 @@ use crate::tests::prelude::*;
 
 // unusedClassInNamespace4_test.go:10
 pub fn test_unused_class_in_namespace4(t: &T) {
-    t.parallel();
-    let content: &str = r"// @strict: false
+    fourslash::run_generated_test(t, r"// @strict: false
 // @noUnusedLocals: true
 // @noUnusedParameters:true
  [| namespace Validation {
@@ -187,8 +174,7 @@ pub fn test_unused_class_in_namespace4(t: &T) {
     class c3 {
         public x: c1;
     }
-} |]";
-    fourslash::run_generated_test(t, content, |f, t| {
+} |]", |f, t| {
         f.verify_range_after_code_fix(t, r"namespace Validation {
     class c1 {
 
@@ -208,14 +194,12 @@ use crate::tests::prelude::*;
 
 // unusedClassInNamespaceWithTrivia1_test.go:10
 pub fn test_unused_class_in_namespace_with_trivia1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 [| namespace greeter {
   /* comment1 */
   class /* comment2 */ class1 {
   }
-} |]";
-    fourslash::run_generated_test(t, content, |f, t| {
+} |]", |f, t| {
         f.verify_range_after_code_fix(t, r"namespace greeter {
    /* comment1 */
 }", false, 0, 0);
@@ -229,8 +213,7 @@ use crate::tests::prelude::*;
 
 // unusedClassInNamespaceWithTrivia2_test.go:10
 pub fn test_unused_class_in_namespace_with_trivia2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 [| namespace greeter {
   // Do not remove
   /**
@@ -238,8 +221,7 @@ pub fn test_unused_class_in_namespace_with_trivia2(t: &T) {
    */
   class /* comment2 */ class1 {
   }
-} |]";
-    fourslash::run_generated_test(t, content, |f, t| {
+} |]", |f, t| {
         f.verify_range_after_code_fix(t, r"namespace greeter {
    // Do not remove
 }", false, 0, 0);
@@ -253,12 +235,10 @@ use crate::tests::prelude::*;
 
 // unusedConstantInFunction1_test.go:10
 pub fn test_unused_constant_in_function1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r#"// @noUnusedLocals: true
 [| function f1 () {
     const x: string = "x";
-} |]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+} |]"#, |f, t| {
         f.verify_range_after_code_fix(t, r"function f1 () {
 }", false, 0, 0);
     });
@@ -271,12 +251,10 @@ use crate::tests::prelude::*;
 
 // unusedEnumInFunction1_test.go:10
 pub fn test_unused_enum_in_function1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 [| function f1 () {
     enum Directions { Up, Down}
-} |]";
-    fourslash::run_generated_test(t, content, |f, t| {
+} |]", |f, t| {
         f.verify_range_after_code_fix(t, r"function f1 () {
 }
 ", false, 0, 0);
@@ -290,14 +268,12 @@ use crate::tests::prelude::*;
 
 // unusedEnumInNamespace1_test.go:10
 pub fn test_unused_enum_in_namespace1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 [| namespace greeter {
   enum enum1 {
       Monday
   }
-} |]";
-    fourslash::run_generated_test(t, content, |f, t| {
+} |]", |f, t| {
         f.verify_range_after_code_fix(t, r"namespace greeter {
 }", false, 0, 0);
     });
@@ -310,14 +286,12 @@ use crate::tests::prelude::*;
 
 // unusedFunctionInNamespace1_test.go:10
 pub fn test_unused_function_in_namespace1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 [| namespace greeter {
   // some legit comments
   function function1() {
   }/*1*/
-} |]";
-    fourslash::run_generated_test(t, content, |f, t| {
+} |]", |f, t| {
         f.verify_range_after_code_fix(t, r"namespace greeter {
    // some legit comments
 }", false, 0, 0);
@@ -331,15 +305,13 @@ use crate::tests::prelude::*;
 
 // unusedFunctionInNamespace2_test.go:10
 pub fn test_unused_function_in_namespace2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
  [| namespace greeter {
     export function function2() {
     }
     function function1() {
     }
-} |]";
-    fourslash::run_generated_test(t, content, |f, t| {
+} |]", |f, t| {
         f.verify_range_after_code_fix(t, r"namespace greeter {
     export function function2() {
     }
@@ -354,14 +326,12 @@ use crate::tests::prelude::*;
 
 // unusedFunctionInNamespace3_test.go:10
 pub fn test_unused_function_in_namespace3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 // @noUnusedParameters:true
  [| namespace Validation {
     function function1() {
     }
-} |]";
-    fourslash::run_generated_test(t, content, |f, t| {
+} |]", |f, t| {
         f.verify_range_after_code_fix(t, r"namespace Validation {
 }", false, 0, 0);
     });
@@ -374,14 +344,12 @@ use crate::tests::prelude::*;
 
 // unusedFunctionInNamespace4_test.go:10
 pub fn test_unused_function_in_namespace4(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 // @noUnusedParameters:true
  [| namespace Validation {
     var function1 = function() {
     }
-} |]";
-    fourslash::run_generated_test(t, content, |f, t| {
+} |]", |f, t| {
         f.verify_range_after_code_fix(t, r"namespace Validation {
 }", false, 0, 0);
     });
@@ -394,8 +362,7 @@ use crate::tests::prelude::*;
 
 // unusedFunctionInNamespace5_test.go:10
 pub fn test_unused_function_in_namespace5(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 // @noUnusedParameters:true
 namespace Validation {
     var function1 = function() {
@@ -414,8 +381,7 @@ namespace Validation {
     }
 
     export let a = function3; |]
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_range_after_code_fix(t, r"function function3() {
         function1();
     }
@@ -431,8 +397,7 @@ use crate::tests::prelude::*;
 
 // unusedFunctionInNamespaceWithTrivia_test.go:10
 pub fn test_unused_function_in_namespace_with_trivia(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 [| namespace greeter {
   // Do not remove
   /**
@@ -440,8 +405,7 @@ pub fn test_unused_function_in_namespace_with_trivia(t: &T) {
    */
   function function1() {
   }/*1*/
-} |]";
-    fourslash::run_generated_test(t, content, |f, t| {
+} |]", |f, t| {
         f.verify_range_after_code_fix(t, r"namespace greeter {
     // Do not remove
  }", false, 0, 0);
@@ -455,8 +419,7 @@ use crate::tests::prelude::*;
 
 // unusedImports10FS_test.go:10
 pub fn test_unused_imports10_fs(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 namespace A {
    export class Calculator {
         public handelChar() {
@@ -465,8 +428,7 @@ namespace A {
 }
 namespace B {
     [|import a = A;|]
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_range_after_code_fix(t, "", false, 0, 0);
     });
 }
@@ -478,8 +440,7 @@ use crate::tests::prelude::*;
 
 // unusedImports11FS_test.go:10
 pub fn test_unused_imports11_fs(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r#"// @noUnusedLocals: true
 // @Filename: file2.ts
 [| import f1, * as s from "./file1"; |]
 s.f2('hello');
@@ -487,8 +448,7 @@ s.f2('hello');
 export var v1;
 export function f1(n: number){}
 export function f2(s: string){};
-export default f1;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export default f1;"#, |f, t| {
         f.verify_range_after_code_fix(t, r#"import * as s from "./file1";"#, false, 0, 0);
     });
 }
@@ -500,16 +460,14 @@ use crate::tests::prelude::*;
 
 // unusedImports12FS_test.go:10
 pub fn test_unused_imports12_fs(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r#"// @noUnusedLocals: true
 // @Filename: file2.ts
 [| import f1, * as s from "./file1"; |]
 f1(42);
 // @Filename: file1.ts
 export function f1(n: number){}
 export function f2(s: string){};
-export default f1;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export default f1;"#, |f, t| {
         f.verify_range_after_code_fix(t, r#"import f1 from "./file1";"#, false, 0, 0);
     });
 }
@@ -521,15 +479,13 @@ use crate::tests::prelude::*;
 
 // unusedImports13FS_test.go:10
 pub fn test_unused_imports13_fs(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 // @Filename: file2.ts
 [| import A, { x } from './a'; |]
 console.log(A);
 // @Filename: file1.ts
 export default 10;
-export var x = 10;";
-    fourslash::run_generated_test(t, content, |f, t| {
+export var x = 10;", |f, t| {
         f.verify_range_after_code_fix(t, "import A from './a';", false, 0, 0);
     });
 }
@@ -541,15 +497,13 @@ use crate::tests::prelude::*;
 
 // unusedImports14FS_test.go:10
 pub fn test_unused_imports14_fs(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 // @Filename: file2.ts
 [| import /* 1 */ A /* 2 */, /* 3 */ { /* 4 */ x /* 5 */ } /* 6 */ from './a'; |]
 console.log(A);
 // @Filename: file1.ts
 export default 10;
-export var x = 10;";
-    fourslash::run_generated_test(t, content, |f, t| {
+export var x = 10;", |f, t| {
         f.verify_range_after_code_fix(t, "import /* 1 */ A /* 2 */ /* 6 */ from './a';", false, 0, 0);
     });
 }
@@ -561,15 +515,13 @@ use crate::tests::prelude::*;
 
 // unusedImports1FS_test.go:10
 pub fn test_unused_imports1_fs(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r#"// @noUnusedLocals: true
 // @Filename: file2.ts
   [|import { Calculator } from "./file1" |]
 // @Filename: file1.ts
    export class Calculator {
 
-   }"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+   }"#, |f, t| {
         f.verify_range_after_code_fix(t, "", false, 0, 0);
     });
 }
@@ -581,8 +533,7 @@ use crate::tests::prelude::*;
 
 // unusedImports3FS_test.go:10
 pub fn test_unused_imports3_fs(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r#"// @noUnusedLocals: true
 // @Filename: file2.ts
 [| import {Calculator, /*some comments*/ test, test2} from "./file1" |]
  test();
@@ -596,8 +547,7 @@ pub fn test_unused_imports3_fs(t: &T) {
  }
  export function test2() {
 
- }"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+ }"#, |f, t| {
         f.verify_range_after_code_fix(t, r#"import {/*some comments*/ test, test2} from "./file1""#, false, 0, 0);
     });
 }
@@ -609,8 +559,7 @@ use crate::tests::prelude::*;
 
 // unusedImports4FS_test.go:10
 pub fn test_unused_imports4_fs(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r#"// @noUnusedLocals: true
 // @Filename: file2.ts
 [| import {Calculator, test, test2} from "./file1" |]
 
@@ -628,8 +577,7 @@ export function test() {
 
 export function test2() {
 
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_range_after_code_fix(t, r#"import {Calculator, test2} from "./file1""#, false, 0, 0);
     });
 }
@@ -641,8 +589,7 @@ use crate::tests::prelude::*;
 
 // unusedImports5FS_test.go:10
 pub fn test_unused_imports5_fs(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r#"// @noUnusedLocals: true
 // @Filename: file2.ts
 [| import {Calculator, test, test2} from "./file1" |]
 
@@ -660,8 +607,7 @@ export function test() {
 
 export function test2() {
 
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_range_after_code_fix(t, r#"import {Calculator, test} from "./file1""#, false, 0, 0);
     });
 }
@@ -673,8 +619,7 @@ use crate::tests::prelude::*;
 
 // unusedImports6FS_test.go:10
 pub fn test_unused_imports6_fs(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r#"// @noUnusedLocals: true
 // @Filename: file2.ts
 [| import d from "./file1" |]
 // @Filename: file1.ts
@@ -686,8 +631,7 @@ export function test() {
 }
 export default function test2() {
 
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_range_after_code_fix(t, "", false, 0, 0);
     });
 }
@@ -699,8 +643,7 @@ use crate::tests::prelude::*;
 
 // unusedImports7FS_test.go:10
 pub fn test_unused_imports7_fs(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r#"// @noUnusedLocals: true
 // @Filename: file2.ts
 [| import * as n from "./file1" |]
 // @Filename: file1.ts
@@ -710,8 +653,7 @@ export class Calculator {
 export function test() {
 }
 export default function test2() {
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_range_after_code_fix(t, "", false, 0, 0);
     });
 }
@@ -723,8 +665,7 @@ use crate::tests::prelude::*;
 
 // unusedImports8FS_test.go:10
 pub fn test_unused_imports8_fs(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r#"// @noUnusedLocals: true
 // @Filename: file2.ts
 [|import {Calculator as calc, test as t1, test2 as t2} from "./file1"|]
 
@@ -740,8 +681,7 @@ export function test() {
 }
 export function test2() {
 
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_range_after_code_fix(t, r#"import {Calculator as calc, test as t1} from "./file1""#, false, 0, 0);
     });
 }
@@ -753,8 +693,7 @@ use crate::tests::prelude::*;
 
 // unusedImports9FS_test.go:10
 pub fn test_unused_imports9_fs(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 // @Filename: file2.ts
 [|import c = require('./file1')|]
 // @Filename: file1.ts
@@ -768,8 +707,7 @@ export function test() {
 
 export function test2() {
 
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_range_after_code_fix(t, "", false, 0, 0);
     });
 }
@@ -781,14 +719,12 @@ use crate::tests::prelude::*;
 
 // unusedLabelAfterEdit_test.go:10
 pub fn test_unused_label_after_edit(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowUnusedLabels: false
+    fourslash::run_generated_test(t, r"// @allowUnusedLabels: false
 myLabel: while (true) {
     if (Math.random() > 0.5) {
         /*marker*/break myLabel;
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_number_of_errors_in_current_file(t, 0);
         f.go_to_marker(t, "marker");
         f.delete_at_caret(t, 14);
@@ -808,12 +744,10 @@ use crate::tests::prelude::*;
 
 // unusedLocalsInFunction1_test.go:10
 pub fn test_unused_locals_in_function1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
  [| function greeter() {
     var x = 0;
-} |]";
-    fourslash::run_generated_test(t, content, |f, t| {
+} |]", |f, t| {
         f.verify_range_after_code_fix(t, r"
 function greeter() {
 }", false, 0, 0);
@@ -827,14 +761,12 @@ use crate::tests::prelude::*;
 
 // unusedLocalsInFunction3_test.go:10
 pub fn test_unused_locals_in_function3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 function greeter() {
    [| var x, y = 0,z = 1; |]
     x+1;
     z+1;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_range_after_code_fix(t, "var x,z = 1;", false, 6133, 0);
     });
 }
@@ -846,15 +778,13 @@ use crate::tests::prelude::*;
 
 // unusedLocalsinConstructorFS1_test.go:10
 pub fn test_unused_localsin_constructor_fs1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 // @noUnusedParameters:true
 class greeter {
     [| constructor() {
         var unused = 20;
     } |]
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_range_after_code_fix(t, r"constructor() {
 }", false, 0, 0);
     });
@@ -867,8 +797,7 @@ use crate::tests::prelude::*;
 
 // unusedLocalsinConstructorFS2_test.go:10
 pub fn test_unused_localsin_constructor_fs2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r#"// @noUnusedLocals: true
 // @noUnusedParameters: true
 class greeter {
     [|constructor() {
@@ -876,8 +805,7 @@ class greeter {
         var used = "dummy";
         used = used + "second part";
     }|]
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_range_after_code_fix(t, r#"
     constructor() {
         var used = "dummy";
@@ -894,14 +822,12 @@ use crate::tests::prelude::*;
 
 // unusedVariableInClass5_test.go:10
 pub fn test_unused_variable_in_class5(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noUnusedLocals: true
+    fourslash::run_generated_test(t, r"// @noUnusedLocals: true
 // @target: esnext
 declare class greeter {
     #private;
     private name;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_no_errors(t);
     });
 }
@@ -913,13 +839,11 @@ use crate::tests::prelude::*;
 
 // updateSourceFile_jsdocSignature_test.go:10
 pub fn test_update_source_file_jsdoc_signature(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * @callback Cb
  * @return {/**/}
  */
-let x;";
-    fourslash::run_generated_test(t, content, |f, t| {
+let x;", |f, t| {
         f.go_to_marker(t, "");
         f.insert(t, "number");
     });
@@ -932,8 +856,7 @@ use crate::tests::prelude::*;
 
 // updateToClassStatics_test.go:10
 pub fn test_update_to_class_statics(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace TypeScript {
+    fourslash::run_generated_test(t, r"namespace TypeScript {
     export class PullSymbol {}
     export class Diagnostic {}
     export class SymbolAndDiagnostics<TSymbol extends PullSymbol> {
@@ -948,8 +871,7 @@ pub fn test_update_to_class_statics(t: &T) {
 }
 namespace TypeScript {
     var x : TypeScript.SymbolAndDiagnostics;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_marker(t, "");
         f.insert(t, "someNewProperty = 0;");
     });
@@ -962,16 +884,14 @@ use crate::tests::prelude::*;
 
 // verifySingleFileEmitOutput1_test.go:10
 pub fn test_verify_single_file_emit_output1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: verifySingleFileEmitOutput1_file0.ts
+    fourslash::run_generated_test(t, r#"// @Filename: verifySingleFileEmitOutput1_file0.ts
 export class A {
 }
 export class Z {
 }
 // @Filename: verifySingleFileEmitOutput1_file1.ts
 import f = require("./verifySingleFileEmitOutput1_file0");
-var /**/b = new f.A();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var /**/b = new f.A();"#, |f, t| {
         f.verify_quick_info_at(t, "", "var b: f.A", "");
     });
 }
@@ -983,9 +903,7 @@ use crate::tests::prelude::*;
 
 // whiteSpaceBeforeReturnTypeFormatting_test.go:10
 pub fn test_white_space_before_return_type_formatting(t: &T) {
-    t.parallel();
-    let content: &str = "var x: () =>     string/**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "var x: () =>     string/**/", |f, t| {
         f.go_to_marker(t, "");
         f.insert(t, ";");
         f.verify_current_line_content(t, "var x: () => string;");
@@ -999,9 +917,7 @@ use crate::tests::prelude::*;
 
 // whiteSpaceTrimming_test.go:10
 pub fn test_white_space_trimming(t: &T) {
-    t.parallel();
-    let content: &str = "if (true) {     \n  //    \n   /*err*/}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "if (true) {     \n  //    \n   /*err*/}", |f, t| {
         f.go_to_marker(t, "err");
         f.insert(t, r"
 ");
@@ -1016,12 +932,10 @@ use crate::tests::prelude::*;
 
 // whiteSpaceTrimming2_test.go:10
 pub fn test_white_space_trimming2(t: &T) {
-    t.parallel();
-    let content: &str = r"let noSubTemplate = `/*    /*1*/`;
+    fourslash::run_generated_test(t, r"let noSubTemplate = `/*    /*1*/`;
 let templateHead = `/*    /*2*/${1 + 2}`;
 let templateMiddle = `/*    ${1 + 2    /*3*/}`;
-let templateTail = `/*    ${1 + 2}    /*4*/`;";
-    fourslash::run_generated_test(t, content, |f, t| {
+let templateTail = `/*    ${1 + 2}    /*4*/`;", |f, t| {
         f.go_to_marker(t, "1");
         f.insert(t, r"
 ");
@@ -1045,11 +959,9 @@ use crate::tests::prelude::*;
 
 // whiteSpaceTrimming3_test.go:10
 pub fn test_white_space_trimming3(t: &T) {
-    t.parallel();
-    let content: &str = r#"let t = "foo \
+    fourslash::run_generated_test(t, r#"let t = "foo \
 bar     \   
-"/*1*/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+"/*1*/"#, |f, t| {
         f.go_to_marker(t, "1");
         f.insert(t, ";");
         f.verify_current_file_content(t, r#"let t = "foo \
@@ -1065,9 +977,7 @@ use crate::tests::prelude::*;
 
 // whiteSpaceTrimming4_test.go:10
 pub fn test_white_space_trimming4(t: &T) {
-    t.parallel();
-    let content: &str = r"var re = /\w+   /*1*//;";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"var re = /\w+   /*1*//;", |f, t| {
         f.go_to_marker(t, "1");
         f.insert(t, r"
 ");
@@ -1083,8 +993,7 @@ use crate::tests::prelude::*;
 
 // workspaceSymbolCurrentProject_test.go:12
 pub fn test_workspace_symbol_current_project(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 // @Filename: /home/projects/a/tsconfig.json
 {}
 
@@ -1096,8 +1005,7 @@ export function [|fromA|]() {}
 
 // @Filename: /home/projects/b/index.ts
 export function [|fromB|]() {}
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.go_to_file(t, "/home/projects/a/index.ts");
         let all_open_projects = lsutil::new_default_user_preferences();
         let mut current_project = lsutil::new_default_user_preferences();
@@ -1113,8 +1021,7 @@ use crate::tests::prelude::*;
 
 // workspaceSymbolMultiProjectNonExistentRef_test.go:14
 pub fn test_workspace_symbol_multi_project_non_existent_ref(t: &T) {
-    t.parallel();
-    let content: &str = r#"
+    fourslash::run_generated_test(t, r#"
 // @Filename: /home/src/projects/project-a/tsconfig.json
 {
   "compilerOptions": { "composite": true },
@@ -1132,8 +1039,7 @@ export const [|myValueA|]: number = 1;
 
 // @Filename: /home/src/projects/project-b/index.ts
 export const [|myValueB|]: string = "hello";
-"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+"#, |f, t| {
         f.verify_workspace_symbol(t, &[fourslash::VerifyWorkspaceSymbolCase { pattern: "myValue".to_string(), includes: Some(vec![lsproto::SymbolInformation { name: "myValueA".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[0].ls_location(), ..Default::default() }, lsproto::SymbolInformation { name: "myValueB".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[1].ls_location(), ..Default::default() }]), ..Default::default() }]);
     });
 }

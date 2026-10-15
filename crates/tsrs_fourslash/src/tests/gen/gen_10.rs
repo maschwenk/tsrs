@@ -5,9 +5,7 @@ use crate::tests::prelude::*;
 
 // exportAssignmentMissingName_test.go:10
 pub fn test_export_assignment_missing_name(t: &T) {
-    t.parallel();
-    let content: &str = "export = ";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "export = ", |f, t| {
         f.verify_baseline_document_symbol(t);
     });
 }
@@ -19,12 +17,10 @@ use crate::tests::prelude::*;
 
 // exportDefaultClass_test.go:12
 pub fn test_export_default_class(t: &T) {
-    t.parallel();
-    let content: &str = r"export default class C {
+    fourslash::run_generated_test(t, r"export default class C {
     method() { /*1*/ }
 }
- /*2*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+ /*2*/", |f, t| {
         f.verify_completions(t, Any::MarkerSlice(f.markers()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "C".to_string(), detail: Some("class C".to_string()), kind: Some(lsproto::CompletionItemKind::Class), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
 }
@@ -36,12 +32,10 @@ use crate::tests::prelude::*;
 
 // exportDefaultFunction_test.go:12
 pub fn test_export_default_function(t: &T) {
-    t.parallel();
-    let content: &str = r"export default function func() {
+    fourslash::run_generated_test(t, r"export default function func() {
     /*1*/
 }
- /*2*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+ /*2*/", |f, t| {
         f.verify_completions(t, Any::MarkerSlice(f.markers()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "func".to_string(), detail: Some("function func(): void".to_string()), kind: Some(lsproto::CompletionItemKind::Function), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
 }
@@ -53,8 +47,7 @@ use crate::tests::prelude::*;
 
 // exportEqualCallableInterface_test.go:11
 pub fn test_export_equal_callable_interface(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 // @Filename: exportEqualCallableInterface_file0.ts
 interface x {
     (): Date;
@@ -65,8 +58,7 @@ export = x;
 ///<reference path='exportEqualCallableInterface_file0.ts'/>
 import test = require('./exportEqualCallableInterface_file0');
 var t2: test;
-t2./**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+t2./**/", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_function_members_with_prototype_plus(&[Any::String("foo".to_string())])), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -78,8 +70,7 @@ use crate::tests::prelude::*;
 
 // exportEqualNamespaceClassESModuleInterop_test.go:11
 pub fn test_export_equal_namespace_class_es_module_interop(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @esModuleInterop: true
+    fourslash::run_generated_test(t, r#"// @esModuleInterop: true
 // @moduleResolution: bundler
 // @target: es2015
 // @module: esnext
@@ -92,8 +83,7 @@ import * as Foo from "@bar/foo";
 export = Foo;
 // @Filename: /index.ts
 import Foo from "foo";
-/**/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/**/"#, |f, t| {
         f.go_to_file(t, "/index.ts");
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("Foo".to_string())], ..Default::default() }), ..Default::default() }));
     });
@@ -106,8 +96,7 @@ use crate::tests::prelude::*;
 
 // exportEqualTypes_test.go:11
 pub fn test_export_equal_types(t: &T) {
-    t.parallel();
-    let content: &str = r"// @module: commonjs
+    fourslash::run_generated_test(t, r"// @module: commonjs
 // @lib: es5
 // @strict: false
 // @Filename: exportEqualTypes_file0.ts
@@ -121,8 +110,7 @@ export = x;
 import test = require('./exportEqualTypes_file0');
 var t: /*1*/test;  // var 't' should be of type 'test'
 var /*2*/r1 = t(); // Should return a Date
-var /*3*/r2 = t./*4*/foo; // t should have 'foo' in dropdown list and be of type 'string'";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*3*/r2 = t./*4*/foo; // t should have 'foo' in dropdown list and be of type 'string'", |f, t| {
         f.verify_quick_info_at(t, "1", r"(alias) interface test
 import test = require('./exportEqualTypes_file0')", "");
         f.verify_quick_info_at(t, "2", "var r1: Date", "");
@@ -139,16 +127,14 @@ use crate::tests::prelude::*;
 
 // exportEqualsInterfaceA_test.go:10
 pub fn test_export_equals_interface_a(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: exportEqualsInterface_A.ts
+    fourslash::run_generated_test(t, r"// @Filename: exportEqualsInterface_A.ts
 interface A {
     p1: number;
 }
 export = A;
 /**/
 var i: I1;
-var n: number = i.p1;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var n: number = i.p1;", |f, t| {
         f.go_to_marker(t, "");
         f.insert(t, r#"import I1 = require("exportEqualsInterface_A");"#);
     });
@@ -161,11 +147,9 @@ use crate::tests::prelude::*;
 
 // exportInLabeledStatement_test.go:10
 pub fn test_export_in_labeled_statement(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: a.ts
+    fourslash::run_generated_test(t, r"// @Filename: a.ts
 subTitle:
-[|export|] const title: string";
-    fourslash::run_generated_test(t, content, |f, t| {
+[|export|] const title: string", |f, t| {
         f.verify_baseline_document_highlights_with_options(t, None, &[f.ranges()[0].file_name().as_str()], &[Any::RangeMarker(Arc::clone(&f.ranges()[0]))]);
     });
 }
@@ -177,12 +161,10 @@ use crate::tests::prelude::*;
 
 // exportInObjectLiteral_test.go:10
 pub fn test_export_in_object_literal(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: a.ts
+    fourslash::run_generated_test(t, r"// @Filename: a.ts
 const k = {
     [|export|] f() { }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_document_highlights_with_options(t, None, &[f.ranges()[0].file_name().as_str()], &[Any::RangeMarker(Arc::clone(&f.ranges()[0]))]);
     });
 }
@@ -194,8 +176,7 @@ use crate::tests::prelude::*;
 
 // extendInterfaceOverloadedMethod_test.go:10
 pub fn test_extend_interface_overloaded_method(t: &T) {
-    t.parallel();
-    let content: &str = r"// @strict: false
+    fourslash::run_generated_test(t, r"// @strict: false
 interface A<T> {
     foo(a: T): B<T>;
     foo(): void ;
@@ -205,8 +186,7 @@ interface B<T> extends A<T> {
     bar(): void ;
 }
 var b: B<number>;
-var /**/x = b.foo2().foo(5).foo(); // 'x' is of type 'void'";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /**/x = b.foo2().foo(5).foo(); // 'x' is of type 'void'", |f, t| {
         f.verify_quick_info_at(t, "", "var x: void", "");
         f.verify_no_errors(t);
     });
@@ -219,9 +199,7 @@ use crate::tests::prelude::*;
 
 // extendsKeywordCompletion1_test.go:13
 pub fn test_extends_keyword_completion1(t: &T) {
-    t.parallel();
-    let content: &str = "export interface B ex/**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "export interface B ex/**/", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "extends".to_string(), sort_text: Some("15".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
 }
@@ -233,10 +211,8 @@ use crate::tests::prelude::*;
 
 // extendsKeywordCompletion2_test.go:13
 pub fn test_extends_keyword_completion2(t: &T) {
-    t.parallel();
-    let content: &str = r"function f1<T /*1*/>() {}
-function f2<T ext/*2*/>() {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"function f1<T /*1*/>() {}
+function f2<T ext/*2*/>() {}", |f, t| {
         f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "extends".to_string(), sort_text: Some("15".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
 }
@@ -248,8 +224,7 @@ use crate::tests::prelude::*;
 
 // extendsTArray_test.go:10
 pub fn test_extends_t_array(t: &T) {
-    t.parallel();
-    let content: &str = r"// @strict: false
+    fourslash::run_generated_test(t, r"// @strict: false
 interface I1<T> {
     (a: T): T;
 }
@@ -258,8 +233,7 @@ interface I2<T> extends I1<T[]> {
 }
 var x: I2<Date>;
 var /**/y = x(undefined); // Typeof y should be Date[]
-y.length;";
-    fourslash::run_generated_test(t, content, |f, t| {
+y.length;", |f, t| {
         f.verify_quick_info_at(t, "", "var y: Date[]", "");
         f.verify_no_errors(t);
     });
@@ -272,8 +246,7 @@ use crate::tests::prelude::*;
 
 // externalModuleIntellisense_test.go:11
 pub fn test_external_module_intellisense(t: &T) {
-    t.parallel();
-    let content: &str = r"// @module: commonjs
+    fourslash::run_generated_test(t, r"// @module: commonjs
 // @Filename: externalModuleIntellisense_file0.ts
 export = express;
 function express(): express.ExpressServer;
@@ -288,8 +261,7 @@ namespace express {
 // @Filename: externalModuleIntellisense_file1.ts
 ///<reference path='externalModuleIntellisense_file0.ts'/>
 import express = require('./externalModuleIntellisense_file0');
-var x = express();/*1*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+var x = express();/*1*/", |f, t| {
         f.go_to_marker(t, "1");
         f.verify_number_of_errors_in_current_file(t, 0);
         f.go_to_eof(t);
@@ -305,12 +277,10 @@ use crate::tests::prelude::*;
 
 // failureToImplementClass_test.go:10
 pub fn test_failure_to_implement_class(t: &T) {
-    t.parallel();
-    let content: &str = r"interface IExec {
+    fourslash::run_generated_test(t, r"interface IExec {
     exec: (filename: string, cmdLine: string) => boolean;
 }
-class /*1*/NodeExec/*2*/ implements IExec { }";
-    fourslash::run_generated_test(t, content, |f, t| {
+class /*1*/NodeExec/*2*/ implements IExec { }", |f, t| {
         f.verify_error_exists_between_markers(t, "1", "2");
         f.verify_number_of_errors_in_current_file(t, 1);
     });
@@ -323,14 +293,12 @@ use crate::tests::prelude::*;
 
 // findAllReferPropertyAccessExpressionHeritageClause_test.go:10
 pub fn test_find_all_refer_property_access_expression_heritage_clause(t: &T) {
-    t.parallel();
-    let content: &str = r"class B {}
+    fourslash::run_generated_test(t, r"class B {}
 function foo() {
     return {/*1*/B: B};
 }
 class C extends (foo())./*2*/B {}
-class C1 extends foo()./*3*/B {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+class C1 extends foo()./*3*/B {}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -342,13 +310,11 @@ use crate::tests::prelude::*;
 
 // findAllReferencesDynamicImport1_test.go:10
 pub fn test_find_all_references_dynamic_import1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @Filename: foo.ts
 export function foo() { return "foo"; }
 /*1*/import("/*2*/./foo")
-/*3*/var x = import("/*4*/./foo")"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*3*/var x = import("/*4*/./foo")"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -360,14 +326,12 @@ use crate::tests::prelude::*;
 
 // findAllReferencesDynamicImport2_test.go:10
 pub fn test_find_all_references_dynamic_import2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: foo.ts
+    fourslash::run_generated_test(t, r#"// @Filename: foo.ts
 [|export function /*1*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}bar|]() { return "bar"; }|]
 var x = import("./foo");
 x.then(foo => {
     foo./*2*/[|bar|]();
-})"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+})"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["bar"]);
     });
@@ -380,11 +344,9 @@ use crate::tests::prelude::*;
 
 // findAllReferencesDynamicImport3_test.go:10
 pub fn test_find_all_references_dynamic_import3(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: foo.ts
+    fourslash::run_generated_test(t, r#"// @Filename: foo.ts
 [|export function /*0*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}bar|]() { return "bar"; }|]
-import('./foo').then(([|{ /*1*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 2 |}bar|] }|]) => undefined);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import('./foo').then(([|{ /*1*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 2 |}bar|] }|]) => undefined);"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1"]);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[3]))]);
     });
@@ -397,11 +359,9 @@ use crate::tests::prelude::*;
 
 // findAllReferencesFilteringMappedTypeProperty_test.go:10
 pub fn test_find_all_references_filtering_mapped_type_property(t: &T) {
-    t.parallel();
-    let content: &str = r"const obj = { /*1*/a: 1, b: 2 };
+    fourslash::run_generated_test(t, r"const obj = { /*1*/a: 1, b: 2 };
 const filtered: { [P in keyof typeof obj as P extends 'b' ? never : P]: 0; } = { /*2*/a: 0 };
-filtered./*3*/a;";
-    fourslash::run_generated_test(t, content, |f, t| {
+filtered./*3*/a;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -413,12 +373,10 @@ use crate::tests::prelude::*;
 
 // findAllReferencesFromLinkTagReference1_test.go:10
 pub fn test_find_all_references_from_link_tag_reference1(t: &T) {
-    t.parallel();
-    let content: &str = r"enum E {
+    fourslash::run_generated_test(t, r"enum E {
     /** {@link /**/A} */
     A
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -430,16 +388,14 @@ use crate::tests::prelude::*;
 
 // findAllReferencesFromLinkTagReference2_test.go:10
 pub fn test_find_all_references_from_link_tag_reference2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r"// @Filename: /a.ts
 enum E {
     /** {@link /**/Foo} */
     Foo
 }
 interface Foo {
     foo: E.Foo;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -451,8 +407,7 @@ use crate::tests::prelude::*;
 
 // findAllReferencesFromLinkTagReference3_test.go:10
 pub fn test_find_all_references_from_link_tag_reference3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @filename: a.ts
+    fourslash::run_generated_test(t, r"// @filename: a.ts
 interface Foo {
     foo: E.Foo;
 }
@@ -460,8 +415,7 @@ interface Foo {
 enum E {
     /** {@link /**/Foo} */
     Foo
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -473,13 +427,11 @@ use crate::tests::prelude::*;
 
 // findAllReferencesFromLinkTagReference4_test.go:10
 pub fn test_find_all_references_from_link_tag_reference4(t: &T) {
-    t.parallel();
-    let content: &str = r"enum E {
+    fourslash::run_generated_test(t, r"enum E {
     /** {@link /**/B} */
     A,
     B
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -491,12 +443,10 @@ use crate::tests::prelude::*;
 
 // findAllReferencesFromLinkTagReference5_test.go:10
 pub fn test_find_all_references_from_link_tag_reference5(t: &T) {
-    t.parallel();
-    let content: &str = r"enum E {
+    fourslash::run_generated_test(t, r"enum E {
     /** {@link E./**/A} */
     A
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -508,11 +458,9 @@ use crate::tests::prelude::*;
 
 // findAllReferencesImportMeta_test.go:10
 pub fn test_find_all_references_import_meta(t: &T) {
-    t.parallel();
-    let content: &str = r"// Haha that's so meta!
+    fourslash::run_generated_test(t, r"// Haha that's so meta!
 
-let x = import.meta/**/;";
-    fourslash::run_generated_test(t, content, |f, t| {
+let x = import.meta/**/;", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -524,8 +472,7 @@ use crate::tests::prelude::*;
 
 // findAllReferencesJsDocTypeLiteral_test.go:10
 pub fn test_find_all_references_js_doc_type_literal(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @Filename: foo.js
 /**
@@ -536,8 +483,7 @@ pub fn test_find_all_references_js_doc_type_literal(t: &T) {
  * @param {boolean} o.nested./*1*/great - much greatness
  * @param {number} o.nested.times - twice? probably!??
  */
- function f(o) { return o.nested./*2*/great; }";
-    fourslash::run_generated_test(t, content, |f, t| {
+ function f(o) { return o.nested./*2*/great; }", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -549,8 +495,7 @@ use crate::tests::prelude::*;
 
 // findAllReferencesJsOverloadedFunctionParameter_test.go:10
 pub fn test_find_all_references_js_overloaded_function_parameter(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @Filename: foo.js
 /**
@@ -567,8 +512,7 @@ pub fn test_find_all_references_js_overloaded_function_parameter(t: &T) {
  */
 function foo(x/*1*/) {
   return x;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -580,8 +524,7 @@ use crate::tests::prelude::*;
 
 // findAllReferencesJsRequireDestructuring_test.go:10
 pub fn test_find_all_references_js_require_destructuring(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @noEmit: true
 // @checkJs: true
 // @Filename: foo.js
@@ -589,8 +532,7 @@ module.exports = {
     foo: '1'
 };
 // @Filename: bar.js
-const { /*1*/foo: bar } = require('./foo');";
-    fourslash::run_generated_test(t, content, |f, t| {
+const { /*1*/foo: bar } = require('./foo');", |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -602,15 +544,13 @@ use crate::tests::prelude::*;
 
 // findAllReferencesJsRequireDestructuring1_test.go:10
 pub fn test_find_all_references_js_require_destructuring1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @noEmit: true
 // @checkJs: true
 // @Filename: /X.js
 module.exports = { x: 1 };
 // @Filename: /Y.js
-const { /*1*/x: { y } } = require("./X");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const { /*1*/x: { y } } = require("./X");"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -622,12 +562,10 @@ use crate::tests::prelude::*;
 
 // findAllReferencesJSDocFunctionNew_test.go:10
 pub fn test_find_all_references_jsdoc_function_new(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: Foo.js
 /** @type {function (/*1*/new: string, string): string} */
-var f;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var f;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -639,12 +577,10 @@ use crate::tests::prelude::*;
 
 // findAllReferencesJSDocFunctionThis_test.go:10
 pub fn test_find_all_references_jsdoc_function_this(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: Foo.js
 /** @type {function (this: string, string): string} */
-var f = function (s) { return /*0*/this + s; }";
-    fourslash::run_generated_test(t, content, |f, t| {
+var f = function (s) { return /*0*/this + s; }", |f, t| {
         f.verify_baseline_find_all_references(t, &["0"]);
     });
 }
@@ -656,8 +592,7 @@ use crate::tests::prelude::*;
 
 // findAllReferencesLinkTag1_test.go:10
 pub fn test_find_all_references_link_tag1(t: &T) {
-    t.parallel();
-    let content: &str = r"class C/*7*/ {
+    fourslash::run_generated_test(t, r"class C/*7*/ {
     m/*1*/() { }
     n/*2*/ = 1
     static s/*3*/() { }
@@ -719,8 +654,7 @@ function nestor() {
     /** @see {r2} */
     function d3() { }
     function r2/*6*/() { }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8"]);
     });
 }
@@ -732,8 +666,7 @@ use crate::tests::prelude::*;
 
 // findAllReferencesLinkTag2_test.go:10
 pub fn test_find_all_references_link_tag2(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace NPR/*5*/ {
+    fourslash::run_generated_test(t, r"namespace NPR/*5*/ {
     export class Consider/*4*/ {
         This/*3*/ = class {
             show/*2*/() { }
@@ -758,8 +691,7 @@ pub fn test_find_all_references_link_tag2(t: &T) {
  * @see {NPR.Consider#This.show} # doesn't parse trailing .
  * @see {NPR.Consider.This.show}
  */
-export function outerref() { }";
-    fourslash::run_generated_test(t, content, |f, t| {
+export function outerref() { }", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5"]);
     });
 }
@@ -771,8 +703,7 @@ use crate::tests::prelude::*;
 
 // findAllReferencesLinkTag3_test.go:10
 pub fn test_find_all_references_link_tag3(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace NPR/*5*/ {
+    fourslash::run_generated_test(t, r"namespace NPR/*5*/ {
     export class Consider/*4*/ {
         This/*3*/ = class {
             show/*2*/() { }
@@ -797,8 +728,7 @@ pub fn test_find_all_references_link_tag3(t: &T) {
  * {@linkcode NPR.Consider#This.show} # doesn't parse trailing .
  * {@linkcode NPR.Consider.This.show}
  */
-export function outerref() { }";
-    fourslash::run_generated_test(t, content, |f, t| {
+export function outerref() { }", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5"]);
     });
 }
@@ -810,14 +740,12 @@ use crate::tests::prelude::*;
 
 // findAllReferencesNonExistentExportBinding_test.go:10
 pub fn test_find_all_references_non_existent_export_binding(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /tsconfig.json
+    fourslash::run_generated_test(t, r#"// @Filename: /tsconfig.json
  { "compilerOptions": { "module": "commonjs" } }
 // @filename: /bar.ts
 import { Foo/**/ } from "./foo";
 // @filename: /foo.ts
-export { Foo }"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export { Foo }"#, |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -829,8 +757,7 @@ use crate::tests::prelude::*;
 
 // findAllReferencesOfConstructor_test.go:10
 pub fn test_find_all_references_of_constructor(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: a.ts
 export class C {
     /*0*/constructor(n: number);
     /*1*/constructor();
@@ -861,8 +788,7 @@ class E implements C {
 // @Filename: d.ts
 import * as a from "./a";
 new a.C();
-class d extends a.C { constructor() { super(); }"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+class d extends a.C { constructor() { super(); }"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2"]);
     });
 }
@@ -874,12 +800,10 @@ use crate::tests::prelude::*;
 
 // findAllReferencesOfConstructor_badOverload_test.go:10
 pub fn test_find_all_references_of_constructor_bad_overload(t: &T) {
-    t.parallel();
-    let content: &str = r"class C {
+    fourslash::run_generated_test(t, r"class C {
     /*1*/constructor(n: number);
     /*2*/constructor(){}
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -891,16 +815,14 @@ use crate::tests::prelude::*;
 
 // findAllReferencesOfJsonModule_test.go:10
 pub fn test_find_all_references_of_json_module(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @resolveJsonModule: true
+    fourslash::run_generated_test(t, r#"// @resolveJsonModule: true
 // @module: commonjs
 // @esModuleInterop: true
 // @Filename: /foo.ts
 /*1*/import /*2*/settings from "./settings.json";
 /*3*/settings;
 // @Filename: /settings.json
- {}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+ {}"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -912,8 +834,7 @@ use crate::tests::prelude::*;
 
 // findAllReferencesTripleSlash_test.go:10
 pub fn test_find_all_references_triple_slash(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @checkJs: true
+    fourslash::run_generated_test(t, r#"// @checkJs: true
 // @Filename: /node_modules/@types/globals/index.d.ts
 declare const someAmbientGlobal: unknown;
 // @Filename: /a.ts
@@ -923,8 +844,7 @@ declare const someAmbientGlobal: unknown;
 console.log("b.ts");
 // @Filename: /c.js
 require("./b");
-require("globals");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+require("globals");"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -936,8 +856,7 @@ use crate::tests::prelude::*;
 
 // findAllReferencesUmdModuleAsGlobalConst_test.go:10
 pub fn test_find_all_references_umd_module_as_global_const(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /node_modules/@types/three/three-core.d.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /node_modules/@types/three/three-core.d.ts
 export class Vector3 {
     constructor(x?: number, y?: number, z?: number);
     x: number;
@@ -969,8 +888,7 @@ let v = new /*3*/THREE.Vector2();
         "types": ["three"]
  	},
     "files": ["/src/index.ts", "typings/global.d.ts"]
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
     });
 }
@@ -982,14 +900,12 @@ use crate::tests::prelude::*;
 
 // findAllReferencesUndefined_test.go:10
 pub fn test_find_all_references_undefined(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r"// @Filename: /a.ts
 /**/undefined;
 
 void undefined;
 // @Filename: /b.ts
-undefined;";
-    fourslash::run_generated_test(t, content, |f, t| {
+undefined;", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -1001,9 +917,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsBadImport_test.go:10
 pub fn test_find_all_refs_bad_import(t: &T) {
-    t.parallel();
-    let content: &str = r#"import { /*0*/ab as /*1*/cd } from "doesNotExist";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"import { /*0*/ab as /*1*/cd } from "doesNotExist";"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1"]);
     });
 }
@@ -1015,12 +929,10 @@ use crate::tests::prelude::*;
 
 // findAllRefsCatchClause_test.go:10
 pub fn test_find_all_refs_catch_clause(t: &T) {
-    t.parallel();
-    let content: &str = r"try { }
+    fourslash::run_generated_test(t, r"try { }
 catch (/*1*/err) {
     /*2*/err;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -1032,15 +944,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsClassExpression0_test.go:10
 pub fn test_find_all_refs_class_expression0(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 export = class /*0*/A {
     m() { /*1*/A; }
 };
 // @Filename: /b.ts
 import /*2*/A = require("./a");
-/*3*/A;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*3*/A;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
     });
 }
@@ -1052,14 +962,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsClassExpression1_test.go:10
 pub fn test_find_all_refs_class_expression1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: /a.js
 module.exports = class /*0*/A {};
 // @Filename: /b.js
 import /*1*/A = require("./a");
-/*2*/A;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*2*/A;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2"]);
     });
 }
@@ -1071,14 +979,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsClassExpression2_test.go:10
 pub fn test_find_all_refs_class_expression2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: /a.js
 exports./*0*/A = class {};
 // @Filename: /b.js
 import { /*1*/A } from "./a";
-/*2*/A;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*2*/A;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2"]);
     });
 }
@@ -1090,16 +996,14 @@ use crate::tests::prelude::*;
 
 // findAllRefsClassStaticBlocks_test.go:10
 pub fn test_find_all_refs_class_static_blocks(t: &T) {
-    t.parallel();
-    let content: &str = r"class ClassStaticBocks {
+    fourslash::run_generated_test(t, r"class ClassStaticBocks {
     static x;
     [|[|/*classStaticBocks1*/static|] {}|]
     static y;
     [|[|/*classStaticBocks2*/static|] {}|]
     static y;
     [|[|/*classStaticBocks3*/static|] {}|]
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["classStaticBocks1", "classStaticBocks2", "classStaticBocks3"]);
     });
 }
@@ -1111,8 +1015,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsClassWithStaticThisAccess_test.go:10
 pub fn test_find_all_refs_class_with_static_this_access(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|class /*0*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}C|] {
+    fourslash::run_generated_test(t, r#"[|class /*0*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}C|] {
     static s() {
         /*1*/[|this|];
     }
@@ -1122,8 +1025,7 @@ pub fn test_find_all_refs_class_with_static_this_access(t: &T) {
         function inner() { this; }
         class Inner { x = this; }
     }
-}|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}|]"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2"]);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1]))]);
     });
@@ -1136,15 +1038,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsCommonJsRequire_test.go:10
 pub fn test_find_all_refs_common_js_require(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: /a.js
 function f() { }
 export { f }
 // @Filename: /b.js
 const { f } = require('./a')
-/**/f";
-    fourslash::run_generated_test(t, content, |f, t| {
+/**/f", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -1156,15 +1056,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsCommonJsRequire2_test.go:10
 pub fn test_find_all_refs_common_js_require2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: /a.js
 function f() { }
 module.exports.f = f
 // @Filename: /b.js
 const { f } = require('./a')
-/**/f";
-    fourslash::run_generated_test(t, content, |f, t| {
+/**/f", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -1176,15 +1074,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsCommonJsRequire3_test.go:10
 pub fn test_find_all_refs_common_js_require3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: /a.js
 function f() { }
 module.exports = { f }
 // @Filename: /b.js
 const { f } = require('./a')
-/**/f";
-    fourslash::run_generated_test(t, content, |f, t| {
+/**/f", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -1196,11 +1092,9 @@ use crate::tests::prelude::*;
 
 // findAllRefsConst_test.go:10
 pub fn test_find_all_refs_const(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: a.ts
+    fourslash::run_generated_test(t, r"// @Filename: a.ts
 /**/const const
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -1212,8 +1106,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsConstructorFunctions_test.go:10
 pub fn test_find_all_refs_constructor_functions(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: /a.js
 function f() {
     /*1*/this./*2*/x = 0;
@@ -1221,8 +1114,7 @@ function f() {
 f.prototype.setX = function() {
     /*3*/this./*4*/x = 1;
 }
-f.prototype.useX = function() { this./*5*/x; }";
-    fourslash::run_generated_test(t, content, |f, t| {
+f.prototype.useX = function() { this./*5*/x; }", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5"]);
     });
 }
@@ -1234,11 +1126,9 @@ use crate::tests::prelude::*;
 
 // findAllRefsDeclareClass_test.go:10
 pub fn test_find_all_refs_declare_class(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*/declare class /*2*/C {
+    fourslash::run_generated_test(t, r"/*1*/declare class /*2*/C {
     static m(): void;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -1250,12 +1140,10 @@ use crate::tests::prelude::*;
 
 // findAllRefsDefaultImport_test.go:10
 pub fn test_find_all_refs_default_import(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 export default function /*0*/a() {}
 // @Filename: /b.ts
-import /*1*/a, * as ns from "./a";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import /*1*/a, * as ns from "./a";"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1"]);
     });
 }
@@ -1267,10 +1155,8 @@ use crate::tests::prelude::*;
 
 // findAllRefsDefinition_test.go:10
 pub fn test_find_all_refs_definition(t: &T) {
-    t.parallel();
-    let content: &str = r"const /*1*/x = 0;
-/*2*/x;";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"const /*1*/x = 0;
+/*2*/x;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -1282,13 +1168,11 @@ use crate::tests::prelude::*;
 
 // findAllRefsDestructureGeneric_test.go:10
 pub fn test_find_all_refs_destructure_generic(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I<T> {
+    fourslash::run_generated_test(t, r"interface I<T> {
     /*0*/x: boolean;
 }
 declare const i: I<number>;
-const { /*1*/x } = i;";
-    fourslash::run_generated_test(t, content, |f, t| {
+const { /*1*/x } = i;", |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1"]);
     });
 }
@@ -1300,15 +1184,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsDestructureGetter_test.go:10
 pub fn test_find_all_refs_destructure_getter(t: &T) {
-    t.parallel();
-    let content: &str = r"class Test {
+    fourslash::run_generated_test(t, r"class Test {
     get /*x0*/x() { return 0; }
 
     set /*y0*/y(a: number) {}
 }
 const { /*x1*/x, /*y1*/y } = new Test();
-/*x2*/x; /*y2*/y;";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*x2*/x; /*y2*/y;", |f, t| {
         f.verify_baseline_find_all_references(t, &["x0", "x1", "x2", "y0", "y1", "y2"]);
     });
 }
@@ -1320,10 +1202,8 @@ use crate::tests::prelude::*;
 
 // findAllRefsEnumAsNamespace_test.go:10
 pub fn test_find_all_refs_enum_as_namespace(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*/enum /*2*/E { A }
-let e: /*3*/E.A;";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"/*1*/enum /*2*/E { A }
+let e: /*3*/E.A;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1335,10 +1215,8 @@ use crate::tests::prelude::*;
 
 // findAllRefsEnumMember_test.go:10
 pub fn test_find_all_refs_enum_member(t: &T) {
-    t.parallel();
-    let content: &str = r"enum E { /*1*/A, B }
-const e: E./*2*/A = E./*3*/A;";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"enum E { /*1*/A, B }
+const e: E./*2*/A = E./*3*/A;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1350,15 +1228,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsExportAsNamespace_test.go:10
 pub fn test_find_all_refs_export_as_namespace(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /node_modules/a/index.d.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /node_modules/a/index.d.ts
 export function /*0*/f(): void;
 export as namespace A;
 // @Filename: /b.ts
 import { /*1*/f } from "a";
 // @Filename: /c.ts
-A./*2*/f();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+A./*2*/f();"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["0", "1", "2"]);
     });
@@ -1371,13 +1247,11 @@ use crate::tests::prelude::*;
 
 // findAllRefsExportConstEqualToClass_test.go:10
 pub fn test_find_all_refs_export_const_equal_to_class(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 class C {}
 export const /*0*/D = C;
 // @Filename: /b.ts
-import { /*1*/D } from "./a";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { /*1*/D } from "./a";"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1"]);
     });
 }
@@ -1389,11 +1263,9 @@ use crate::tests::prelude::*;
 
 // findAllRefsExportDefaultClassConstructor_test.go:10
 pub fn test_find_all_refs_export_default_class_constructor(t: &T) {
-    t.parallel();
-    let content: &str = r"export default class {
+    fourslash::run_generated_test(t, r"export default class {
     /*1*/constructor() {}
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -1405,13 +1277,11 @@ use crate::tests::prelude::*;
 
 // findAllRefsExportEquals_test.go:10
 pub fn test_find_all_refs_export_equals(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 type /*0*/T = number;
 /*1*/export = /*2*/T;
 // @Filename: /b.ts
-import /*3*/T = require("/*4*/./a");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import /*3*/T = require("/*4*/./a");"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3", "4"]);
     });
 }
@@ -1423,12 +1293,10 @@ use crate::tests::prelude::*;
 
 // findAllRefsExportNotAtTopLevel_test.go:10
 pub fn test_find_all_refs_export_not_at_top_level(t: &T) {
-    t.parallel();
-    let content: &str = r"{
+    fourslash::run_generated_test(t, r"{
     /*1*/export const /*2*/x = 0;
     /*3*/x;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1440,10 +1308,8 @@ use crate::tests::prelude::*;
 
 // findAllRefsExportStringRename_test.go:10
 pub fn test_find_all_refs_export_string_rename(t: &T) {
-    t.parallel();
-    let content: &str = r#"const foo = 123;
-export { foo as /**/"bar" };"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"const foo = 123;
+export { foo as /**/"bar" };"#, |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -1455,8 +1321,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsForComputedProperties_test.go:10
 pub fn test_find_all_refs_for_computed_properties(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface I {
+    fourslash::run_generated_test(t, r#"interface I {
     ["/*0*/prop1"]: () => void;
 }
 
@@ -1466,8 +1331,7 @@ class C implements I {
 
 var x: I = {
     ["/*2*/prop1"]: function () { },
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2"]);
     });
 }
@@ -1479,8 +1343,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsForComputedProperties2_test.go:10
 pub fn test_find_all_refs_for_computed_properties2(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface I {
+    fourslash::run_generated_test(t, r#"interface I {
     [/*1*/42](): void;
 }
 
@@ -1490,8 +1353,7 @@ class C implements I {
 
 var x: I = {
     ["/*3*/42"]: function () { }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1503,15 +1365,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsForDefaultExport_test.go:10
 pub fn test_find_all_refs_for_default_export(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: a.ts
 export default function /*def*/f() {}
 // @Filename: b.ts
 import /*deg*/g from "./a";
 [|/*ref*/g|]();
 // @Filename: c.ts
-import { f } from "./a";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { f } from "./a";"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["def", "deg"]);
         f.verify_baseline_go_to_definition(t, true, &["ref"]);
     });
@@ -1524,14 +1384,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsForDefaultExport01_test.go:10
 pub fn test_find_all_refs_for_default_export01(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*/export default class /*2*/DefaultExportedClass {
+    fourslash::run_generated_test(t, r"/*1*/export default class /*2*/DefaultExportedClass {
 }
 
 var x: /*3*/DefaultExportedClass;
 
-var y = new /*4*/DefaultExportedClass;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var y = new /*4*/DefaultExportedClass;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -1543,8 +1401,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsForDefaultExport02_test.go:10
 pub fn test_find_all_refs_for_default_export02(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*/export default function /*2*/DefaultExportedFunction() {
+    fourslash::run_generated_test(t, r"/*1*/export default function /*2*/DefaultExportedFunction() {
     return /*3*/DefaultExportedFunction;
 }
 
@@ -1553,8 +1410,7 @@ var x: typeof /*4*/DefaultExportedFunction;
 var y = /*5*/DefaultExportedFunction();
 
 /*6*/namespace /*7*/DefaultExportedFunction {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7"]);
     });
 }
@@ -1566,8 +1422,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsForDefaultExport03_test.go:10
 pub fn test_find_all_refs_for_default_export03(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*/function /*2*/f() {
+    fourslash::run_generated_test(t, r"/*1*/function /*2*/f() {
     return 100;
 }
 
@@ -1579,8 +1434,7 @@ var y = /*6*/f();
 
 /*7*/namespace /*8*/f {
     var local = 100;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8"]);
     });
 }
@@ -1592,14 +1446,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsForDefaultExport04_test.go:10
 pub fn test_find_all_refs_for_default_export04(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 const /*0*/a = 0;
 export /*1*/default /*2*/a;
 // @Filename: /b.ts
 import /*3*/a from "./a";
-/*4*/a;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*4*/a;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "2", "1", "3", "4"]);
     });
 }
@@ -1611,8 +1463,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsForDefaultExport08_test.go:10
 pub fn test_find_all_refs_for_default_export08(t: &T) {
-    t.parallel();
-    let content: &str = r"export default class DefaultExportedClass {
+    fourslash::run_generated_test(t, r"export default class DefaultExportedClass {
 }
 
 var x: DefaultExportedClass;
@@ -1620,8 +1471,7 @@ var x: DefaultExportedClass;
 var y = new DefaultExportedClass;
 
 namespace /*1*/DefaultExportedClass {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["1"]);
     });
@@ -1634,8 +1484,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsForDefaultExport09_test.go:10
 pub fn test_find_all_refs_for_default_export09(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @filename: /tsconfig.json
+    fourslash::run_generated_test(t, r#"// @filename: /tsconfig.json
 {
     "compilerOptions": {
         "target": "esnext",
@@ -1661,8 +1510,7 @@ import /*3*/bDefault from "./b.js"
 import * as /*4*/c from "./c"
 import /*5*/cDefault from "./c"
 import * as /*6*/d from "./d"
-import /*7*/dDefault from "./d""#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import /*7*/dDefault from "./d""#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3", "4", "5", "6", "7"]);
     });
 }
@@ -1674,12 +1522,10 @@ use crate::tests::prelude::*;
 
 // findAllRefsForDefaultExport_anonymous_test.go:10
 pub fn test_find_all_refs_for_default_export_anonymous(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 export /*1*/default 1;
 // @Filename: /b.ts
-import a from "./a";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import a from "./a";"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -1691,15 +1537,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsForDefaultExport_reExport_test.go:10
 pub fn test_find_all_refs_for_default_export_re_export(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /export.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /export.ts
 const /*0*/foo = 1;
 export default /*1*/foo;
 // @Filename: /re-export.ts
 export { /*2*/default } from "./export";
 // @Filename: /re-export-dep.ts
-import /*3*/fooDefault from "./re-export";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import /*3*/fooDefault from "./re-export";"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
     });
 }
@@ -1711,8 +1555,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsForDefaultExport_reExport_allowSyntheticDefaultImports_test.go:10
 pub fn test_find_all_refs_for_default_export_re_export_allow_synthetic_default_imports(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowSyntheticDefaultImports: true
+    fourslash::run_generated_test(t, r#"// @allowSyntheticDefaultImports: true
 // @module: commonjs
 // @Filename: /export.ts
 const /*0*/foo = 1;
@@ -1720,8 +1563,7 @@ export = /*1*/foo;
 // @Filename: /re-export.ts
 export { /*2*/default } from "./export";
 // @Filename: /re-export-dep.ts
-import /*3*/fooDefault from "./re-export";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import /*3*/fooDefault from "./re-export";"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
     });
@@ -1761,8 +1603,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsForDefaultKeyword_test.go:10
 pub fn test_find_all_refs_for_default_keyword(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noLib: true
+    fourslash::run_generated_test(t, r"// @noLib: true
 function f(value: string, /*1*/default: string) {}
 
 const /*2*/default = 1;
@@ -1773,8 +1614,7 @@ class /*4*/default {}
 
 const foo = {
     /*5*/default: 1
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5"]);
     });
 }
@@ -1786,15 +1626,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsForFunctionExpression01_test.go:10
 pub fn test_find_all_refs_for_function_expression01(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: file1.ts
+    fourslash::run_generated_test(t, r#"// @Filename: file1.ts
 var foo = /*1*/function /*2*/foo(a = /*3*/foo(), b = () => /*4*/foo) {
     /*5*/foo(/*6*/foo, /*7*/foo);
 }
 // @Filename: file2.ts
 /// <reference path="file1.ts" />
-foo();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+foo();"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7"]);
     });
 }
@@ -1806,8 +1644,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsForImportCall_test.go:10
 pub fn test_find_all_refs_for_import_call(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /app.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /app.ts
 export function he/**/llo() {};
 // @Filename: /re-export.ts
 export const services = { app: setup(() => import('./app')) }
@@ -1818,8 +1655,7 @@ import("./re-export").then(mod => mod.services.app.hello());
 async function main() {
     const mod = await import("./app")
     mod.hello();
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -1831,16 +1667,14 @@ use crate::tests::prelude::*;
 
 // findAllRefsForImportCallType_test.go:10
 pub fn test_find_all_refs_for_import_call_type(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /app.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /app.ts
 export function he/**/llo() {};
 // @Filename: /re-export.ts
 export type app = typeof import("./app")
 // @Filename: /indirect-use.ts
 import type { app } from "./re-export";
 declare const app: app
-app.hello();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+app.hello();"#, |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -1852,13 +1686,11 @@ use crate::tests::prelude::*;
 
 // findAllRefsForMappedType_test.go:10
 pub fn test_find_all_refs_for_mapped_type(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface T { /*1*/a: number };
+    fourslash::run_generated_test(t, r#"interface T { /*1*/a: number };
 type U = { [K in keyof T]: string };
 type V = { [K in keyof U]: boolean };
 const u: U = { a: "" }
-const v: V = { a: true }"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const v: V = { a: true }"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -1870,8 +1702,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsForModule_test.go:10
 pub fn test_find_all_refs_for_module(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: /a.ts
 export const x = 0;
 // @Filename: /b.ts
@@ -1879,8 +1710,7 @@ export const x = 0;
 // @Filename: /c/sub.js
 [|const a = require("/*1*/[|{| "contextRangeIndex": 2 |}../a|]");|]
 // @Filename: /d.ts
- /// <reference path="/*2*/[|./a.ts|]" />"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+ /// <reference path="/*2*/[|./a.ts|]" />"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2"]);
         f.verify_baseline_document_highlights_with_options(t, None, &["/b.ts", "/c/sub.js", "/d.ts"], &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[4]))]);
     });
@@ -1893,14 +1723,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsForModuleGlobal_test.go:10
 pub fn test_find_all_refs_for_module_global(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /node_modules/foo/index.d.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /node_modules/foo/index.d.ts
 export const x = 0;
 // @Filename: /b.ts
 /// <reference types="foo" />
 import { x } from "/*1*/foo";
-declare module "foo" {}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+declare module "foo" {}"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["1"]);
     });
@@ -1913,15 +1741,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsForObjectLiteralProperties_test.go:10
 pub fn test_find_all_refs_for_object_literal_properties(t: &T) {
-    t.parallel();
-    let content: &str = r"var x = {
+    fourslash::run_generated_test(t, r"var x = {
     /*1*/property: {}
 };
 
 x./*2*/property;
 
-/*3*/let {/*4*/property: pVar} = x;";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*3*/let {/*4*/property: pVar} = x;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -1933,15 +1759,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsForObjectSpread_test.go:10
 pub fn test_find_all_refs_for_object_spread(t: &T) {
-    t.parallel();
-    let content: &str = r"interface A1 { readonly /*0*/a: string };
+    fourslash::run_generated_test(t, r"interface A1 { readonly /*0*/a: string };
 interface A2 { /*1*/a?: number };
 let a1: A1;
 let a2: A2;
 let a12 = { ...a1, ...a2 };
 a12./*2*/a;
-a1./*3*/a;";
-    fourslash::run_generated_test(t, content, |f, t| {
+a1./*3*/a;", |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
     });
 }
@@ -1953,16 +1777,14 @@ use crate::tests::prelude::*;
 
 // findAllRefsForRest_test.go:10
 pub fn test_find_all_refs_for_rest(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Gen {
+    fourslash::run_generated_test(t, r"interface Gen {
     x: number
     /*1*/parent: Gen;
     millenial: string;
 }
 let t: Gen;
 var { x, ...rest } = t;
-rest./*2*/parent;";
-    fourslash::run_generated_test(t, content, |f, t| {
+rest./*2*/parent;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -1974,8 +1796,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsForStaticInstanceMethodInheritance_test.go:10
 pub fn test_find_all_refs_for_static_instance_method_inheritance(t: &T) {
-    t.parallel();
-    let content: &str = r"class X{
+    fourslash::run_generated_test(t, r"class X{
 	/*0*/foo(): void{}
 }
 
@@ -1995,8 +1816,7 @@ x.foo();
 y.foo();
 z.foo();
 Y.foo();
-Z.foo();";
-    fourslash::run_generated_test(t, content, |f, t| {
+Z.foo();", |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
     });
 }
@@ -2008,8 +1828,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsForStaticInstancePropertyInheritance_test.go:10
 pub fn test_find_all_refs_for_static_instance_property_inheritance(t: &T) {
-    t.parallel();
-    let content: &str = r"class X{
+    fourslash::run_generated_test(t, r"class X{
 	/*0*/foo:any
 }
 
@@ -2029,8 +1848,7 @@ x./*4*/foo;
 y./*5*/foo;
 z./*6*/foo;
 Y./*7*/foo;
-Z./*8*/foo;";
-    fourslash::run_generated_test(t, content, |f, t| {
+Z./*8*/foo;", |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3", "4", "5", "6", "7", "8"]);
     });
 }
@@ -2042,8 +1860,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsForStringLiteral_test.go:10
 pub fn test_find_all_refs_for_string_literal(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @filename: /a.ts
 interface Foo {
     property: /**/"foo";
 }
@@ -2052,8 +1869,7 @@ interface Foo {
  */
 const obj: Foo = {
     property: "foo",
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -2065,10 +1881,8 @@ use crate::tests::prelude::*;
 
 // findAllRefsForStringLiteralTypes_test.go:10
 pub fn test_find_all_refs_for_string_literal_types(t: &T) {
-    t.parallel();
-    let content: &str = r#"type Options = "/*1*/option 1" | "option 2";
-let myOption: Options = "/*2*/option 1";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"type Options = "/*1*/option 1" | "option 2";
+let myOption: Options = "/*2*/option 1";"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -2080,15 +1894,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsForUMDModuleAlias1_test.go:10
 pub fn test_find_all_refs_for_umd_module_alias1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: 0.d.ts
+    fourslash::run_generated_test(t, r#"// @Filename: 0.d.ts
 export function doThing(): string;
 export function doTheOtherThing(): void;
 /*1*/export as namespace /*2*/myLib;
 // @Filename: 1.ts
 /// <reference path="0.d.ts" />
-/*3*/myLib.doThing();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*3*/myLib.doThing();"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -2100,10 +1912,8 @@ use crate::tests::prelude::*;
 
 // findAllRefsForVariableInExtendsClause01_test.go:10
 pub fn test_find_all_refs_for_variable_in_extends_clause01(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*/var /*2*/Base = class { };
-class C extends /*3*/Base { }";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"/*1*/var /*2*/Base = class { };
+class C extends /*3*/Base { }", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -2115,13 +1925,11 @@ use crate::tests::prelude::*;
 
 // findAllRefsForVariableInExtendsClause02_test.go:10
 pub fn test_find_all_refs_for_variable_in_extends_clause02(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*/interface /*2*/Base { }
+    fourslash::run_generated_test(t, r"/*1*/interface /*2*/Base { }
 namespace n {
     var Base = class { };
     interface I extends /*3*/Base { }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -2133,10 +1941,8 @@ use crate::tests::prelude::*;
 
 // findAllRefsForVariableInImplementsClause01_test.go:10
 pub fn test_find_all_refs_for_variable_in_implements_clause01(t: &T) {
-    t.parallel();
-    let content: &str = r"var Base = class { };
-class C extends Base implements /**/Base { }";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"var Base = class { };
+class C extends Base implements /**/Base { }", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -2148,14 +1954,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsFromContextualUnionType1_test.go:10
 pub fn test_find_all_refs_from_contextual_union_type1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @strict: true
+    fourslash::run_generated_test(t, r#"// @strict: true
 function test1(arg: { prop: "foo" }) {}
 test1({ /*1*/prop: "bar" });
 
 function test2(arg: { prop: "foo" } | undefined) {}
-test2({ /*2*/prop: "bar" });"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+test2({ /*2*/prop: "bar" });"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -2167,15 +1971,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsGlobalModuleAugmentation_test.go:10
 pub fn test_find_all_refs_global_module_augmentation(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r"// @Filename: /a.ts
 export {};
 declare global {
     /*1*/function /*2*/f(): void;
 }
 // @Filename: /b.ts
-/*3*/f();";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*3*/f();", |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
@@ -2188,11 +1990,9 @@ use crate::tests::prelude::*;
 
 // findAllRefsGlobalThisKeywordInModule_test.go:10
 pub fn test_find_all_refs_global_this_keyword_in_module(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noLib: true
+    fourslash::run_generated_test(t, r"// @noLib: true
 /*1*/this;
-export const c = 1;";
-    fourslash::run_generated_test(t, content, |f, t| {
+export const c = 1;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -2204,16 +2004,14 @@ use crate::tests::prelude::*;
 
 // findAllRefsImportDefault_test.go:10
 pub fn test_find_all_refs_import_default(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: f.ts
+    fourslash::run_generated_test(t, r#"// @Filename: f.ts
 export { foo as default };
 function /*start*/foo(a: number, b: number) {
     return a + b;
 }
 // @Filename: b.ts
 import bar from "./f";
-bar(1, 2);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+bar(1, 2);"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["start"]);
     });
@@ -2226,10 +2024,8 @@ use crate::tests::prelude::*;
 
 // findAllRefsImportEquals_test.go:10
 pub fn test_find_all_refs_import_equals(t: &T) {
-    t.parallel();
-    let content: &str = r"import j = N./**/q;
-namespace N { export const q = 0; }";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"import j = N./**/q;
+namespace N { export const q = 0; }", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -2241,8 +2037,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsImportEqualsJsonFile_test.go:10
 pub fn test_find_all_refs_import_equals_json_file(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @checkJs: true
 // @resolveJsonModule: true
 // @module: commonjs
@@ -2253,8 +2048,7 @@ import /*0*/j = require("/*1*/./j.json");
 const /*3*/j = require("/*4*/./j.json");
 /*5*/j;
 // @Filename: /j.json
-/*6*/{ "x": 0 }"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*6*/{ "x": 0 }"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["0", "2", "1", "4", "3", "5", "6"]);
     });
@@ -2267,15 +2061,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsImportNamed_test.go:10
 pub fn test_find_all_refs_import_named(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: commonjs
+    fourslash::run_generated_test(t, r#"// @module: commonjs
 // @Filename: f.ts
 export { foo as foo }
 function /*start*/foo(a: number, b: number) { }
 // @Filename: b.ts
 import x = require("./f");
-x.foo(1, 2);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+x.foo(1, 2);"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["start"]);
     });
@@ -2288,8 +2080,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsImportStarOfExportEquals_test.go:10
 pub fn test_find_all_refs_import_star_of_export_equals(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowSyntheticDefaultimports: true
+    fourslash::run_generated_test(t, r#"// @allowSyntheticDefaultimports: true
 // @Filename: /node_modules/a/index.d.ts
 [|declare function /*a0*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}a|](): void;|]
 [|declare namespace /*a1*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 2 |}a|] {
@@ -2303,8 +2094,7 @@ pub fn test_find_all_refs_import_star_of_export_equals(t: &T) {
 // @Filename: /c.ts
 [|import /*c0*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 10 |}a|] from "a";|]
 /*c1*/[|a|]();
-/*c2*/[|a|].x;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*c2*/[|a|].x;"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["a0", "a1", "a2", "b0", "b1", "c0", "c1", "c2"]);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[5]))]);
@@ -2320,14 +2110,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsImportType_test.go:10
 pub fn test_find_all_refs_import_type(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: /a.js
 module.exports = 0;
 /*1*/export type /*2*/N = number;
 // @Filename: /b.js
-type T = import("./a")./*3*/N;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+type T = import("./a")./*3*/N;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -2339,8 +2127,7 @@ use crate::tests::prelude::*;
 
 // findAllRefs_importType_js1_test.go:10
 pub fn test_find_all_refs_import_type_js1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @checkJs: true
 // @Filename: /a.js
 module.exports = class /**/C {};
@@ -2349,8 +2136,7 @@ module.exports.D = class D {};
 /** @type {import("./a")} */
 const x = 0;
 /** @type {import("./a").D} */
-const y = 0;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const y = 0;"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &[""]);
     });
@@ -2363,8 +2149,7 @@ use crate::tests::prelude::*;
 
 // findAllRefs_importType_js2_test.go:10
 pub fn test_find_all_refs_import_type_js2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @checkJs: true
 // @Filename: /a.js
 module.exports = class C {};
@@ -2373,8 +2158,7 @@ module.exports./**/D = class D {};
 /** @type {import("./a")} */
 const x = 0;
 /** @type {import("./a").D} */
-const y = 0;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const y = 0;"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &[""]);
     });
@@ -2387,8 +2171,7 @@ use crate::tests::prelude::*;
 
 // findAllRefs_importType_js3_test.go:10
 pub fn test_find_all_refs_import_type_js3(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @checkJs: true
 // @Filename: /a.js
 module.exports = class C {};
@@ -2397,8 +2180,7 @@ module.exports.D = class /**/D {};
 /** @type {import("./a")} */
 const x = 0;
 /** @type {import("./a").D} */
-const y = 0;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const y = 0;"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &[""]);
     });
@@ -2411,8 +2193,7 @@ use crate::tests::prelude::*;
 
 // findAllRefs_importType_js4_test.go:10
 pub fn test_find_all_refs_import_type_js4(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: commonjs
+    fourslash::run_generated_test(t, r#"// @module: commonjs
 // @allowJs: true
 // @checkJs: true
 // @Filename: /a.js
@@ -2423,8 +2204,7 @@ pub fn test_find_all_refs_import_type_js4(t: &T) {
 
 module.exports = {};
 // @Filename: /b.js
-/** @typedef {import("./a").A} A */"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/** @typedef {import("./a").A} A */"#, |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -2436,14 +2216,12 @@ use crate::tests::prelude::*;
 
 // findAllRefs_importType_meaningAtLocation_test.go:10
 pub fn test_find_all_refs_import_type_meaning_at_location(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 /*1*/export type /*2*/T = 0;
 /*3*/export const /*4*/T = 0;
 // @Filename: /b.ts
 const x: import("./a")./*5*/T = 0;
-const x: typeof import("./a")./*6*/T = 0;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const x: typeof import("./a")./*6*/T = 0;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6"]);
     });
 }
@@ -2455,14 +2233,12 @@ use crate::tests::prelude::*;
 
 // findAllRefs_importType_named_test.go:10
 pub fn test_find_all_refs_import_type_named(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 /*1*/export type /*2*/T = number;
 /*3*/export type /*4*/U = string;
 // @Filename: /b.ts
 const x: import("./a")./*5*/T = 0;
-const x: import("./a")./*6*/U = 0;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const x: import("./a")./*6*/U = 0;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6"]);
     });
 }
@@ -2474,13 +2250,11 @@ use crate::tests::prelude::*;
 
 // findAllRefs_importType_typeofImport_test.go:10
 pub fn test_find_all_refs_import_type_typeof_import(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 export const x = 0;
 // @Filename: /b.ts
 /*1*/const x: typeof import("/*2*/./a") = { x: 0 };
-/*3*/const y: typeof import("/*4*/./a") = { x: 0 };"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*3*/const y: typeof import("/*4*/./a") = { x: 0 };"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -2492,12 +2266,10 @@ use crate::tests::prelude::*;
 
 // findAllRefsInClassExpression_test.go:10
 pub fn test_find_all_refs_in_class_expression(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I { /*0*/boom(): void; }
+    fourslash::run_generated_test(t, r"interface I { /*0*/boom(): void; }
 new class C implements I {
    /*1*/boom(){}
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1"]);
     });
 }
@@ -2509,16 +2281,14 @@ use crate::tests::prelude::*;
 
 // findAllRefsIndexedAccessTypes_test.go:10
 pub fn test_find_all_refs_indexed_access_types(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface I {
+    fourslash::run_generated_test(t, r#"interface I {
     /*1*/0: number;
     /*2*/s: string;
 }
 interface J {
     a: I[/*3*/0],
     b: I["/*4*/s"],
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -2530,16 +2300,14 @@ use crate::tests::prelude::*;
 
 // findAllRefsInheritedProperties1_test.go:10
 pub fn test_find_all_refs_inherited_properties1(t: &T) {
-    t.parallel();
-    let content: &str = r"class class1 extends class1 {
+    fourslash::run_generated_test(t, r"class class1 extends class1 {
    /*1*/doStuff() { }
    /*2*/propName: string;
 }
 
 var v: class1;
 v./*3*/doStuff();
-v./*4*/propName;";
-    fourslash::run_generated_test(t, content, |f, t| {
+v./*4*/propName;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -2579,16 +2347,14 @@ use crate::tests::prelude::*;
 
 // findAllRefsInheritedProperties2_test.go:10
 pub fn test_find_all_refs_inherited_properties2(t: &T) {
-    t.parallel();
-    let content: &str = r"interface interface1 extends interface1 {
+    fourslash::run_generated_test(t, r"interface interface1 extends interface1 {
    /*1*/doStuff(): void;   // r0
    /*2*/propName: string;  // r1
 }
 
 var v: interface1;
 v./*3*/doStuff();  // r2
-v./*4*/propName;   // r3";
-    fourslash::run_generated_test(t, content, |f, t| {
+v./*4*/propName;   // r3", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -2600,8 +2366,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsInheritedProperties3_test.go:10
 pub fn test_find_all_refs_inherited_properties3(t: &T) {
-    t.parallel();
-    let content: &str = r"class class1 extends class1 {
+    fourslash::run_generated_test(t, r"class class1 extends class1 {
     [|/*0*/doStuff() { }|]
     [|/*1*/propName: string;|]
 }
@@ -2616,8 +2381,7 @@ class class2 extends class1 implements interface1 {
 
 var v: class2;
 v./*6*/doStuff();
-v./*7*/propName;";
-    fourslash::run_generated_test(t, content, |f, t| {
+v./*7*/propName;", |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3", "4", "6", "5", "7"]);
     });
 }
@@ -2629,8 +2393,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsInheritedProperties4_test.go:10
 pub fn test_find_all_refs_inherited_properties4(t: &T) {
-    t.parallel();
-    let content: &str = r"interface C extends D {
+    fourslash::run_generated_test(t, r"interface C extends D {
     /*0*/prop0: string;
     /*1*/prop1: number;
 }
@@ -2641,8 +2404,7 @@ interface D extends C {
 
 var d: D;
 d./*3*/prop0;
-d./*4*/prop1;";
-    fourslash::run_generated_test(t, content, |f, t| {
+d./*4*/prop1;", |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "2", "3", "1", "4"]);
     });
 }
@@ -2654,8 +2416,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsInheritedProperties5_test.go:10
 pub fn test_find_all_refs_inherited_properties5(t: &T) {
-    t.parallel();
-    let content: &str = r"class C extends D {
+    fourslash::run_generated_test(t, r"class C extends D {
     /*0*/prop0: string;
     /*1*/prop1: number;
 }
@@ -2666,8 +2427,7 @@ class D extends C {
 
 var d: D;
 d./*3*/prop0;
-d./*4*/prop1;";
-    fourslash::run_generated_test(t, content, |f, t| {
+d./*4*/prop1;", |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3", "4"]);
     });
 }
@@ -2679,10 +2439,8 @@ use crate::tests::prelude::*;
 
 // findAllRefsInsideTemplates1_test.go:10
 pub fn test_find_all_refs_inside_templates1(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*/var /*2*/x = 10;
-var y = `${ /*3*/x } ${ /*4*/x }`";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"/*1*/var /*2*/x = 10;
+var y = `${ /*3*/x } ${ /*4*/x }`", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -2694,10 +2452,8 @@ use crate::tests::prelude::*;
 
 // findAllRefsInsideTemplates2_test.go:10
 pub fn test_find_all_refs_inside_templates2(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*/function /*2*/f(...rest: any[]) { }
-/*3*/f `${ /*4*/f } ${ /*5*/f }`";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"/*1*/function /*2*/f(...rest: any[]) { }
+/*3*/f `${ /*4*/f } ${ /*5*/f }`", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5"]);
     });
 }
@@ -2709,16 +2465,14 @@ use crate::tests::prelude::*;
 
 // findAllRefsInsideWithBlock_test.go:10
 pub fn test_find_all_refs_inside_with_block(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*/var /*2*/x = 0;
+    fourslash::run_generated_test(t, r"/*1*/var /*2*/x = 0;
 
 with ({}) {
     var y = x;  // Reference of x here should not be picked
     y++;        // also reference for y should be ignored
 }
 
-/*3*/x = /*4*/x + 1;";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*3*/x = /*4*/x + 1;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -2730,8 +2484,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsIsDefinition_test.go:10
 pub fn test_find_all_refs_is_definition(t: &T) {
-    t.parallel();
-    let content: &str = r"declare function foo(a: number): number;
+    fourslash::run_generated_test(t, r"declare function foo(a: number): number;
 declare function foo(a: string): string;
 declare function foo/*1*/(a: string | number): string | number;
 
@@ -2755,8 +2508,7 @@ class Foo implements IFoo {
     /*5*/constructor(n: number?) { }
     foo/*6*/(): void { }
     static init() { return new this() }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6"]);
     });
 }
@@ -2768,8 +2520,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsJsDocImportTag_test.go:10
 pub fn test_find_all_refs_js_doc_import_tag(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJS: true
+    fourslash::run_generated_test(t, r#"// @allowJS: true
 // @checkJs: true
 // @Filename: /b.ts
 export interface A { }
@@ -2781,8 +2532,7 @@ export interface A { }
 /**
  * @param { [|A/**/|] } a
  */
-function f(a) {}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+function f(a) {}"#, |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -2794,8 +2544,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsJsDocImportTag2_test.go:10
 pub fn test_find_all_refs_js_doc_import_tag2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @checkJs: true
+    fourslash::run_generated_test(t, r"// @checkJs: true
 // @Filename: /component.js
 export default class Component {
   constructor() {
@@ -2820,8 +2569,7 @@ import Component from './component.js';
 /**
  * @extends Component/*1*/
  */
-export class Player extends Component {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+export class Player extends Component {}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -2833,8 +2581,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsJsDocImportTag3_test.go:10
 pub fn test_find_all_refs_js_doc_import_tag3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @checkJs: true
+    fourslash::run_generated_test(t, r"// @checkJs: true
 // @Filename: /component.js
 export class Component {
   constructor() {
@@ -2859,8 +2606,7 @@ import { Component } from './component.js';
 /**
  * @extends Component/*1*/
  */
-export class Player extends Component {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+export class Player extends Component {}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -2872,8 +2618,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsJsDocImportTag4_test.go:10
 pub fn test_find_all_refs_js_doc_import_tag4(t: &T) {
-    t.parallel();
-    let content: &str = r"// @checkJs: true
+    fourslash::run_generated_test(t, r"// @checkJs: true
 // @Filename: /component.js
 export class Component {
   constructor() {
@@ -2898,8 +2643,7 @@ import * as C from './component.js';
 /**
  * @extends C/*1*/.Component
  */
-export class Player extends Component {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+export class Player extends Component {}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -2911,13 +2655,11 @@ use crate::tests::prelude::*;
 
 // findAllRefsJsDocImportTag5_test.go:10
 pub fn test_find_all_refs_js_doc_import_tag5(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @checkJs: true
+    fourslash::run_generated_test(t, r#"// @checkJs: true
 // @Filename: /a.js
 export default function /*0*/a() {}
 // @Filename: /b.js
-/** @import /*1*/a, * as ns from "./a" */"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/** @import /*1*/a, * as ns from "./a" */"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1"]);
     });
 }
@@ -2929,10 +2671,8 @@ use crate::tests::prelude::*;
 
 // findAllRefsJsDocTemplateTag_class_test.go:10
 pub fn test_find_all_refs_js_doc_template_tag_class(t: &T) {
-    t.parallel();
-    let content: &str = r"/** @template /*1*/T */
-class C</*2*/T> {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"/** @template /*1*/T */
+class C</*2*/T> {}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -2944,10 +2684,8 @@ use crate::tests::prelude::*;
 
 // findAllRefsJsDocTemplateTag_function_test.go:10
 pub fn test_find_all_refs_js_doc_template_tag_function(t: &T) {
-    t.parallel();
-    let content: &str = r"/** @template /*1*/T */
-function f</*2*/T>() {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"/** @template /*1*/T */
+function f</*2*/T>() {}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -2959,10 +2697,8 @@ use crate::tests::prelude::*;
 
 // findAllRefsJsDocTypeDef_test.go:10
 pub fn test_find_all_refs_js_doc_type_def(t: &T) {
-    t.parallel();
-    let content: &str = r"/** @typedef {Object} /*0*/T */
-function foo() {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"/** @typedef {Object} /*0*/T */
+function foo() {}", |f, t| {
         f.verify_baseline_find_all_references(t, &["0"]);
     });
 }
@@ -2974,15 +2710,13 @@ use crate::tests::prelude::*;
 
 // findAllRefs_jsEnum_test.go:10
 pub fn test_find_all_refs_js_enum(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: /a.js
 /** @enum {string} */
 /*1*/const /*2*/E = { A: "" };
 /*3*/E["A"];
 /** @type {/*4*/E} */
-const e = /*5*/E.A;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const e = /*5*/E.A;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5"]);
     });
 }
@@ -2994,8 +2728,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsJsThisPropertyAssignment_test.go:10
 pub fn test_find_all_refs_js_this_property_assignment(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @noImplicitThis: true
 // @Filename: infer.d.ts
 export declare function infer(o: { m(): void } & ThisType<{ x: number }>): void;
@@ -3018,8 +2751,7 @@ infer({
         this.x = 2;
         this./*2*/x;
     },
-});"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+});"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -3031,8 +2763,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsJsThisPropertyAssignment2_test.go:10
 pub fn test_find_all_refs_js_this_property_assignment2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @noImplicitThis: true
 // @Filename: infer.d.ts
 export declare function infer(o: { m: Record<string, Function> } & ThisType<{ x: number }>): void;
@@ -3055,8 +2786,7 @@ infer({
             this./*2*/x;
         },
     }
-});"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+});"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -3068,8 +2798,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsJSDocNamespacedTypedef_test.go:10
 pub fn test_find_all_refs_jsdoc_namespaced_typedef(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 // @allowJs: true
 // @checkJs: true
 // @Filename: /index.js
@@ -3081,8 +2810,7 @@ pub fn test_find_all_refs_jsdoc_namespaced_typedef(t: &T) {
 
 // Namespaced typedef aliased to implicitly-resolved typedef.
 /** @typedef {U} NS.[|V|] */
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_baseline_find_all_references(t, &[]);
     });
 }
@@ -3094,14 +2822,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsMappedType_test.go:10
 pub fn test_find_all_refs_mapped_type(t: &T) {
-    t.parallel();
-    let content: &str = r"interface T { /*1*/a: number; }
+    fourslash::run_generated_test(t, r"interface T { /*1*/a: number; }
 type U = { readonly [K in keyof T]?: string };
 declare const t: T;
 t./*2*/a;
 declare const u: U;
-u./*3*/a;";
-    fourslash::run_generated_test(t, content, |f, t| {
+u./*3*/a;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -3113,13 +2839,11 @@ use crate::tests::prelude::*;
 
 // findAllRefsMappedType_nonHomomorphic_test.go:10
 pub fn test_find_all_refs_mapped_type_non_homomorphic(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @strict: true
+    fourslash::run_generated_test(t, r#"// @strict: true
 function f(x: { [K in "m"]: number; }) {
     x./*1*/m;
     x./*2*/m
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -3131,11 +2855,9 @@ use crate::tests::prelude::*;
 
 // findAllRefsMissingModulesOverlappingSpecifiers_test.go:10
 pub fn test_find_all_refs_missing_modules_overlapping_specifiers(t: &T) {
-    t.parallel();
-    let content: &str = r#"// https://github.com/microsoft/TypeScript/issues/5551
+    fourslash::run_generated_test(t, r#"// https://github.com/microsoft/TypeScript/issues/5551
 import { resolve/*0*/ as resolveUrl } from "idontcare";
-import { resolve/*1*/ } from "whatever";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { resolve/*1*/ } from "whatever";"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1"]);
     });
 }
@@ -3147,15 +2869,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsModuleAugmentation_test.go:10
 pub fn test_find_all_refs_module_augmentation(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /node_modules/foo/index.d.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /node_modules/foo/index.d.ts
 /*1*/export type /*2*/T = number;
 // @Filename: /a.ts
 import * as foo from "foo";
 declare module "foo" {
     export const x: /*3*/T;
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
@@ -3168,13 +2888,11 @@ use crate::tests::prelude::*;
 
 // findAllRefsModuleDotExports_test.go:10
 pub fn test_find_all_refs_module_dot_exports(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: /a.js
 /*1*/const b = require("/*2*/./b");
 // @Filename: /b.js
-/*3*/module.exports = 0;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*3*/module.exports = 0;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -3186,12 +2904,10 @@ use crate::tests::prelude::*;
 
 // findAllRefsNoImportClause_test.go:10
 pub fn test_find_all_refs_no_import_clause(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 /*1*/export const /*2*/x = 0;
 // @Filename: /b.ts
-import "./a";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import "./a";"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -3203,9 +2919,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsNoSubstitutionTemplateLiteralNoCrash1_test.go:10
 pub fn test_find_all_refs_no_substitution_template_literal_no_crash1(t: &T) {
-    t.parallel();
-    let content: &str = "type Test = `T/*1*/`;";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "type Test = `T/*1*/`;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -3217,8 +2931,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsNonModule_test.go:10
 pub fn test_find_all_refs_non_module(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @checkJs: true
+    fourslash::run_generated_test(t, r#"// @checkJs: true
 // @Filename: /script.ts
 console.log("I'm a script!");
 // @Filename: /import.ts
@@ -3229,8 +2942,7 @@ console.log("./script/*3*/");
 // @Filename: /tripleSlash.ts
 /// <reference path="script.ts" />
 // @Filename: /stringLiteral.ts
-console.log("./script");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+console.log("./script");"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -3242,8 +2954,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsNonexistentPropertyNoCrash1_test.go:10
 pub fn test_find_all_refs_nonexistent_property_no_crash1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @strict: true
+    fourslash::run_generated_test(t, r#"// @strict: true
 // @allowJs: true
 // @checkJs: true
 // @filename: ./src/parser-input.js
@@ -3287,8 +2998,7 @@ const Parser = function Parser(context, imports, fileInfo, currentIndex) {
   };
 };
 
-export default Parser;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export default Parser;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -3300,15 +3010,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsObjectBindingElementPropertyName01_test.go:10
 pub fn test_find_all_refs_object_binding_element_property_name01(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I {
+    fourslash::run_generated_test(t, r"interface I {
     /*1*/property1: number;
     property2: string;
 }
 
 var foo: I;
-/*2*/var { /*3*/property1: prop1 } = foo;";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*2*/var { /*3*/property1: prop1 } = foo;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -3320,15 +3028,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsObjectBindingElementPropertyName02_test.go:10
 pub fn test_find_all_refs_object_binding_element_property_name02(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I {
+    fourslash::run_generated_test(t, r"interface I {
     /*1*/property1: number;
     property2: string;
 }
 
 var foo: I;
-/*2*/var { /*3*/property1: {} } = foo;";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*2*/var { /*3*/property1: {} } = foo;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -3340,15 +3046,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsObjectBindingElementPropertyName03_test.go:10
 pub fn test_find_all_refs_object_binding_element_property_name03(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I {
+    fourslash::run_generated_test(t, r"interface I {
     /*1*/property1: number;
     property2: string;
 }
 
 var foo: I;
-var [ { property1: prop1 }, { /*2*/property1, property2 } ] = [foo, foo];";
-    fourslash::run_generated_test(t, content, |f, t| {
+var [ { property1: prop1 }, { /*2*/property1, property2 } ] = [foo, foo];", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }

@@ -232,6 +232,8 @@ pub fn new_fourslash(t: &T, capabilities: Option<lsproto::ClientCapabilities>, c
 /// Runs the common shape of a generated fourslash test. Keeping the two Go-defer panic boundaries here avoids
 /// compiling their identical closure scaffolding into every generated test body.
 pub fn run_generated_test(t: &T, content: &str, body: fn(&mut FourslashTest, &T)) {
+    // Parallel precedes RecoverAndFail in Go, so keep it outside both panic boundaries.
+    t.parallel();
     let test_result = crate::go::run(|| {
         let (mut f, done) = new_fourslash(t, None, content);
         let body_result = crate::go::run(|| body(&mut f, t));

@@ -5,8 +5,7 @@ use crate::tests::prelude::*;
 
 // referencesForMergedDeclarations7_test.go:10
 pub fn test_references_for_merged_declarations7(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Foo { }
+    fourslash::run_generated_test(t, r"interface Foo { }
 namespace Foo {
     export interface /*1*/Bar { }
     export module /*2*/Bar { export interface Baz { } }
@@ -14,8 +13,7 @@ namespace Foo {
 }
 
 // module, value and type
-import a2 = Foo./*4*/Bar;";
-    fourslash::run_generated_test(t, content, |f, t| {
+import a2 = Foo./*4*/Bar;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -27,8 +25,7 @@ use crate::tests::prelude::*;
 
 // referencesForMergedDeclarations8_test.go:10
 pub fn test_references_for_merged_declarations8(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Foo { }
+    fourslash::run_generated_test(t, r"interface Foo { }
 namespace Foo {
     export interface Bar { }
     /*1*/export module /*2*/Bar { export interface Baz { } }
@@ -36,8 +33,7 @@ namespace Foo {
 }
 
 // module
-import a3 = Foo./*3*/Bar.Baz;";
-    fourslash::run_generated_test(t, content, |f, t| {
+import a3 = Foo./*3*/Bar.Baz;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -49,8 +45,7 @@ use crate::tests::prelude::*;
 
 // referencesForModifiers_test.go:10
 pub fn test_references_for_modifiers(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 [|/*declareModifier*/declare /*abstractModifier*/abstract class C1 {
     [|/*staticModifier*/static a;|]
     [|/*readonlyModifier*/readonly b;|]
@@ -61,8 +56,7 @@ pub fn test_references_for_modifiers(t: &T) {
 [|/*constModifier*/const enum E {
 }|]
 [|/*asyncModifier*/async function fn() {}|]
-[|/*exportModifier*/export /*defaultModifier*/default class C2 {}|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+[|/*exportModifier*/export /*defaultModifier*/default class C2 {}|]", |f, t| {
         f.verify_baseline_find_all_references(t, &["declareModifier", "abstractModifier", "staticModifier", "readonlyModifier", "publicModifier", "protectedModifier", "privateModifier", "constModifier", "asyncModifier", "exportModifier", "defaultModifier"]);
     });
 }
@@ -74,8 +68,7 @@ use crate::tests::prelude::*;
 
 // referencesForNoContext_test.go:10
 pub fn test_references_for_no_context(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace modTest {
+    fourslash::run_generated_test(t, r"namespace modTest {
     //Declare
     export var modVar:number;
     /*1*/
@@ -94,8 +87,7 @@ pub fn test_references_for_no_context(t: &T) {
 /*4*/
     namespace testMod {
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -107,16 +99,14 @@ use crate::tests::prelude::*;
 
 // referencesForNumericLiteralPropertyNames_test.go:10
 pub fn test_references_for_numeric_literal_property_names(t: &T) {
-    t.parallel();
-    let content: &str = r#"class Foo {
+    fourslash::run_generated_test(t, r#"class Foo {
     public /*1*/12: any;
 }
 
 var x: Foo;
 x[12];
 x = { "12": 0 };
-x = { 12: 0 };"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+x = { 12: 0 };"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -128,13 +118,11 @@ use crate::tests::prelude::*;
 
 // referencesForObjectLiteralProperties_test.go:10
 pub fn test_references_for_object_literal_properties(t: &T) {
-    t.parallel();
-    let content: &str = r#"var x = { /*1*/add: 0, b: "string" };
+    fourslash::run_generated_test(t, r#"var x = { /*1*/add: 0, b: "string" };
 x["/*2*/add"];
 x./*3*/add;
 var y = x;
-y./*4*/add;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+y./*4*/add;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -146,8 +134,7 @@ use crate::tests::prelude::*;
 
 // referencesForOverrides_test.go:10
 pub fn test_references_for_overrides(t: &T) {
-    t.parallel();
-    let content: &str = r#"namespace FindRef3 {
+    fourslash::run_generated_test(t, r#"namespace FindRef3 {
 	namespace SimpleClassTest {
 		export class Foo {
 			public /*foo*/foo(): void {
@@ -220,8 +207,7 @@ pub fn test_references_for_overrides(t: &T) {
 		z.field = "";
         z.method();
 	}
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["foo", "ifoo", "icfoo", "field", "method"]);
     });
 }
@@ -233,8 +219,7 @@ use crate::tests::prelude::*;
 
 // referencesForPropertiesOfGenericType_test.go:10
 pub fn test_references_for_properties_of_generic_type(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface IFoo<T> {
+    fourslash::run_generated_test(t, r#"interface IFoo<T> {
     /*1*/doSomething(v: T): T;
 }
 
@@ -242,8 +227,7 @@ var x: IFoo<string>;
 x./*2*/doSomething("ss");
 
 var y: IFoo<number>;
-y./*3*/doSomething(12);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+y./*3*/doSomething(12);"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -255,8 +239,7 @@ use crate::tests::prelude::*;
 
 // referencesForStatementKeywords_test.go:10
 pub fn test_references_for_statement_keywords(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @filename: /main.ts
+    fourslash::run_generated_test(t, r#"// @filename: /main.ts
 // import ... = ...
 [|{| "id": "importEqualsDecl1" |}/*importEqualsDecl1_importKeyword*/[|import|] [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeId": "importEqualsDecl1" |}A|] = /*importEqualsDecl1_requireKeyword*/[|require|]("[|{| "isWriteAccess": false, "isDefinition": false, "contextRangeId": "importEqualsDecl1" |}./a|]");|]
 [|{| "id": "namespaceDecl1" |}namespace [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeId": "namespaceDecl1" |}N|] { }|]
@@ -308,8 +291,7 @@ export const h = 1;
 [|{| "id": "classDecl3" |}export class [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeId": "classDecl3" |}I|] {}|]
 // @filename: /j.ts
 export const j1 = 1;
-export const j2 = 2;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export const j2 = 2;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["importEqualsDecl1_importKeyword", "importEqualsDecl1_requireKeyword", "importEqualsDecl2_importKeyword", "importDecl1_importKeyword", "importDecl1_typeKeyword", "importDecl1_fromKeyword", "importDecl2_importKeyword", "importDecl2_typeKeyword", "importDecl2_asKeyword", "importDecl2_fromKeyword", "importDecl3_importKeyword", "importDecl3_typeKeyword", "importDecl3_fromKeyword", "importDecl4_importKeyword", "importDecl4_typeKeyword", "importDecl4_fromKeyword", "importDecl4_asKeyword", "importDecl5_importKeyword", "exportDecl1_exportKeyword", "exportDecl1_typeKeyword", "exportDecl1_fromKeyword", "exportDecl2_exportKeyword", "exportDecl2_typeKeyword", "exportDecl2_asKeyword", "exportDecl2_fromKeyword", "exportDecl3_exportKeyword", "exportDecl3_typeKeyword", "exportDecl3_fromKeyword", "exportDecl4_exportKeyword", "exportDecl4_typeKeyword", "exportDecl4_fromKeyword", "exportDecl4_asKeyword", "exportDecl5_exportKeyword", "exportDecl5_typeKeyword", "exportDecl6_exportKeyword", "exportDecl6_typeKeyword", "exportDecl6_asKeyword", "exportAssignment1_exportKeyword", "exportAssignment2_exportKeyword"]);
     });
 }
@@ -321,8 +303,7 @@ use crate::tests::prelude::*;
 
 // referencesForStatic_test.go:10
 pub fn test_references_for_static(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: referencesOnStatic_1.ts
+    fourslash::run_generated_test(t, r#"// @Filename: referencesOnStatic_1.ts
 var n = 43;
 
 class foo {
@@ -347,8 +328,7 @@ class foo2 {
     }
 }
 // @Filename: referencesOnStatic_2.ts
-var q = foo./*9*/n;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var q = foo./*9*/n;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
     });
 }
@@ -360,8 +340,7 @@ use crate::tests::prelude::*;
 
 // referencesForStaticsAndMembersWithSameNames_test.go:10
 pub fn test_references_for_statics_and_members_with_same_names(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace FindRef4 {
+    fourslash::run_generated_test(t, r"namespace FindRef4 {
 	namespace MixedStaticsClassTest {
 		export class Foo {
 			/*1*/bar: Foo;
@@ -384,8 +363,7 @@ pub fn test_references_for_statics_and_members_with_same_names(t: &T) {
 		MixedStaticsClassTest.Foo./*10*/foo();
 		MixedStaticsClassTest.Foo./*11*/bar;
 	}
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]);
     });
 }
@@ -397,8 +375,7 @@ use crate::tests::prelude::*;
 
 // referencesForStringLiteralPropertyNames_test.go:10
 pub fn test_references_for_string_literal_property_names(t: &T) {
-    t.parallel();
-    let content: &str = r#"class Foo {
+    fourslash::run_generated_test(t, r#"class Foo {
     public "/*1*/ss": any;
 }
 
@@ -406,8 +383,7 @@ var x: Foo;
 x.ss;
 x["ss"];
 x = { "ss": 0 };
-x = { ss: 0 };"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+x = { ss: 0 };"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -419,14 +395,12 @@ use crate::tests::prelude::*;
 
 // referencesForStringLiteralPropertyNames2_test.go:10
 pub fn test_references_for_string_literal_property_names2(t: &T) {
-    t.parallel();
-    let content: &str = r#"class Foo {
+    fourslash::run_generated_test(t, r#"class Foo {
     /*1*/"/*2*/blah"() { return 0; }
 }
 
 var x: Foo;
-x./*3*/blah;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+x./*3*/blah;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -438,15 +412,13 @@ use crate::tests::prelude::*;
 
 // referencesForStringLiteralPropertyNames3_test.go:10
 pub fn test_references_for_string_literal_property_names3(t: &T) {
-    t.parallel();
-    let content: &str = r#"class Foo2 {
+    fourslash::run_generated_test(t, r#"class Foo2 {
     /*1*/get "/*2*/42"() { return 0; }
     /*3*/set /*4*/42(n) { }
 }
 
 var y: Foo2;
-y[/*5*/42];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+y[/*5*/42];"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5"]);
     });
 }
@@ -458,11 +430,9 @@ use crate::tests::prelude::*;
 
 // referencesForStringLiteralPropertyNames4_test.go:10
 pub fn test_references_for_string_literal_property_names4(t: &T) {
-    t.parallel();
-    let content: &str = r#"var x = { "/*1*/someProperty": 0 }
+    fourslash::run_generated_test(t, r#"var x = { "/*1*/someProperty": 0 }
 x[/*2*/"someProperty"] = 3;
-x.someProperty = 5;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+x.someProperty = 5;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -474,11 +444,9 @@ use crate::tests::prelude::*;
 
 // referencesForStringLiteralPropertyNames5_test.go:10
 pub fn test_references_for_string_literal_property_names5(t: &T) {
-    t.parallel();
-    let content: &str = r#"var x = { "/*1*/someProperty": 0 }
+    fourslash::run_generated_test(t, r#"var x = { "/*1*/someProperty": 0 }
 x["/*2*/someProperty"] = 3;
-x.someProperty = 5;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+x.someProperty = 5;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -490,11 +458,9 @@ use crate::tests::prelude::*;
 
 // referencesForStringLiteralPropertyNames6_test.go:10
 pub fn test_references_for_string_literal_property_names6(t: &T) {
-    t.parallel();
-    let content: &str = r#"const x = function () { return 111111; }
+    fourslash::run_generated_test(t, r#"const x = function () { return 111111; }
 x./*1*/someProperty = 5;
-x["/*2*/someProperty"] = 3;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+x["/*2*/someProperty"] = 3;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -506,15 +472,13 @@ use crate::tests::prelude::*;
 
 // referencesForStringLiteralPropertyNames7_test.go:10
 pub fn test_references_for_string_literal_property_names7(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: foo.js
+    fourslash::run_generated_test(t, r#"// @Filename: foo.js
 // @noEmit: true
 // @allowJs: true
 // @checkJs: true
 var x = { "/*1*/someProperty": 0 }
 x["/*2*/someProperty"] = 3;
-x.someProperty = 5;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+x.someProperty = 5;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -526,15 +490,13 @@ use crate::tests::prelude::*;
 
 // referencesForTypeKeywords_test.go:10
 pub fn test_references_for_type_keywords(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I {}
+    fourslash::run_generated_test(t, r"interface I {}
 function f<T /*typeParam_extendsKeyword*/extends I>() {}
 type A1<T, U> = T /*conditionalType_extendsKeyword*/extends U ? 1 : 0;
 type A2<T> = T extends /*inferType_inferKeyword*/infer U ? 1 : 0;
 type A3<T> = { [P /*mappedType_inOperator*/in keyof T]: 1 };
 type A4<T> = /*keyofOperator_keyofKeyword*/keyof T;
-type A5<T> = /*readonlyOperator_readonlyKeyword*/readonly T[];";
-    fourslash::run_generated_test(t, content, |f, t| {
+type A5<T> = /*readonlyOperator_readonlyKeyword*/readonly T[];", |f, t| {
         f.verify_baseline_find_all_references(t, &["typeParam_extendsKeyword", "conditionalType_extendsKeyword", "inferType_inferKeyword", "mappedType_inOperator", "keyofOperator_keyofKeyword", "readonlyOperator_readonlyKeyword"]);
     });
 }
@@ -546,8 +508,7 @@ use crate::tests::prelude::*;
 
 // referencesForUnionProperties_test.go:10
 pub fn test_references_for_union_properties(t: &T) {
-    t.parallel();
-    let content: &str = r"interface One {
+    fourslash::run_generated_test(t, r"interface One {
     common: { /*one*/a: number; };
 }
 
@@ -567,8 +528,7 @@ interface Two {
 
 var x : One | Two;
 
-x.common./*x*/a;";
-    fourslash::run_generated_test(t, content, |f, t| {
+x.common./*x*/a;", |f, t| {
         f.verify_baseline_find_all_references(t, &["one", "base", "x"]);
     });
 }
@@ -580,12 +540,10 @@ use crate::tests::prelude::*;
 
 // referencesInComment_test.go:10
 pub fn test_references_in_comment(t: &T) {
-    t.parallel();
-    let content: &str = r"// References to /*1*/foo or b/*2*/ar
+    fourslash::run_generated_test(t, r"// References to /*1*/foo or b/*2*/ar
 /* in comments should not find fo/*3*/o or bar/*4*/ */
 class foo { }
-var bar = 0;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var bar = 0;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -597,16 +555,14 @@ use crate::tests::prelude::*;
 
 // referencesInConfiguredProject_test.go:10
 pub fn test_references_in_configured_project(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /home/src/workspaces/project/referencesForGlobals_1.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /home/src/workspaces/project/referencesForGlobals_1.ts
 class /*0*/globalClass {
     public f() { }
 }
 // @Filename: /home/src/workspaces/project/referencesForGlobals_2.ts
 var c = /*1*/globalClass();
 // @Filename: /home/src/workspaces/project/tsconfig.json
-{ "files": ["referencesForGlobals_1.ts", "referencesForGlobals_2.ts"], "compilerOptions": { "lib": ["es5"] } }"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+{ "files": ["referencesForGlobals_1.ts", "referencesForGlobals_2.ts"], "compilerOptions": { "lib": ["es5"] } }"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_find_all_references(t, &["1"]);
     });
@@ -619,10 +575,8 @@ use crate::tests::prelude::*;
 
 // referencesInEmptyFile_test.go:10
 pub fn test_references_in_empty_file(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
-/*1*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"// @lib: es5
+/*1*/", |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_find_all_references(t, &["1"]);
     });
@@ -635,8 +589,7 @@ use crate::tests::prelude::*;
 
 // referencesInEmptyFileWithMultipleProjects_test.go:10
 pub fn test_references_in_empty_file_with_multiple_projects(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /home/src/workspaces/project/a/tsconfig.json
+    fourslash::run_generated_test(t, r#"// @Filename: /home/src/workspaces/project/a/tsconfig.json
 { "files": ["a.ts"], "compilerOptions": { "lib": ["es5"] } }
 // @Filename: /home/src/workspaces/project/a/a.ts
 /// <reference path="../b/b.ts" />
@@ -644,8 +597,7 @@ pub fn test_references_in_empty_file_with_multiple_projects(t: &T) {
 // @Filename: /home/src/workspaces/project/b/tsconfig.json
 { "files": ["b.ts"], "compilerOptions": { "lib": ["es5"] } }
 // @Filename: /home/src/workspaces/project/b/b.ts
-/*2*/;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*2*/;"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
@@ -658,8 +610,7 @@ use crate::tests::prelude::*;
 
 // referencesInStringLiteralValueWithMultipleProjects_test.go:10
 pub fn test_references_in_string_literal_value_with_multiple_projects(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /home/src/workspaces/project/a/tsconfig.json
+    fourslash::run_generated_test(t, r#"// @Filename: /home/src/workspaces/project/a/tsconfig.json
 { "files": ["a.ts"], "compilerOptions": { "lib": ["es5"] } }
 // @Filename: /home/src/workspaces/project/a/a.ts
 /// <reference path="../b/b.ts" />
@@ -667,8 +618,7 @@ const str: string = "hello/*1*/";
 // @Filename: /home/src/workspaces/project/b/tsconfig.json
 { "files": ["b.ts"], "compilerOptions": { "lib": ["es5"] } }
 // @Filename: /home/src/workspaces/project/b/b.ts
-const str2: string = "hello/*2*/";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const str2: string = "hello/*2*/";"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
@@ -681,8 +631,7 @@ use crate::tests::prelude::*;
 
 // referencesIsAvailableThroughGlobalNoCrash_test.go:10
 pub fn test_references_is_available_through_global_no_crash(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /packages/playwright-core/bundles/utils/node_modules/@types/debug/index.d.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /packages/playwright-core/bundles/utils/node_modules/@types/debug/index.d.ts
 declare var debug: debug.Debug & { debug: debug.Debug; default: debug.Debug };
 export = debug;
 export as namespace debug;
@@ -694,8 +643,7 @@ declare namespace debug {
 // @Filename: /packages/playwright-core/bundles/utils/node_modules/@types/debug/package.json
 { "types": "index.d.ts" }
 // @Filename: /packages/playwright-core/src/index.ts
-export const debug: typeof import('../bundles/utils/node_modules//*1*/@types/debug') = require('./utilsBundleImpl').debug;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export const debug: typeof import('../bundles/utils/node_modules//*1*/@types/debug') = require('./utilsBundleImpl').debug;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -707,10 +655,8 @@ use crate::tests::prelude::*;
 
 // referencesToNonPropertyNameStringLiteral_test.go:10
 pub fn test_references_to_non_property_name_string_literal(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
-const str: string = "hello/*1*/";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"// @lib: es5
+const str: string = "hello/*1*/";"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_find_all_references(t, &["1"]);
     });
@@ -723,10 +669,8 @@ use crate::tests::prelude::*;
 
 // referencesToStringLiteralValue_test.go:10
 pub fn test_references_to_string_literal_value(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
-const s: string = "some /*1*/ string";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"// @lib: es5
+const s: string = "some /*1*/ string";"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_find_all_references(t, &["1"]);
     });
@@ -739,9 +683,7 @@ use crate::tests::prelude::*;
 
 // regexDetection_test.go:10
 pub fn test_regex_detection(t: &T) {
-    t.parallel();
-    let content: &str = " /*1*/15 / /*2*/Math.min(61 / /*3*/42, 32 / 15) / /*4*/15;";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, " /*1*/15 / /*2*/Math.min(61 / /*3*/42, 32 / 15) / /*4*/15;", |f, t| {
         f.go_to_marker(t, "1");
         f.verify_not_quick_info_exists(t);
         f.go_to_marker(t, "2");
@@ -760,14 +702,12 @@ use crate::tests::prelude::*;
 
 // regexErrorRecovery_test.go:10
 pub fn test_regex_error_recovery(t: &T) {
-    t.parallel();
-    let content: &str = r#" // test code
+    fourslash::run_generated_test(t, r#" // test code
 //var x = //**/a/;/*1*/
 //x.exec("bab");
  Bug 579071: Parser no longer detects a Regex when an open bracket is inserted
 verify.quickInfoIs("RegExp");
-verify.not.errorExistsAfterMarker("1");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+verify.not.errorExistsAfterMarker("1");"#, |f, t| {
         f.insert(t, "(");
     });
 }
@@ -779,9 +719,7 @@ use crate::tests::prelude::*;
 
 // regexp_test.go:10
 pub fn test_regexp(t: &T) {
-    t.parallel();
-    let content: &str = "var /**/x = /aa/;";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "var /**/x = /aa/;", |f, t| {
         f.verify_quick_info_at(t, "", "var x: RegExp", "");
     });
 }
@@ -793,8 +731,7 @@ use crate::tests::prelude::*;
 
 // remoteGetReferences_test.go:10
 pub fn test_remote_get_references(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: remoteGetReferences_1.ts
+    fourslash::run_generated_test(t, r#"// @Filename: remoteGetReferences_1.ts
 // Comment Refence Test: globalVar
 var globalVar: number = 2;
 
@@ -968,8 +905,7 @@ namespace remotemodTest {
 	namespace remotetestMod {
 		var remoteboo = remotefoo;
 	}
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30"]);
     });
 }
@@ -981,12 +917,10 @@ use crate::tests::prelude::*;
 
 // removeDeclareFunctionExports_test.go:10
 pub fn test_remove_declare_function_exports(t: &T) {
-    t.parallel();
-    let content: &str = r"declare namespace M {
+    fourslash::run_generated_test(t, r"declare namespace M {
     function RegExp2(pattern: string): RegExp2;
     export function RegExp2(pattern: string, flags: string): RegExp2;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_bof(t);
         f.delete_at_caret(t, 8);
     });
@@ -999,13 +933,11 @@ use crate::tests::prelude::*;
 
 // removeDeclareInModule_test.go:10
 pub fn test_remove_declare_in_module(t: &T) {
-    t.parallel();
-    let content: &str = r"/**/export namespace Foo {
+    fourslash::run_generated_test(t, r"/**/export namespace Foo {
     function a(): void {}
 }
 
-Foo.a();";
-    fourslash::run_generated_test(t, content, |f, t| {
+Foo.a();", |f, t| {
         f.go_to_marker(t, "");
         f.delete_at_caret(t, 7);
         f.verify_number_of_errors_in_current_file(t, 1);
@@ -1019,10 +951,8 @@ use crate::tests::prelude::*;
 
 // removeDeclareKeyword_test.go:10
 pub fn test_remove_declare_keyword(t: &T) {
-    t.parallel();
-    let content: &str = r"/**/declare var y;
-var x = new y;";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"/**/declare var y;
+var x = new y;", |f, t| {
         f.go_to_marker(t, "");
         f.delete_at_caret(t, 7);
     });
@@ -1035,11 +965,9 @@ use crate::tests::prelude::*;
 
 // removeDeclareParamTypeAnnotation_test.go:10
 pub fn test_remove_declare_param_type_annotation(t: &T) {
-    t.parallel();
-    let content: &str = r"declare class T { }
+    fourslash::run_generated_test(t, r"declare class T { }
 declare function parseInt(/**/s:T):T;
-parseInt('2');";
-    fourslash::run_generated_test(t, content, |f, t| {
+parseInt('2');", |f, t| {
         f.go_to_marker(t, "");
         f.delete_at_caret(t, 3);
     });
@@ -1052,10 +980,8 @@ use crate::tests::prelude::*;
 
 // removeDuplicateIdentifier_test.go:10
 pub fn test_remove_duplicate_identifier(t: &T) {
-    t.parallel();
-    let content: &str = r"class foo{}
-function foo() { return null; }";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"class foo{}
+function foo() { return null; }", |f, t| {
         f.go_to_bof(t);
         f.delete_at_caret(t, 11);
     });
@@ -1068,14 +994,12 @@ use crate::tests::prelude::*;
 
 // removeExportedClassFromReopenedModule_test.go:10
 pub fn test_remove_exported_class_from_reopened_module(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace multiM { }
+    fourslash::run_generated_test(t, r"namespace multiM { }
 
 namespace multiM {
     /*1*/export class c { }
 }
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.go_to_marker(t, "1");
         f.delete_at_caret(t, 18);
         f.go_to_eof(t);
@@ -1091,10 +1015,8 @@ use crate::tests::prelude::*;
 
 // removeInterfaceExtendsClause_test.go:10
 pub fn test_remove_interface_extends_clause(t: &T) {
-    t.parallel();
-    let content: &str = r"interface IFoo<T> { }
-interface Array<T> /**/extends IFoo<T> { }";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"interface IFoo<T> { }
+interface Array<T> /**/extends IFoo<T> { }", |f, t| {
         f.go_to_marker(t, "");
         f.delete_at_caret(t, 15);
     });
@@ -1107,11 +1029,9 @@ use crate::tests::prelude::*;
 
 // removeInterfaceUsedAsGenericTypeArgument_test.go:10
 pub fn test_remove_interface_used_as_generic_type_argument(t: &T) {
-    t.parallel();
-    let content: &str = r"/**/interface A { a: string; }
+    fourslash::run_generated_test(t, r"/**/interface A { a: string; }
 interface G<T, U> { }
-var v1: G<A, C>;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var v1: G<A, C>;", |f, t| {
         f.go_to_marker(t, "");
         f.delete_at_caret(t, 26);
     });
@@ -1124,9 +1044,7 @@ use crate::tests::prelude::*;
 
 // removeParameterBetweenCommentAndParameter_test.go:10
 pub fn test_remove_parameter_between_comment_and_parameter(t: &T) {
-    t.parallel();
-    let content: &str = "function fn(/* comment! */ /**/a: number, c) { }";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "function fn(/* comment! */ /**/a: number, c) { }", |f, t| {
         f.go_to_marker(t, "");
         f.delete_at_caret(t, 10);
     });
@@ -1139,8 +1057,7 @@ use crate::tests::prelude::*;
 
 // removeVarFromModuleWithReopenedEnums_test.go:10
 pub fn test_remove_var_from_module_with_reopened_enums(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace A {
+    fourslash::run_generated_test(t, r"namespace A {
     /**/var o;
 }
 enum A {
@@ -1149,8 +1066,7 @@ enum A {
 }
 namespace A {
     var p;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_marker(t, "");
         f.delete_at_caret(t, 6);
     });
@@ -1163,14 +1079,12 @@ use crate::tests::prelude::*;
 
 // rename01_test.go:10
 pub fn test_rename01(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 ///<reference path="./Bar.ts" />
 [|function [|{| "contextRangeIndex": 0 |}Bar|]() {
     // This is a reference to [|Bar|] in a comment.
     "this is a reference to [|Bar|] in a string"
-}|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}|]"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1]))]);
     });
@@ -1183,16 +1097,14 @@ use crate::tests::prelude::*;
 
 // renameAcrossMultipleProjects_test.go:10
 pub fn test_rename_across_multiple_projects(t: &T) {
-    t.parallel();
-    let content: &str = r#"//@Filename: a.ts
+    fourslash::run_generated_test(t, r#"//@Filename: a.ts
 [|var [|{| "contextRangeIndex": 0 |}x|]: number;|]
 //@Filename: b.ts
 /// <reference path="a.ts" />
 [|x|]++;
 //@Filename: c.ts
 /// <reference path="a.ts" />
-[|x|]++;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|x|]++;"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["x"]);
     });
 }
@@ -1204,11 +1116,9 @@ use crate::tests::prelude::*;
 
 // renameAlias_test.go:10
 pub fn test_rename_alias(t: &T) {
-    t.parallel();
-    let content: &str = r#"namespace SomeModule { export class SomeClass { } }
+    fourslash::run_generated_test(t, r#"namespace SomeModule { export class SomeClass { } }
 [|import [|{| "contextRangeIndex": 0 |}M|] = SomeModule;|]
-import C = [|M|].SomeClass;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import C = [|M|].SomeClass;"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["M"]);
     });
 }
@@ -1220,11 +1130,9 @@ use crate::tests::prelude::*;
 
 // renameAlias2_test.go:10
 pub fn test_rename_alias2(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|module [|{| "contextRangeIndex": 0 |}SomeModule|] { export class SomeClass { } }|]
+    fourslash::run_generated_test(t, r#"[|module [|{| "contextRangeIndex": 0 |}SomeModule|] { export class SomeClass { } }|]
 import M = [|SomeModule|];
-import C = M.SomeClass;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import C = M.SomeClass;"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["SomeModule"]);
     });
 }
@@ -1236,11 +1144,9 @@ use crate::tests::prelude::*;
 
 // renameAlias3_test.go:10
 pub fn test_rename_alias3(t: &T) {
-    t.parallel();
-    let content: &str = r#"namespace SomeModule { [|export class [|{| "contextRangeIndex": 0 |}SomeClass|] { }|] }
+    fourslash::run_generated_test(t, r#"namespace SomeModule { [|export class [|{| "contextRangeIndex": 0 |}SomeClass|] { }|] }
 import M = SomeModule;
-import C = M.[|SomeClass|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import C = M.[|SomeClass|];"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["SomeClass"]);
     });
 }
@@ -1252,14 +1158,12 @@ use crate::tests::prelude::*;
 
 // renameAliasExternalModule_test.go:10
 pub fn test_rename_alias_external_module(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: a.ts
 namespace SomeModule { export class SomeClass { } }
 export = SomeModule;
 // @Filename: b.ts
 [|import [|{| "contextRangeIndex": 0 |}M|] = require("./a");|]
-import C = [|M|].SomeClass;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import C = [|M|].SomeClass;"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["M"]);
     });
 }
@@ -1271,14 +1175,12 @@ use crate::tests::prelude::*;
 
 // renameAliasExternalModule2_test.go:10
 pub fn test_rename_alias_external_module2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: a.ts
 [|module [|{| "contextRangeIndex": 0 |}SomeModule|] { export class SomeClass { } }|]
 [|export = [|{| "contextRangeIndex": 2 |}SomeModule|];|]
 // @Filename: b.ts
 [|import [|{| "contextRangeIndex": 4 |}M|] = require("./a");|]
-import C = [|M|].SomeClass;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import C = [|M|].SomeClass;"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[5])), Any::RangeMarker(Arc::clone(&f.ranges()[6]))]);
     });
 }
@@ -1290,14 +1192,12 @@ use crate::tests::prelude::*;
 
 // renameAliasExternalModule3_test.go:10
 pub fn test_rename_alias_external_module3(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: a.ts
 namespace SomeModule { [|export class [|{| "contextRangeIndex": 0 |}SomeClass|] { }|] }
 export = SomeModule;
 // @Filename: b.ts
 import M = require("./a");
-import C = M.[|SomeClass|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import C = M.[|SomeClass|];"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["SomeClass"]);
     });
 }
@@ -1309,8 +1209,7 @@ use crate::tests::prelude::*;
 
 // renameBindingElementInitializerExternal_test.go:10
 pub fn test_rename_binding_element_initializer_external(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 [|const [|{| "contextRangeIndex": 0 |}external|] = true;|]
 
 function f({
@@ -1323,8 +1222,7 @@ const {
     lvl1 = [|external|],
     nested: { lvl2 = [|external|]},
     oldName: newName = [|external|]
-} = obj;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+} = obj;"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["external"]);
     });
 }
@@ -1336,14 +1234,12 @@ use crate::tests::prelude::*;
 
 // renameBindingElementInitializerProperty_test.go:10
 pub fn test_rename_binding_element_initializer_property(t: &T) {
-    t.parallel();
-    let content: &str = r#"function f([|{[|{| "contextRangeIndex": 0 |}required|], optional = [|required|]}: {[|[|{| "contextRangeIndex": 3 |}required|]: number,|] optional?: number}|]) {
+    fourslash::run_generated_test(t, r#"function f([|{[|{| "contextRangeIndex": 0 |}required|], optional = [|required|]}: {[|[|{| "contextRangeIndex": 3 |}required|]: number,|] optional?: number}|]) {
     console.log("required", [|required|]);
     console.log("optional", optional);
 }
 
-f({[|[|{| "contextRangeIndex": 6 |}required|]: 10|]});"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+f({[|[|{| "contextRangeIndex": 6 |}required|]: 10|]});"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[2])), Any::RangeMarker(Arc::clone(&f.ranges()[5])), Any::RangeMarker(Arc::clone(&f.ranges()[4])), Any::RangeMarker(Arc::clone(&f.ranges()[7]))]);
     });
 }
@@ -1355,14 +1251,12 @@ use crate::tests::prelude::*;
 
 // renameBuiltinTypes_test.go:10
 pub fn test_rename_builtin_types(t: &T) {
-    t.parallel();
-    let content: &str = r#"
+    fourslash::run_generated_test(t, r#"
 const arr: /*1*/Array<number> = [];
 const map1: /*2*/Map<string, number> = new Map();
 const prom: /*3*/Promise<void> = Promise.resolve();
 const str: /*4*/string = "hello";
-"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+"#, |f, t| {
         for marker in ["1".to_string(), "2".to_string(), "3".to_string(), "4".to_string()] {
             f.go_to_marker(t, marker.as_str());
             f.verify_rename_failed(t, None);
@@ -1377,13 +1271,11 @@ use crate::tests::prelude::*;
 
 // renameCommentsAndStrings1_test.go:10
 pub fn test_rename_comments_and_strings1(t: &T) {
-    t.parallel();
-    let content: &str = r#"///<reference path="./Bar.ts" />
+    fourslash::run_generated_test(t, r#"///<reference path="./Bar.ts" />
 [|function [|{| "contextRangeIndex": 0 |}Bar|]() {
     // This is a reference to Bar in a comment.
     "this is a reference to Bar in a string"
-}|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}|]"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["Bar"]);
     });
 }
@@ -1395,13 +1287,11 @@ use crate::tests::prelude::*;
 
 // renameCommentsAndStrings2_test.go:10
 pub fn test_rename_comments_and_strings2(t: &T) {
-    t.parallel();
-    let content: &str = r#"///<reference path="./Bar.ts" />
+    fourslash::run_generated_test(t, r#"///<reference path="./Bar.ts" />
 [|function [|{| "contextRangeIndex": 0 |}Bar|]() {
     // This is a reference to Bar in a comment.
     "this is a reference to [|Bar|] in a string"
-}|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}|]"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1]))]);
     });
 }
@@ -1413,13 +1303,11 @@ use crate::tests::prelude::*;
 
 // renameCommentsAndStrings3_test.go:10
 pub fn test_rename_comments_and_strings3(t: &T) {
-    t.parallel();
-    let content: &str = r#"///<reference path="./Bar.ts" />
+    fourslash::run_generated_test(t, r#"///<reference path="./Bar.ts" />
 [|function [|{| "contextRangeIndex": 0 |}Bar|]() {
     // This is a reference to [|Bar|] in a comment.
     "this is a reference to Bar in a string"
-}|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}|]"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1]))]);
     });
 }
@@ -1431,8 +1319,7 @@ use crate::tests::prelude::*;
 
 // renameCommentsAndStrings4_test.go:10
 pub fn test_rename_comments_and_strings4(t: &T) {
-    t.parallel();
-    let content: &str = r#"///<reference path="./Bar.ts" />
+    fourslash::run_generated_test(t, r#"///<reference path="./Bar.ts" />
 [|function [|{| "contextRangeIndex": 0 |}Bar|]() {
     // This is a reference to [|Bar|] in a comment.
     "this is a reference to [|Bar|] in a string";
@@ -1441,8 +1328,7 @@ pub fn test_rename_comments_and_strings4(t: &T) {
         const Bar = 0;
         `[|Bar|] ba ${Bar} bara [|Bar|] berbobo ${Bar} araura [|Bar|] ara!`;
     }
-}|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}|]"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1]))]);
     });
 }
@@ -1454,8 +1340,7 @@ use crate::tests::prelude::*;
 
 // renameContextuallyTypedProperties_test.go:10
 pub fn test_rename_contextually_typed_properties(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface I {
+    fourslash::run_generated_test(t, r#"interface I {
     [|[|{| "contextRangeIndex": 0 |}prop1|]: () => void;|]
     prop2(): void;
 }
@@ -1508,8 +1393,7 @@ var o9: I = {
 var o10: I = {
     [|set ["[|{| "contextRangeIndex": 20 |}prop1|]"](v) { }|],
     set ["prop2"](v) { }
-};"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+};"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["prop1"]);
     });
 }
@@ -1521,8 +1405,7 @@ use crate::tests::prelude::*;
 
 // renameContextuallyTypedProperties2_test.go:10
 pub fn test_rename_contextually_typed_properties2(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface I {
+    fourslash::run_generated_test(t, r#"interface I {
     prop1: () => void;
     [|[|{| "contextRangeIndex": 0 |}prop2|](): void;|]
 }
@@ -1575,8 +1458,7 @@ var o9: I = {
 var o10: I = {
     set ["prop1"](v) { },
     [|set ["[|{| "contextRangeIndex": 20 |}prop2|]"](v) { }|]
-};"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+};"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["prop2"]);
     });
 }
@@ -1588,14 +1470,12 @@ use crate::tests::prelude::*;
 
 // renameCrossJsTs01_test.go:10
 pub fn test_rename_cross_js_ts01(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: a.js
 [|exports.[|{| "contextRangeIndex": 0 |}area|] = function (r) { return r * r; }|]
 // @Filename: b.ts
 [|import { [|{| "contextRangeIndex": 2 |}area|] } from './a';|]
-var t = [|area|](10);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var t = [|area|](10);"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[4]))]);
     });
 }
@@ -1607,8 +1487,7 @@ use crate::tests::prelude::*;
 
 // renameDeclarationKeywords_test.go:10
 pub fn test_rename_declaration_keywords(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|{| "id": "baseDecl" |}class [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeId": "baseDecl" |}Base|] {}|]
+    fourslash::run_generated_test(t, r#"[|{| "id": "baseDecl" |}class [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeId": "baseDecl" |}Base|] {}|]
 [|{| "id": "implemented1Decl" |}interface [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeId": "implemented1Decl" |}Implemented1|] {}|]
 [|{| "id": "classDecl1" |}[|class|] [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeId": "classDecl1" |}C1|] [|extends|] [|Base|] [|implements|] [|Implemented1|] {
     [|{| "id": "getDecl" |}[|get|] [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeId": "getDecl" |}e|]() { return 1; }|]
@@ -1622,8 +1501,7 @@ pub fn test_rename_declaration_keywords(t: &T) {
 [|{| "id": "functionDecl" |}[|function|] [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeId": "functionDecl" |}fn|]() {}|]
 [|{| "id": "varDecl" |}[|var|] [|{| "isWriteAccess": false, "isDefinition": true, "contextRangeId": "varDecl" |}x|];|]
 [|{| "id": "letDecl" |}[|let|] [|{| "isWriteAccess": false, "isDefinition": true, "contextRangeId": "letDecl" |}y|];|]
-[|{| "id": "constDecl" |}[|const|] [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeId": "constDecl" |}z|] = 1;|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|{| "id": "constDecl" |}[|const|] [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeId": "constDecl" |}z|] = 1;|]"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[5])), Any::RangeMarker(Arc::clone(&f.ranges()[7])), Any::RangeMarker(Arc::clone(&f.ranges()[9])), Any::RangeMarker(Arc::clone(&f.ranges()[12])), Any::RangeMarker(Arc::clone(&f.ranges()[15])), Any::RangeMarker(Arc::clone(&f.ranges()[18])), Any::RangeMarker(Arc::clone(&f.ranges()[20])), Any::RangeMarker(Arc::clone(&f.ranges()[23])), Any::RangeMarker(Arc::clone(&f.ranges()[26])), Any::RangeMarker(Arc::clone(&f.ranges()[29])), Any::RangeMarker(Arc::clone(&f.ranges()[32])), Any::RangeMarker(Arc::clone(&f.ranges()[35])), Any::RangeMarker(Arc::clone(&f.ranges()[38])), Any::RangeMarker(Arc::clone(&f.ranges()[41])), Any::RangeMarker(Arc::clone(&f.ranges()[44]))]);
     });
 }
@@ -1635,8 +1513,7 @@ use crate::tests::prelude::*;
 
 // renameDefaultImport_test.go:10
 pub fn test_rename_default_import(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: B.ts
+    fourslash::run_generated_test(t, r#"// @Filename: B.ts
 [|export default class /*1*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}B|] {
     test() {
     }
@@ -1644,8 +1521,7 @@ pub fn test_rename_default_import(t: &T) {
 // @Filename: A.ts
 [|import /*2*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 2 |}B|] from "./B";|]
 let b = new [|B|]();
-b.test();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+b.test();"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[4]))]);
         f.verify_baseline_document_highlights(t, None, &[Any::String("1".to_string())]);
@@ -1659,8 +1535,7 @@ use crate::tests::prelude::*;
 
 // renameDefaultImportDifferentName_test.go:10
 pub fn test_rename_default_import_different_name(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: B.ts
+    fourslash::run_generated_test(t, r#"// @Filename: B.ts
 [|export default class /*1*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}C|] {
     test() {
     }
@@ -1668,8 +1543,7 @@ pub fn test_rename_default_import_different_name(t: &T) {
 // @Filename: A.ts
 [|import /*2*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 2 |}B|] from "./B";|]
 let b = new [|B|]();
-b.test();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+b.test();"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1]))]);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[4]))]);
@@ -1684,8 +1558,7 @@ use crate::tests::prelude::*;
 
 // renameDefaultKeyword_test.go:10
 pub fn test_rename_default_keyword(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 // @noLib: true
 function f(value: string, /*1*/default: string) {}
 
@@ -1697,8 +1570,7 @@ class /*4*/default {}
 
 const foo = {
     /*5*/[|default|]: 1
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         let markers = vec!["1".to_string(), "2".to_string(), "3".to_string(), "4".to_string()];
         for marker in markers {
             f.go_to_marker(t, marker.as_str());
@@ -1716,11 +1588,9 @@ use crate::tests::prelude::*;
 
 // renameDefaultLibDontWork_test.go:10
 pub fn test_rename_default_lib_dont_work(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: file1.ts
+    fourslash::run_generated_test(t, r#"// @Filename: file1.ts
 [|var [|{| "contextRangeIndex": 0 |}test|] = "foo";|]
-console.log([|test|]);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+console.log([|test|]);"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1]))]);
     });
 }
@@ -1732,14 +1602,12 @@ use crate::tests::prelude::*;
 
 // renameDestructuringAssignment_test.go:10
 pub fn test_rename_destructuring_assignment(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface I {
+    fourslash::run_generated_test(t, r#"interface I {
     [|[|{| "contextRangeIndex": 0 |}x|]: number;|]
 }
 var a: I;
 var x;
-([|{ [|{| "contextRangeIndex": 2 |}x|]: x } = a|]);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+([|{ [|{| "contextRangeIndex": 2 |}x|]: x } = a|]);"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["x"]);
     });
 }
@@ -1751,8 +1619,7 @@ use crate::tests::prelude::*;
 
 // renameDestructuringAssignmentInFor_test.go:10
 pub fn test_rename_destructuring_assignment_in_for(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @strict: false
+    fourslash::run_generated_test(t, r#"// @strict: false
 interface I {
     [|[|{| "contextRangeIndex": 0 |}property1|]: number;|]
     property2: string;
@@ -1764,8 +1631,7 @@ for ([|{ [|{| "contextRangeIndex": 4 |}property1|] } = elems[0]|]; p2 < 100; p2+
    p2 = [|property1|]++;
 }
 for ([|{ [|{| "contextRangeIndex": 7 |}property1|]: p2 } = elems[0]|]; p2 < 100; p2++) {
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[8])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[5])), Any::RangeMarker(Arc::clone(&f.ranges()[6]))]);
     });
@@ -1778,8 +1644,7 @@ use crate::tests::prelude::*;
 
 // renameDestructuringAssignmentInForOf_test.go:10
 pub fn test_rename_destructuring_assignment_in_for_of(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @strict: false
+    fourslash::run_generated_test(t, r#"// @strict: false
 interface I {
     [|[|{| "contextRangeIndex": 0 |}property1|]: number;|]
     property2: string;
@@ -1791,8 +1656,7 @@ for ([|{ [|{| "contextRangeIndex": 4 |}property1|] } of elems|]) {
     [|property1|]++;
 }
 for ([|{ [|{| "contextRangeIndex": 7 |}property1|]: p2 } of elems|]) {
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[8])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[5])), Any::RangeMarker(Arc::clone(&f.ranges()[6]))]);
     });
@@ -1805,15 +1669,13 @@ use crate::tests::prelude::*;
 
 // renameDestructuringAssignmentNestedInArrayLiteral_test.go:10
 pub fn test_rename_destructuring_assignment_nested_in_array_literal(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface I {
+    fourslash::run_generated_test(t, r#"interface I {
     [|[|{| "contextRangeIndex": 0 |}property1|]: number;|]
     property2: string;
 }
 var elems: I[], p1: number, [|[|{| "contextRangeIndex": 2 |}property1|]: number|];
 [|[{ [|{| "contextRangeIndex": 4 |}property1|]: p1 }] = elems;|]
-[|[{ [|{| "contextRangeIndex": 6 |}property1|] }] = elems;|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|[{ [|{| "contextRangeIndex": 6 |}property1|] }] = elems;|]"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[5])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[7]))]);
     });
 }
@@ -1825,8 +1687,7 @@ use crate::tests::prelude::*;
 
 // renameDestructuringAssignmentNestedInFor_test.go:10
 pub fn test_rename_destructuring_assignment_nested_in_for(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface MultiRobot {
+    fourslash::run_generated_test(t, r#"interface MultiRobot {
     name: string;
     skills: {
         [|[|{| "contextRangeIndex": 0 |}primary|]: string;|]
@@ -1839,8 +1700,7 @@ for ([|{ skills: { [|{| "contextRangeIndex": 4 |}primary|]: primaryA, secondary:
 }
 for ([|{ skills: { [|{| "contextRangeIndex": 6 |}primary|], secondary } } = multiRobot|], i = 0; i < 1; i++) {
     [|primary|];
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[5])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[7])), Any::RangeMarker(Arc::clone(&f.ranges()[8]))]);
     });
@@ -1853,8 +1713,7 @@ use crate::tests::prelude::*;
 
 // renameDestructuringAssignmentNestedInFor2_test.go:10
 pub fn test_rename_destructuring_assignment_nested_in_for2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @strict: false
+    fourslash::run_generated_test(t, r#"// @strict: false
 interface MultiRobot {
     name: string;
     skills: {
@@ -1868,8 +1727,7 @@ for ([|{ skills: { [|{| "contextRangeIndex": 4 |}primary|]: primaryA, secondary:
 }
 for ([|{ skills: { [|{| "contextRangeIndex": 6 |}primary|], secondary } } = multiRobot|], i = 0; i < 1; i++) {
     [|primary|];
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[5])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[7])), Any::RangeMarker(Arc::clone(&f.ranges()[8]))]);
     });
@@ -1882,8 +1740,7 @@ use crate::tests::prelude::*;
 
 // renameDestructuringAssignmentNestedInForOf_test.go:10
 pub fn test_rename_destructuring_assignment_nested_in_for_of(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @strict: false
+    fourslash::run_generated_test(t, r#"// @strict: false
 interface MultiRobot {
     name: string;
     skills: {
@@ -1898,8 +1755,7 @@ for ([|{ skills: { [|{| "contextRangeIndex": 4 |}primary|]: primaryA, secondary:
 }
 for ([|{ skills: { [|{| "contextRangeIndex": 6 |}primary|], secondary } } of multiRobots|]) {
     [|primary|];
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[5])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[7])), Any::RangeMarker(Arc::clone(&f.ranges()[8]))]);
     });
@@ -1912,8 +1768,7 @@ use crate::tests::prelude::*;
 
 // renameDestructuringAssignmentNestedInForOf2_test.go:10
 pub fn test_rename_destructuring_assignment_nested_in_for_of2(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface MultiRobot {
+    fourslash::run_generated_test(t, r#"interface MultiRobot {
     name: string;
     skills: {
         [|[|{| "contextRangeIndex": 0 |}primary|]: string;|]
@@ -1926,8 +1781,7 @@ for ([|{ skills: { [|{| "contextRangeIndex": 4 |}primary|]: primaryA, secondary:
 }
 for ([|{ skills: { [|{| "contextRangeIndex": 6 |}primary|], secondary } } of multiRobots|]) {
     console.log([|primary|]);
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[5])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[7])), Any::RangeMarker(Arc::clone(&f.ranges()[8]))]);
     });
 }
@@ -1939,8 +1793,7 @@ use crate::tests::prelude::*;
 
 // renameDestructuringClassProperty_test.go:10
 pub fn test_rename_destructuring_class_property(t: &T) {
-    t.parallel();
-    let content: &str = r#"class A {
+    fourslash::run_generated_test(t, r#"class A {
     [|[|{| "contextRangeIndex": 0 |}foo|]: string;|]
 }
 class B {
@@ -1954,8 +1807,7 @@ class B {
         [|let { [|{| "contextRangeIndex": 6 |}foo|] } = a;|]
         [|foo|] = "newString";
     }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[5])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[7])), Any::RangeMarker(Arc::clone(&f.ranges()[8]))]);
     });
 }
@@ -1967,8 +1819,7 @@ use crate::tests::prelude::*;
 
 // renameDestructuringDeclarationInFor_test.go:10
 pub fn test_rename_destructuring_declaration_in_for(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface I {
+    fourslash::run_generated_test(t, r#"interface I {
     [|[|{| "contextRangeIndex": 0 |}property1|]: number;|]
     property2: string;
 }
@@ -1979,8 +1830,7 @@ for ([|let { [|{| "contextRangeIndex": 2 |}property1|]: p2 } = elems[0]|]; p2 < 
 }
 for ([|let { [|{| "contextRangeIndex": 4 |}property1|] } = elems[0]|]; p2 < 100; p2++) {
     [|property1|] = p2;
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[5])), Any::RangeMarker(Arc::clone(&f.ranges()[6]))]);
     });
 }
@@ -1992,8 +1842,7 @@ use crate::tests::prelude::*;
 
 // renameDestructuringDeclarationInForOf_test.go:10
 pub fn test_rename_destructuring_declaration_in_for_of(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface I {
+    fourslash::run_generated_test(t, r#"interface I {
     [|[|{| "contextRangeIndex": 0 |}property1|]: number;|]
     property2: string;
 }
@@ -2003,8 +1852,7 @@ for ([|let { [|{| "contextRangeIndex": 2 |}property1|] } of elems|]) {
     [|property1|]++;
 }
 for ([|let { [|{| "contextRangeIndex": 5 |}property1|]: p2 } of elems|]) {
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[6])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[4]))]);
     });
 }
@@ -2016,11 +1864,9 @@ use crate::tests::prelude::*;
 
 // renameDestructuringFunctionParameter_test.go:10
 pub fn test_rename_destructuring_function_parameter(t: &T) {
-    t.parallel();
-    let content: &str = r#"function f([|{[|{| "contextRangeIndex": 0 |}a|]}: {[|a|]}|]) {
+    fourslash::run_generated_test(t, r#"function f([|{[|{| "contextRangeIndex": 0 |}a|]}: {[|a|]}|]) {
     f({[|a|]});
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[2]))]);
     });
 }
@@ -2032,8 +1878,7 @@ use crate::tests::prelude::*;
 
 // renameDestructuringNestedBindingElement_test.go:10
 pub fn test_rename_destructuring_nested_binding_element(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface MultiRobot {
+    fourslash::run_generated_test(t, r#"interface MultiRobot {
     name: string;
     skills: {
         [|[|{| "contextRangeIndex": 0|}primary|]: string;|]
@@ -2046,8 +1891,7 @@ for ([|let { skills: {[|{| "contextRangeIndex": 2|}primary|]: primaryA, secondar
 }
 for ([|let { skills: {[|{| "contextRangeIndex": 4|}primary|], secondary } } of multiRobots|]) {
     console.log([|primary|]);
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[5])), Any::RangeMarker(Arc::clone(&f.ranges()[6]))]);
     });
 }
@@ -2059,13 +1903,11 @@ use crate::tests::prelude::*;
 
 // renameExportCrash_test.go:10
 pub fn test_rename_export_crash(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowNonTsExtensions: true
+    fourslash::run_generated_test(t, r#"// @allowNonTsExtensions: true
 // @Filename: Foo.js
 let a;
 module.exports = /**/a;
-exports["foo"] = a;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+exports["foo"] = a;"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -2077,14 +1919,12 @@ use crate::tests::prelude::*;
 
 // renameExportSpecifier_test.go:12
 pub fn test_rename_export_specifier(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: a.ts
+    fourslash::run_generated_test(t, r"// @Filename: a.ts
 const name = {};
 export { name as name/**/ };
 // @Filename: b.ts
 import { name } from './a';
-const x = name.toString();";
-    fourslash::run_generated_test(t, content, |f, t| {
+const x = name.toString();", |f, t| {
         f.verify_baseline_rename(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::False, ..Default::default() }), &[Any::String(String::new())]);
     });
 }
@@ -2096,14 +1936,12 @@ use crate::tests::prelude::*;
 
 // renameExportSpecifier2_test.go:12
 pub fn test_rename_export_specifier2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: a.ts
+    fourslash::run_generated_test(t, r"// @Filename: a.ts
 const name = {};
 export { name/**/ };
 // @Filename: b.ts
 import { name } from './a';
-const x = name.toString();";
-    fourslash::run_generated_test(t, content, |f, t| {
+const x = name.toString();", |f, t| {
         f.verify_baseline_rename(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::False, ..Default::default() }), &[Any::String(String::new())]);
     });
 }
@@ -2115,12 +1953,10 @@ use crate::tests::prelude::*;
 
 // renameFilePackageJson_test.go:10
 pub fn test_rename_file_package_json(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /src/example.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /src/example.ts
 import brushPackageJson from './visx-brush//*rename*/package.json';
 // @Filename: /src/visx-brush/package.json
-{ "name": "brush" }"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+{ "name": "brush" }"#, |f, t| {
         f.verify_rename(t, "rename", "package2.json", go::map_of([("/src/example.ts".to_string(), "import brushPackageJson from './visx-brush/package2.json';".to_string()), ("/src/visx-brush/package2.json".to_string(), r#"{ "name": "brush" }"#.to_string())]));
     });
 }
@@ -2132,12 +1968,10 @@ use crate::tests::prelude::*;
 
 // renameForAliasingExport01_test.go:10
 pub fn test_rename_for_aliasing_export01(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: foo.ts
+    fourslash::run_generated_test(t, r"// @Filename: foo.ts
 let x = 1;
 
-export { /**/[|x|] as y };";
-    fourslash::run_generated_test(t, content, |f, t| {
+export { /**/[|x|] as y };", |f, t| {
         f.go_to_marker(t, "");
         f.verify_rename_succeeded(t, None);
     });
@@ -2150,12 +1984,10 @@ use crate::tests::prelude::*;
 
 // renameForAliasingExport02_test.go:10
 pub fn test_rename_for_aliasing_export02(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: foo.ts
+    fourslash::run_generated_test(t, r"// @Filename: foo.ts
 let x = 1;
 
-export { x as /**/[|y|] };";
-    fourslash::run_generated_test(t, content, |f, t| {
+export { x as /**/[|y|] };", |f, t| {
         f.go_to_marker(t, "");
         f.verify_rename_succeeded(t, None);
     });
@@ -2168,8 +2000,7 @@ use crate::tests::prelude::*;
 
 // renameForDefaultExport01_test.go:10
 pub fn test_rename_for_default_export01(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|export default class [|{| "contextRangeIndex": 0 |}DefaultExportedClass|] {
+    fourslash::run_generated_test(t, r#"[|export default class [|{| "contextRangeIndex": 0 |}DefaultExportedClass|] {
 }|]
 /*
  *  Commenting [|{| "inComment": true |}DefaultExportedClass|]
@@ -2177,8 +2008,7 @@ pub fn test_rename_for_default_export01(t: &T) {
 
 var x: [|DefaultExportedClass|];
 
-var y = new [|DefaultExportedClass|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var y = new [|DefaultExportedClass|];"#, |f, t| {
         let ranges = f.get_ranges_by_text().get(&"DefaultExportedClass".to_string()).to_vec();
         let mut marker_or_ranges: Vec<Any> = Vec::<Any>::default();
         for r in ranges {
@@ -2197,8 +2027,7 @@ use crate::tests::prelude::*;
 
 // renameForDefaultExport02_test.go:12
 pub fn test_rename_for_default_export02(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|export default function /*1*/[|{| "contextRangeIndex": 0 |}DefaultExportedFunction|]() {
+    fourslash::run_generated_test(t, r#"[|export default function /*1*/[|{| "contextRangeIndex": 0 |}DefaultExportedFunction|]() {
     return /*2*/[|DefaultExportedFunction|]
 }|]
 /**
@@ -2207,8 +2036,7 @@ pub fn test_rename_for_default_export02(t: &T) {
 
 var x: typeof /*3*/[|DefaultExportedFunction|];
 
-var y = /*4*/[|DefaultExportedFunction|]();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var y = /*4*/[|DefaultExportedFunction|]();"#, |f, t| {
         f.verify_baseline_rename(t, None, &util::to_any(&go::filter(f.get_ranges_by_text().get(&"DefaultExportedFunction".to_string()), |r: &Arc<fourslash::RangeMarker>| -> bool {
             r.marker.is_none() || r.marker.as_ref().unwrap().data.get("inComment").cloned().unwrap_or_default().is_nil()
         })[..]));
@@ -2222,8 +2050,7 @@ use crate::tests::prelude::*;
 
 // renameForDefaultExport03_test.go:12
 pub fn test_rename_for_default_export03(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|function /*1*/[|{| "contextRangeIndex": 0 |}f|]() {
+    fourslash::run_generated_test(t, r#"[|function /*1*/[|{| "contextRangeIndex": 0 |}f|]() {
     return 100;
 }|]
 
@@ -2238,8 +2065,7 @@ var y = /*4*/[|f|]();
  */
 [|namespace /*5*/[|{| "contextRangeIndex": 7 |}f|] {
     var local = 100;
-}|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}|]"#, |f, t| {
         f.verify_baseline_rename(t, None, &util::to_any(&go::filter(f.get_ranges_by_text().get(&"f".to_string()), |r: &Arc<fourslash::RangeMarker>| -> bool {
             r.marker.is_none() || r.marker.as_ref().unwrap().data.get("inComment").cloned().unwrap_or_default().is_nil()
         })[..]));
@@ -2253,8 +2079,7 @@ use crate::tests::prelude::*;
 
 // renameForDefaultExport04_test.go:10
 pub fn test_rename_for_default_export04(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: foo.ts
+    fourslash::run_generated_test(t, r"// @Filename: foo.ts
 export default class /**/[|DefaultExportedClass|] {
 }
 /*
@@ -2263,8 +2088,7 @@ export default class /**/[|DefaultExportedClass|] {
 
 var x: DefaultExportedClass;
 
-var y = new DefaultExportedClass;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var y = new DefaultExportedClass;", |f, t| {
         f.go_to_marker(t, "");
         f.verify_rename_succeeded(t, None);
     });
@@ -2277,8 +2101,7 @@ use crate::tests::prelude::*;
 
 // renameForDefaultExport05_test.go:10
 pub fn test_rename_for_default_export05(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: foo.ts
+    fourslash::run_generated_test(t, r"// @Filename: foo.ts
 export default class DefaultExportedClass {
 }
 /*
@@ -2287,8 +2110,7 @@ export default class DefaultExportedClass {
 
 var x: /**/[|DefaultExportedClass|];
 
-var y = new DefaultExportedClass;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var y = new DefaultExportedClass;", |f, t| {
         f.go_to_marker(t, "");
         f.verify_rename_succeeded(t, None);
     });
@@ -2301,8 +2123,7 @@ use crate::tests::prelude::*;
 
 // renameForDefaultExport06_test.go:10
 pub fn test_rename_for_default_export06(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: foo.ts
+    fourslash::run_generated_test(t, r"// @Filename: foo.ts
 export default class DefaultExportedClass {
 }
 /*
@@ -2311,8 +2132,7 @@ export default class DefaultExportedClass {
 
 var x: DefaultExportedClass;
 
-var y = new /**/[|DefaultExportedClass|];";
-    fourslash::run_generated_test(t, content, |f, t| {
+var y = new /**/[|DefaultExportedClass|];", |f, t| {
         f.go_to_marker(t, "");
         f.verify_rename_succeeded(t, None);
     });
@@ -2325,8 +2145,7 @@ use crate::tests::prelude::*;
 
 // renameForDefaultExport07_test.go:10
 pub fn test_rename_for_default_export07(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: foo.ts
+    fourslash::run_generated_test(t, r"// @Filename: foo.ts
 export default function /**/[|DefaultExportedFunction|]() {
     return DefaultExportedFunction
 }
@@ -2336,8 +2155,7 @@ export default function /**/[|DefaultExportedFunction|]() {
 
 var x: typeof DefaultExportedFunction;
 
-var y = DefaultExportedFunction();";
-    fourslash::run_generated_test(t, content, |f, t| {
+var y = DefaultExportedFunction();", |f, t| {
         f.go_to_marker(t, "");
         f.verify_rename_succeeded(t, None);
     });
@@ -2350,8 +2168,7 @@ use crate::tests::prelude::*;
 
 // renameForDefaultExport08_test.go:10
 pub fn test_rename_for_default_export08(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: foo.ts
+    fourslash::run_generated_test(t, r"// @Filename: foo.ts
 export default function DefaultExportedFunction() {
     return /**/[|DefaultExportedFunction|]
 }
@@ -2361,8 +2178,7 @@ export default function DefaultExportedFunction() {
 
 var x: typeof DefaultExportedFunction;
 
-var y = DefaultExportedFunction();";
-    fourslash::run_generated_test(t, content, |f, t| {
+var y = DefaultExportedFunction();", |f, t| {
         f.go_to_marker(t, "");
         f.verify_rename_succeeded(t, None);
     });
@@ -2375,8 +2191,7 @@ use crate::tests::prelude::*;
 
 // renameForDefaultExport09_test.go:10
 pub fn test_rename_for_default_export09(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: foo.ts
+    fourslash::run_generated_test(t, r"// @Filename: foo.ts
 function /**/[|f|]() {
     return 100;
 }
@@ -2392,8 +2207,7 @@ var y = f();
  */
 namespace f {
     var local = 100;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_marker(t, "");
         f.verify_rename_succeeded(t, None);
     });
@@ -2406,8 +2220,7 @@ use crate::tests::prelude::*;
 
 // renameForStringLiteral_test.go:10
 pub fn test_rename_for_string_literal(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @filename: /a.ts
 interface Foo {
     property: /**/"foo";
 }
@@ -2416,8 +2229,7 @@ interface Foo {
  */
 const obj: Foo = {
     property: "foo",
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -2429,8 +2241,7 @@ use crate::tests::prelude::*;
 
 // renameFromNodeModulesDep1_test.go:12
 pub fn test_rename_from_node_modules_dep1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /index.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /index.ts
 import { /*okWithAlias*/[|Foo|] } from "foo";
 declare const f: Foo;
 f./*notOk*/bar;
@@ -2441,8 +2252,7 @@ f./*notOk*/bar;
 // @Filename: /node_modules/foo/index.d.ts
 export interface Foo {
     bar: string;
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.go_to_marker(t, "okWithAlias");
         f.verify_rename_succeeded(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::True, ..Default::default() }));
         f.verify_rename_failed(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::False, ..Default::default() }));
@@ -2458,8 +2268,7 @@ use crate::tests::prelude::*;
 
 // renameFromNodeModulesDep2_test.go:12
 pub fn test_rename_from_node_modules_dep2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /node_modules/first/index.d.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /node_modules/first/index.d.ts
 import { /*okWithAlias*/[|Foo|] } from "foo";
 declare type FooBar = Foo[/*notOk*/"bar"];
 // @Filename: /node_modules/first/node_modules/foo/package.json
@@ -2470,8 +2279,7 @@ export interface Foo {
 }
 // @Filename: /node_modules/first/node_modules/foo/bar.d.ts
 import { Foo } from "./index";
-declare type FooBar = Foo[/*ok3*/"[|bar|]"];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+declare type FooBar = Foo[/*ok3*/"[|bar|]"];"#, |f, t| {
         f.go_to_marker(t, "okWithAlias");
         f.verify_rename_succeeded(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::True, ..Default::default() }));
         f.verify_rename_failed(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::False, ..Default::default() }));
@@ -2491,8 +2299,7 @@ use crate::tests::prelude::*;
 
 // renameFromNodeModulesDep3_test.go:12
 pub fn test_rename_from_node_modules_dep3(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /packages/first/index.d.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /packages/first/index.d.ts
 import { /*ok*/[|Foo|] } from "foo";
 declare type FooBar = Foo[/*ok2*/"[|bar|]"];
 // @Filename: /packages/foo/package.json
@@ -2501,8 +2308,7 @@ declare type FooBar = Foo[/*ok2*/"[|bar|]"];
 export interface Foo {
     /*ok3*/[|bar|]: string;
 }
-// @link: /packages/foo -> /packages/first/node_modules/foo"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+// @link: /packages/foo -> /packages/first/node_modules/foo"#, |f, t| {
         f.go_to_marker(t, "ok");
         f.verify_rename_succeeded(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::True, ..Default::default() }));
         f.verify_rename_succeeded(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::False, ..Default::default() }));
@@ -2520,8 +2326,7 @@ use crate::tests::prelude::*;
 
 // renameFromNodeModulesDep4_test.go:12
 pub fn test_rename_from_node_modules_dep4(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /index.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /index.ts
 import hljs from "highlight.js/lib/core"
 import { h } from "highlight.js/lib/core";
 import { /*notOk*/h as hh } from "highlight.js/lib/core";
@@ -2533,8 +2338,7 @@ declare const hljs: { registerLanguage(s: string): void };
 export default hljs;
 export const h: string;
 // @Filename: /tsconfig.json
-{}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+{}"#, |f, t| {
         f.go_to_marker(t, "ok");
         f.verify_rename_succeeded(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::True, ..Default::default() }));
         f.verify_rename_succeeded(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::False, ..Default::default() }));
@@ -2557,16 +2361,14 @@ use crate::tests::prelude::*;
 
 // renameFunctionParameter1_test.go:10
 pub fn test_rename_function_parameter1(t: &T) {
-    t.parallel();
-    let content: &str = r"function Foo() {
+    fourslash::run_generated_test(t, r"function Foo() {
     /**
      * @param {number} p
      */
     this.foo = function foo(p/**/) {
         return p;
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -2578,14 +2380,12 @@ use crate::tests::prelude::*;
 
 // renameFunctionParameter2_test.go:10
 pub fn test_rename_function_parameter2(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * @param {number} p
  */
 const foo = function foo(p/**/) {
     return p;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -2597,10 +2397,8 @@ use crate::tests::prelude::*;
 
 // renameImportAndExport_test.go:10
 pub fn test_rename_import_and_export(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|import [|{| "contextRangeIndex": 0 |}a|] from "module";|]
-[|export { [|{| "contextRangeIndex": 2 |}a|] };|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"[|import [|{| "contextRangeIndex": 0 |}a|] from "module";|]
+[|export { [|{| "contextRangeIndex": 2 |}a|] };|]"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[3]))]);
     });
 }
@@ -2612,13 +2410,11 @@ use crate::tests::prelude::*;
 
 // renameImportAndExportInDiffFiles_test.go:10
 pub fn test_rename_import_and_export_in_diff_files(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: a.ts
 [|export var /*1*/[|{| "isDefinition": true, "contextRangeIndex": 0 |}a|];|]
 // @Filename: b.ts
 [|import { /*2*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 2 |}a|] } from './a';|]
-[|export { /*3*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 4 |}a|] };|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|export { /*3*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 4 |}a|] };|]"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[5]))]);
     });
@@ -2631,10 +2427,8 @@ use crate::tests::prelude::*;
 
 // renameImportAndShorthand_test.go:10
 pub fn test_rename_import_and_shorthand(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|import [|{| "contextRangeIndex": 0 |}foo|] from 'bar';|]
-const bar = { [|foo|] };"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"[|import [|{| "contextRangeIndex": 0 |}foo|] from 'bar';|]
+const bar = { [|foo|] };"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[2]))]);
     });
 }
@@ -2646,10 +2440,8 @@ use crate::tests::prelude::*;
 
 // renameImportNamespaceAndShorthand_test.go:10
 pub fn test_rename_import_namespace_and_shorthand(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|import * as [|{| "contextRangeIndex": 0 |}foo|] from 'bar';|]
-const bar = { [|foo|] };"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"[|import * as [|{| "contextRangeIndex": 0 |}foo|] from 'bar';|]
+const bar = { [|foo|] };"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[2]))]);
     });
 }
@@ -2661,8 +2453,7 @@ use crate::tests::prelude::*;
 
 // renameImportOfExportEquals_test.go:10
 pub fn test_rename_import_of_export_equals(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|declare namespace /*N*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}N|] {
+    fourslash::run_generated_test(t, r#"[|declare namespace /*N*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}N|] {
     [|export var /*x*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 2 |}x|]: number;|]
 }|]
 declare module "mod" {
@@ -2675,8 +2466,7 @@ declare module "a" {
 declare module "b" {
     [|import { /*b*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 10 |}N|] } from "a";|]
     export const y: typeof [|N|].[|x|];
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["N", "a", "b", "x"]);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[5]))]);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[7]))]);
@@ -2693,8 +2483,7 @@ use crate::tests::prelude::*;
 
 // renameImportOfExportEquals2_test.go:10
 pub fn test_rename_import_of_export_equals2(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|declare namespace /*N*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}N|] {
+    fourslash::run_generated_test(t, r#"[|declare namespace /*N*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}N|] {
     export var x: number;
 }|]
 declare module "mod" {
@@ -2707,8 +2496,7 @@ declare module "a" {
 declare module "b" {
     [|import { [|{| "contextRangeIndex": 9 |}P|] as /*Q*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 9 |}Q|] } from "a";|]
     export const y: typeof [|Q|].x;
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["N", "O", "P", "Q"]);
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["N", "O", "P", "Q"]);
@@ -2722,8 +2510,7 @@ use crate::tests::prelude::*;
 
 // renameImportOfReExport_test.go:10
 pub fn test_rename_import_of_re_export(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @noLib: true
+    fourslash::run_generated_test(t, r#"// @noLib: true
 declare module "a" {
     [|export class /*1*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}C|] {}|]
 }
@@ -2733,8 +2520,7 @@ declare module "b" {
 declare module "c" {
     [|import { /*3*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 4 |}C|] } from "b";|]
     export function f(c: [|C|]): void;
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1]))]);
@@ -2750,8 +2536,7 @@ use crate::tests::prelude::*;
 
 // renameImportOfReExport2_test.go:11
 pub fn test_rename_import_of_re_export2(t: &T) {
-    t.parallel();
-    let content: &str = r#"declare module "a" {
+    fourslash::run_generated_test(t, r#"declare module "a" {
     [|export class /*1*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}C|] {}|]
 }
 declare module "b" {
@@ -2760,8 +2545,7 @@ declare module "b" {
 declare module "c" {
     [|import { /*3*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 5 |}D|] } from "b";|]
     export function f(c: [|D|]): void;
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
         f.verify_baseline_rename(t, None, &util::to_any(f.get_ranges_by_text().get(&"C".to_string())));
@@ -2777,16 +2561,14 @@ use crate::tests::prelude::*;
 
 // renameImportRequire_test.go:10
 pub fn test_rename_import_require(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 [|import [|{| "contextRangeIndex": 0 |}e|] = require("mod4");|]
 [|e|];
 a = { [|e|] };
 [|export { [|{| "contextRangeIndex": 4 |}e|] };|]
 // @Filename: /b.ts
 [|import { [|{| "contextRangeIndex": 6 |}e|] } from "./a";|]
-[|export { [|{| "contextRangeIndex": 8 |}e|] };|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|export { [|{| "contextRangeIndex": 8 |}e|] };|]"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[2])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[5])), Any::RangeMarker(Arc::clone(&f.ranges()[7])), Any::RangeMarker(Arc::clone(&f.ranges()[9]))]);
     });
 }
@@ -2826,12 +2608,10 @@ use crate::tests::prelude::*;
 
 // renameImportSpecifierPropertyName_test.go:10
 pub fn test_rename_import_specifier_property_name(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: canada.ts
+    fourslash::run_generated_test(t, r"// @Filename: canada.ts
 export interface /**/Ginger {}
 // @Filename: dry.ts
-import { Ginger as Ale } from './canada';";
-    fourslash::run_generated_test(t, content, |f, t| {
+import { Ginger as Ale } from './canada';", |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -2843,14 +2623,12 @@ use crate::tests::prelude::*;
 
 // renameInConfiguredProject_test.go:11
 pub fn test_rename_in_configured_project(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: referencesForGlobals_1.ts
+    fourslash::run_generated_test(t, r#"// @Filename: referencesForGlobals_1.ts
 [|var [|{| "contextRangeIndex": 0 |}globalName|] = 0;|]
 // @Filename: referencesForGlobals_2.ts
 var y = [|globalName|];
 // @Filename: tsconfig.json
-{ "files": ["referencesForGlobals_1.ts", "referencesForGlobals_2.ts"], "compilerOptions": { "lib": ["es5"] } }"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+{ "files": ["referencesForGlobals_1.ts", "referencesForGlobals_2.ts"], "compilerOptions": { "lib": ["es5"] } }"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_rename(t, None, &util::to_any(&f.ranges()[1..].to_vec()[..]));
     });
@@ -2863,11 +2641,9 @@ use crate::tests::prelude::*;
 
 // renameInfoForFunctionExpression01_test.go:10
 pub fn test_rename_info_for_function_expression01(t: &T) {
-    t.parallel();
-    let content: &str = r"var x = function /**/[|f|](g: any, h: any) {
+    fourslash::run_generated_test(t, r"var x = function /**/[|f|](g: any, h: any) {
     f(f, g);
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_marker(t, "");
         f.verify_rename_succeeded(t, None);
     });
@@ -2880,14 +2656,12 @@ use crate::tests::prelude::*;
 
 // renameInheritedProperties1_test.go:10
 pub fn test_rename_inherited_properties1(t: &T) {
-    t.parallel();
-    let content: &str = r#"class class1 extends class1 {
+    fourslash::run_generated_test(t, r#"class class1 extends class1 {
    [|[|{| "contextRangeIndex": 0 |}propName|]: string;|]
 }
 
 var v: class1;
-v.[|propName|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+v.[|propName|];"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["propName"]);
     });
 }
@@ -2899,14 +2673,12 @@ use crate::tests::prelude::*;
 
 // renameInheritedProperties2_test.go:10
 pub fn test_rename_inherited_properties2(t: &T) {
-    t.parallel();
-    let content: &str = r#"class class1 extends class1 {
+    fourslash::run_generated_test(t, r#"class class1 extends class1 {
    [|[|{| "contextRangeIndex": 0 |}doStuff|]() { }|]
 }
 
 var v: class1;
-v.[|doStuff|]();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+v.[|doStuff|]();"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["doStuff"]);
     });
 }
@@ -2918,14 +2690,12 @@ use crate::tests::prelude::*;
 
 // renameInheritedProperties3_test.go:10
 pub fn test_rename_inherited_properties3(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface interface1 extends interface1 {
+    fourslash::run_generated_test(t, r#"interface interface1 extends interface1 {
    [|[|{| "contextRangeIndex": 0 |}propName|]: string;|]
 }
 
 var v: interface1;
-v.[|propName|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+v.[|propName|];"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["propName"]);
     });
 }
@@ -2937,14 +2707,12 @@ use crate::tests::prelude::*;
 
 // renameInheritedProperties4_test.go:10
 pub fn test_rename_inherited_properties4(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface interface1 extends interface1 {
+    fourslash::run_generated_test(t, r#"interface interface1 extends interface1 {
    [|[|{| "contextRangeIndex": 0 |}doStuff|](): string;|]
 }
 
 var v: interface1;
-v.[|doStuff|]();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+v.[|doStuff|]();"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["doStuff"]);
     });
 }
@@ -2956,16 +2724,14 @@ use crate::tests::prelude::*;
 
 // renameInheritedProperties5_test.go:10
 pub fn test_rename_inherited_properties5(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface C extends D {
+    fourslash::run_generated_test(t, r#"interface C extends D {
     propC: number;
 }
 interface D extends C {
     [|[|{| "contextRangeIndex": 0 |}propD|]: string;|]
 }
 var d: D;
-d.[|propD|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+d.[|propD|];"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["propD"]);
     });
 }
@@ -2977,16 +2743,14 @@ use crate::tests::prelude::*;
 
 // renameInheritedProperties6_test.go:10
 pub fn test_rename_inherited_properties6(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface C extends D {
+    fourslash::run_generated_test(t, r#"interface C extends D {
     propD: number;
 }
 interface D extends C {
     [|[|{| "contextRangeIndex": 0 |}propC|]: number;|]
 }
 var d: D;
-d.[|propC|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+d.[|propC|];"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["propC"]);
     });
 }
@@ -2998,8 +2762,7 @@ use crate::tests::prelude::*;
 
 // renameInheritedProperties7_test.go:10
 pub fn test_rename_inherited_properties7(t: &T) {
-    t.parallel();
-    let content: &str = r#"class C extends D {
+    fourslash::run_generated_test(t, r#"class C extends D {
     [|[|{| "contextRangeIndex": 0 |}prop1|]: string;|]
 }
 
@@ -3008,8 +2771,7 @@ class D extends C {
 }
 
 var c: C;
-c.[|prop1|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+c.[|prop1|];"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["prop1"]);
     });
 }
@@ -3021,8 +2783,7 @@ use crate::tests::prelude::*;
 
 // renameInheritedProperties8_test.go:10
 pub fn test_rename_inherited_properties8(t: &T) {
-    t.parallel();
-    let content: &str = r#"class C implements D {
+    fourslash::run_generated_test(t, r#"class C implements D {
     [|[|{| "contextRangeIndex": 0 |}prop1|]: string;|]
 }
 
@@ -3031,8 +2792,7 @@ interface D extends C {
 }
 
 var c: C;
-c.[|prop1|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+c.[|prop1|];"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["prop1"]);
     });
 }
@@ -3044,8 +2804,7 @@ use crate::tests::prelude::*;
 
 // renameJsDocImportTag_test.go:10
 pub fn test_rename_js_doc_import_tag(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJS: true
+    fourslash::run_generated_test(t, r#"// @allowJS: true
 // @checkJs: true
 // @Filename: /b.ts
 export interface A { }
@@ -3057,8 +2816,7 @@ export interface A { }
 /**
  * @param { [|A/**/|] } a
  */
-function f(a) {}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+function f(a) {}"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -3070,8 +2828,7 @@ use crate::tests::prelude::*;
 
 // renameJsDocTypeLiteral_test.go:10
 pub fn test_rename_js_doc_type_literal(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @filename: /a.js
 /**
@@ -3079,8 +2836,7 @@ pub fn test_rename_js_doc_type_literal(t: &T) {
  * @param {string} options.foo
  * @param {number} options.bar
  */
-function foo(/**/options) {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+function foo(/**/options) {}", |f, t| {
         f.go_to_file(t, "/a.js");
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
@@ -3093,14 +2849,12 @@ use crate::tests::prelude::*;
 
 // renameJsExports01_test.go:10
 pub fn test_rename_js_exports01(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: a.js
 [|exports.[|{| "contextRangeIndex": 0 |}area|] = function (r) { return r * r; }|]
 // @Filename: b.js
 var mod = require('./a');
-var t = mod./*1*/[|area|](10);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var t = mod./*1*/[|area|](10);"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["area"]);
     });
@@ -3113,13 +2867,11 @@ use crate::tests::prelude::*;
 
 // renameJsExports02_test.go:10
 pub fn test_rename_js_exports02(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: a.js
 module.exports = class /*1*/A {}
 // @Filename: b.js
-const /*2*/A = require("./a");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const /*2*/A = require("./a");"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -3131,8 +2883,7 @@ use crate::tests::prelude::*;
 
 // renameJsExports03_test.go:10
 pub fn test_rename_js_exports03(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: a.js
 class /*1*/A {
     /*2*/constructor() { }
@@ -3140,8 +2891,7 @@ class /*1*/A {
 module.exports = A;
 // @Filename: b.js
 const /*3*/A = require("./a");
-new /*4*/A;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+new /*4*/A;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -3153,8 +2903,7 @@ use crate::tests::prelude::*;
 
 // renameJsOverloadedFunctionParameter_test.go:10
 pub fn test_rename_js_overloaded_function_parameter(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @Filename: foo.js
 /**
@@ -3171,8 +2920,7 @@ pub fn test_rename_js_overloaded_function_parameter(t: &T) {
  */
 function foo(x/**/) {
   return x;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -3184,14 +2932,12 @@ use crate::tests::prelude::*;
 
 // renameJsPropertyAssignment_test.go:10
 pub fn test_rename_js_property_assignment(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: a.js
 function bar() {
 }
 [|bar.[|{| "contextRangeIndex": 0 |}foo|] = "foo";|]
-console.log(bar.[|foo|]);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+console.log(bar.[|foo|]);"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["foo"]);
     });
 }
@@ -3203,14 +2949,12 @@ use crate::tests::prelude::*;
 
 // renameJsPropertyAssignment2_test.go:10
 pub fn test_rename_js_property_assignment2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: a.js
 class Minimatch {
 }
 [|Minimatch.[|{| "contextRangeIndex": 0 |}staticProperty|] = "string";|]
-console.log(Minimatch.[|staticProperty|]);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+console.log(Minimatch.[|staticProperty|]);"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["staticProperty"]);
     });
 }
@@ -3222,14 +2966,12 @@ use crate::tests::prelude::*;
 
 // renameJsPropertyAssignment3_test.go:10
 pub fn test_rename_js_property_assignment3(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: a.js
 var C = class  {
 }
 [|C.[|{| "contextRangeIndex": 0 |}staticProperty|] = "string";|]
-console.log(C.[|staticProperty|]);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+console.log(C.[|staticProperty|]);"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["staticProperty"]);
     });
 }
@@ -3241,14 +2983,12 @@ use crate::tests::prelude::*;
 
 // renameJsPropertyAssignment4_test.go:10
 pub fn test_rename_js_property_assignment4(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: /a.js
 function f() {
    var /*1*/foo = this;
    /*2*/foo.x = 1;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_file(t, "/a.js");
         f.verify_baseline_rename(t, None, &[Any::String("1".to_string()), Any::String("2".to_string())]);
     });
@@ -3261,15 +3001,13 @@ use crate::tests::prelude::*;
 
 // renameJsPrototypeProperty01_test.go:10
 pub fn test_rename_js_prototype_property01(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: a.js
 function bar() {
 }
 [|bar.prototype.[|{| "contextRangeIndex": 0 |}x|] = 10;|]
 var t = new bar();
-[|t.[|{| "contextRangeIndex": 2 |}x|] = 11;|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|t.[|{| "contextRangeIndex": 2 |}x|] = 11;|]"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["x"]);
     });
 }
@@ -3281,15 +3019,13 @@ use crate::tests::prelude::*;
 
 // renameJsPrototypeProperty02_test.go:10
 pub fn test_rename_js_prototype_property02(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: a.js
 function bar() {
 }
 [|bar.prototype.[|{| "contextRangeIndex": 0 |}x|] = 10;|]
 var t = new bar();
-[|t.[|{| "contextRangeIndex": 2 |}x|] = 11;|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|t.[|{| "contextRangeIndex": 2 |}x|] = 11;|]"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["x"]);
     });
 }
@@ -3301,8 +3037,7 @@ use crate::tests::prelude::*;
 
 // renameJsSpecialAssignmentRhs1_test.go:10
 pub fn test_rename_js_special_assignment_rhs1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: a.js
 const foo = {
     set: function (x) {
@@ -3311,8 +3046,7 @@ const foo = {
     copy: function ([|x|]) {
         this._x = [|x|].prop;
     }
-};";
-    fourslash::run_generated_test(t, content, |f, t| {
+};", |f, t| {
         f.verify_baseline_rename(t, None, &[]);
     });
 }
@@ -3324,8 +3058,7 @@ use crate::tests::prelude::*;
 
 // renameJsSpecialAssignmentRhs2_test.go:10
 pub fn test_rename_js_special_assignment_rhs2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: a.js
 const foo = {
     set: function (x) {
@@ -3334,8 +3067,7 @@ const foo = {
     copy: function ([|x|]) {
         this._x = [|x|].prop;
     }
-};";
-    fourslash::run_generated_test(t, content, |f, t| {
+};", |f, t| {
         f.verify_baseline_rename(t, None, &[]);
     });
 }
@@ -3347,15 +3079,13 @@ use crate::tests::prelude::*;
 
 // renameJsThisProperty01_test.go:10
 pub fn test_rename_js_this_property01(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: a.js
 function bar() {
     [|this.[|{| "contextRangeIndex": 0 |}x|] = 10;|]
 }
 var t = new bar();
-[|t.[|{| "contextRangeIndex": 2 |}x|] = 11;|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|t.[|{| "contextRangeIndex": 2 |}x|] = 11;|]"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["x"]);
     });
 }
@@ -3367,8 +3097,7 @@ use crate::tests::prelude::*;
 
 // renameJsThisProperty03_test.go:10
 pub fn test_rename_js_this_property03(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: a.js
 class C {
   constructor(y) {
@@ -3376,8 +3105,7 @@ class C {
   }
 }
 var t = new C(12);
-[|t.[|{| "contextRangeIndex": 2 |}x|] = 11;|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|t.[|{| "contextRangeIndex": 2 |}x|] = 11;|]"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["x"]);
     });
 }
@@ -3389,8 +3117,7 @@ use crate::tests::prelude::*;
 
 // renameJsThisProperty05_test.go:10
 pub fn test_rename_js_this_property05(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: a.js
 class C {
   constructor(y) {
@@ -3399,8 +3126,7 @@ class C {
 }
 [|C.prototype.[|{| "contextRangeIndex": 0 |}z|] = 1;|]
 var t = new C(12);
-[|t.[|{| "contextRangeIndex": 2 |}z|] = 11;|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|t.[|{| "contextRangeIndex": 2 |}z|] = 11;|]"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["z"]);
     });
 }
@@ -3412,8 +3138,7 @@ use crate::tests::prelude::*;
 
 // renameJsThisProperty06_test.go:10
 pub fn test_rename_js_this_property06(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: a.js
 var C = class {
   constructor(y) {
@@ -3422,8 +3147,7 @@ var C = class {
 }
 [|C.prototype.[|{| "contextRangeIndex": 0 |}z|] = 1;|]
 var t = new C(12);
-[|t.[|{| "contextRangeIndex": 2 |}z|] = 11;|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|t.[|{| "contextRangeIndex": 2 |}z|] = 11;|]"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["z"]);
     });
 }
@@ -3435,14 +3159,12 @@ use crate::tests::prelude::*;
 
 // renameJSDocNamepath_test.go:10
 pub fn test_rename_jsdoc_namepath(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noLib: true
+    fourslash::run_generated_test(t, r"// @noLib: true
 /**
  * @type {module:foo/A} x
  */
 var x = 1
-var /*0*/A = 0;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*0*/A = 0;", |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String("0".to_string())]);
     });
 }
@@ -3454,11 +3176,9 @@ use crate::tests::prelude::*;
 
 // renameLabel1_test.go:10
 pub fn test_rename_label1(t: &T) {
-    t.parallel();
-    let content: &str = r"foo: {
+    fourslash::run_generated_test(t, r"foo: {
     break /**/foo;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -3470,11 +3190,9 @@ use crate::tests::prelude::*;
 
 // renameLabel2_test.go:10
 pub fn test_rename_label2(t: &T) {
-    t.parallel();
-    let content: &str = r"/**/foo: {
+    fourslash::run_generated_test(t, r"/**/foo: {
     break foo;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -3486,14 +3204,12 @@ use crate::tests::prelude::*;
 
 // renameLabel3_test.go:10
 pub fn test_rename_label3(t: &T) {
-    t.parallel();
-    let content: &str = r"/**/loop:
+    fourslash::run_generated_test(t, r"/**/loop:
 for (let i = 0; i <= 10; i++) {
    if (i === 0) continue loop;
    if (i === 1) continue loop;
    if (i === 10) break loop;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -3505,14 +3221,12 @@ use crate::tests::prelude::*;
 
 // renameLabel4_test.go:10
 pub fn test_rename_label4(t: &T) {
-    t.parallel();
-    let content: &str = r"loop:
+    fourslash::run_generated_test(t, r"loop:
 for (let i = 0; i <= 10; i++) {
    if (i === 0) continue loop;
    if (i === 1) continue /**/loop;
    if (i === 10) break loop;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -3524,14 +3238,12 @@ use crate::tests::prelude::*;
 
 // renameLabel5_test.go:10
 pub fn test_rename_label5(t: &T) {
-    t.parallel();
-    let content: &str = r"loop1: for (let i = 0; i <= 10; i++) {
+    fourslash::run_generated_test(t, r"loop1: for (let i = 0; i <= 10; i++) {
     loop2: for (let j = 0; j <= 10; j++) {
         if (i === 5) continue /**/loop1;
         if (j === 5) break loop2;
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -3543,14 +3255,12 @@ use crate::tests::prelude::*;
 
 // renameLabel6_test.go:10
 pub fn test_rename_label6(t: &T) {
-    t.parallel();
-    let content: &str = r"loop1: for (let i = 0; i <= 10; i++) {
+    fourslash::run_generated_test(t, r"loop1: for (let i = 0; i <= 10; i++) {
     loop2: for (let j = 0; j <= 10; j++) {
         if (i === 5) continue loop1;
         if (j === 5) break /**/loop2;
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -3562,8 +3272,7 @@ use crate::tests::prelude::*;
 
 // renameLocationsForClassExpression01_test.go:10
 pub fn test_rename_locations_for_class_expression01(t: &T) {
-    t.parallel();
-    let content: &str = r#"class Foo {
+    fourslash::run_generated_test(t, r#"class Foo {
 }
 
 var x = [|class [|{| "contextRangeIndex": 0 |}Foo|] {
@@ -3581,8 +3290,7 @@ var y = class {
       return Foo
    }
 }
-var z = class Foo {}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var z = class Foo {}"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["Foo"]);
     });
 }
@@ -3594,11 +3302,9 @@ use crate::tests::prelude::*;
 
 // renameLocationsForFunctionExpression01_test.go:10
 pub fn test_rename_locations_for_function_expression01(t: &T) {
-    t.parallel();
-    let content: &str = r#"var x = [|function [|{| "contextRangeIndex": 0 |}f|](g: any, h: any) {
+    fourslash::run_generated_test(t, r#"var x = [|function [|{| "contextRangeIndex": 0 |}f|](g: any, h: any) {
     [|f|]([|f|], g);
-}|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}|]"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["f"]);
     });
 }
@@ -3610,8 +3316,7 @@ use crate::tests::prelude::*;
 
 // renameLocationsForFunctionExpression02_test.go:10
 pub fn test_rename_locations_for_function_expression02(t: &T) {
-    t.parallel();
-    let content: &str = r#"function f() {
+    fourslash::run_generated_test(t, r#"function f() {
 
 }
 var x = [|function [|{| "contextRangeIndex": 0 |}f|](g: any, h: any) {
@@ -3619,8 +3324,7 @@ var x = [|function [|{| "contextRangeIndex": 0 |}f|](g: any, h: any) {
     let helper = function f(): any { f(); }
 
     let foo = () => [|f|]([|f|], g);
-}|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}|]"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["f"]);
     });
 }
@@ -3632,8 +3336,7 @@ use crate::tests::prelude::*;
 
 // renameModifiers_test.go:10
 pub fn test_rename_modifiers(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|[|declare|] [|abstract|] class [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -3 |}C1|] {
+    fourslash::run_generated_test(t, r#"[|[|declare|] [|abstract|] class [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -3 |}C1|] {
     [|[|static|] [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -2 |}a|];|]
     [|[|readonly|] [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -2 |}b|];|]
     [|[|public|] [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -2 |}c|];|]
@@ -3643,8 +3346,7 @@ pub fn test_rename_modifiers(t: &T) {
 [|[|const|] enum [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -2 |}E|] {
 }|]
 [|[|async|] function [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -2 |}fn|]() {}|]
-[|[|export|] [|default|] class [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -3 |}C2|] {}|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|[|export|] [|default|] class [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -3 |}C2|] {}|]"#, |f, t| {
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[2])), Any::RangeMarker(Arc::clone(&f.ranges()[5])), Any::RangeMarker(Arc::clone(&f.ranges()[8])), Any::RangeMarker(Arc::clone(&f.ranges()[11])), Any::RangeMarker(Arc::clone(&f.ranges()[14])), Any::RangeMarker(Arc::clone(&f.ranges()[17])), Any::RangeMarker(Arc::clone(&f.ranges()[20])), Any::RangeMarker(Arc::clone(&f.ranges()[23])), Any::RangeMarker(Arc::clone(&f.ranges()[26])), Any::RangeMarker(Arc::clone(&f.ranges()[27]))]);
     });
 }

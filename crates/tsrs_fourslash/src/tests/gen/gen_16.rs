@@ -5,8 +5,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterface_02_test.go:10
 pub fn test_go_to_implementation_interface_02(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Fo/*interface_definition*/o { hello: () => void }
+    fourslash::run_generated_test(t, r"interface Fo/*interface_definition*/o { hello: () => void }
 
 let x: number = 9;
 
@@ -27,8 +26,7 @@ function createFooLike() {
     return {
         hello() {}
     };
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["interface_definition"]);
     });
 }
@@ -40,11 +38,9 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterface_03_test.go:10
 pub fn test_go_to_implementation_interface_03(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Fo/*interface_definition*/o { hello: () => void }
+    fourslash::run_generated_test(t, r"interface Fo/*interface_definition*/o { hello: () => void }
 
-var x = <Foo> [|{ hello: () => {} }|];";
-    fourslash::run_generated_test(t, content, |f, t| {
+var x = <Foo> [|{ hello: () => {} }|];", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["interface_definition"]);
     });
 }
@@ -56,8 +52,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterface_04_test.go:10
 pub fn test_go_to_implementation_interface_04(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Fo/*interface_definition*/o {
+    fourslash::run_generated_test(t, r"interface Fo/*interface_definition*/o {
     (a: number): void
 }
 
@@ -70,8 +65,7 @@ class Bar {
     x: Foo = [|(a) => {/**2*/}|]
 
     constructor(public f: Foo = [|function(a) {}|] ) {}
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["interface_definition"]);
     });
 }
@@ -83,14 +77,12 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterface_05_test.go:10
 pub fn test_go_to_implementation_interface_05(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Fo/*interface_definition*/o {
+    fourslash::run_generated_test(t, r"interface Fo/*interface_definition*/o {
     (a: number): void
 }
 
 let bar2 = <Foo> [|function(a) {}|];
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["interface_definition"]);
     });
 }
@@ -102,16 +94,14 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterface_06_test.go:10
 pub fn test_go_to_implementation_interface_06(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Fo/*interface_definition*/o {
+    fourslash::run_generated_test(t, r"interface Fo/*interface_definition*/o {
     new (a: number): SomeOtherType;
 }
 
 interface SomeOtherType {}
 
 let x: Foo = [|class { constructor (a: number) {} }|];
-let y = <Foo> [|class { constructor (a: number) {} }|];";
-    fourslash::run_generated_test(t, content, |f, t| {
+let y = <Foo> [|class { constructor (a: number) {} }|];", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["interface_definition"]);
     });
 }
@@ -123,8 +113,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterface_07_test.go:10
 pub fn test_go_to_implementation_interface_07(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface Fo/*interface_definition*/o {
+    fourslash::run_generated_test(t, r#"interface Fo/*interface_definition*/o {
     hello (): void;
 }
 
@@ -147,8 +136,7 @@ let x11 = class [|{|"parts": ["(","local class",")"," ","C"], "kind": "local cla
 // Should not do anything for type predicates
 function isFoo(a: any): a is Foo {
     return true;
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_go_to_implementation(t, &["interface_definition"]);
     });
 }
@@ -160,8 +148,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterface_08_test.go:10
 pub fn test_go_to_implementation_interface_08(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Base {
+    fourslash::run_generated_test(t, r"interface Base {
     hello (): void;
 }
 
@@ -175,8 +162,7 @@ class X implements B {
 
 function someFunction(d : A) {
     d.he/*function_call*/llo();
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["function_call"]);
     });
 }
@@ -188,13 +174,11 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterface_09_test.go:10
 pub fn test_go_to_implementation_interface_09(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: def.d.ts
+    fourslash::run_generated_test(t, r#"// @Filename: def.d.ts
 export interface Interface { P: number }
 // @Filename: ref.ts
 import { Interface } from "./def";
-const c: I/*ref*/nterface = [|{ P: 2 }|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const c: I/*ref*/nterface = [|{ P: 2 }|];"#, |f, t| {
         f.verify_baseline_go_to_implementation(t, &["ref"]);
     });
 }
@@ -206,8 +190,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterface_10_test.go:10
 pub fn test_go_to_implementation_interface_10(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r"// @Filename: /a.ts
 interface /*def*/A {
 	foo: boolean;
 }
@@ -218,8 +201,7 @@ export class [|C|] implements B {
 	foo = true;
 	bar = true;
 }
-export class [|D|] extends C { }";
-    fourslash::run_generated_test(t, content, |f, t| {
+export class [|D|] extends C { }", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["def"]);
     });
 }
@@ -231,8 +213,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterfaceMethod_00_test.go:10
 pub fn test_go_to_implementation_interface_method_00(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface Foo {
+    fourslash::run_generated_test(t, r#"interface Foo {
     he/*declaration*/llo: () => void
 }
 
@@ -249,8 +230,7 @@ class Bar {
     x: Foo = { [|hello|]() {/*2*/} }
 
     constructor(public f: Foo = { [|hello|]() {/**3*/} } ) {}
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_go_to_implementation(t, &["function_call", "declaration"]);
     });
 }
@@ -262,8 +242,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterfaceMethod_01_test.go:10
 pub fn test_go_to_implementation_interface_method_01(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Foo {
+    fourslash::run_generated_test(t, r"interface Foo {
     hel/*declaration*/lo(): void;
     okay?: number;
 }
@@ -277,8 +256,7 @@ function whatever(a: Foo) {
     a.he/*function_call*/llo();
 }
 
-whatever(new Bar());";
-    fourslash::run_generated_test(t, content, |f, t| {
+whatever(new Bar());", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["function_call", "declaration"]);
     });
 }
@@ -290,8 +268,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterfaceMethod_02_test.go:10
 pub fn test_go_to_implementation_interface_method_02(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Foo {
+    fourslash::run_generated_test(t, r"interface Foo {
     he/*declaration*/llo(): void
 }
 
@@ -305,8 +282,7 @@ class Bar extends AbstractBar {
 
 function whatever(a: AbstractBar) {
     a.he/*function_call*/llo();
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["function_call", "declaration"]);
     });
 }
@@ -318,8 +294,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterfaceMethod_03_test.go:10
 pub fn test_go_to_implementation_interface_method_03(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface Foo {
+    fourslash::run_generated_test(t, r#"interface Foo {
     hello (): void;
 }
 
@@ -336,8 +311,7 @@ class OtherBar implements Foo {
 }
 
 new Bar().hel/*function_call*/lo();
-new Bar()["hello"]();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+new Bar()["hello"]();"#, |f, t| {
         f.verify_baseline_go_to_implementation(t, &["function_call"]);
     });
 }
@@ -349,8 +323,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterfaceMethod_04_test.go:10
 pub fn test_go_to_implementation_interface_method_04(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Foo {
+    fourslash::run_generated_test(t, r"interface Foo {
     hello (): void;
 }
 
@@ -368,8 +341,7 @@ class OtherBar implements Foo {
 
 function (x: SuperBar) {
     x.he/*function_call*/llo()
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["function_call"]);
     });
 }
@@ -381,8 +353,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterfaceMethod_05_test.go:10
 pub fn test_go_to_implementation_interface_method_05(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Foo {
+    fourslash::run_generated_test(t, r"interface Foo {
     hello (): void;
 }
 
@@ -412,8 +383,7 @@ class NotBar extends SuperBar {
 
 function whatever(x: Bar) {
     x.he/*function_call*/llo()
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["function_call"]);
     });
 }
@@ -425,8 +395,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterfaceMethod_06_test.go:10
 pub fn test_go_to_implementation_interface_method_06(t: &T) {
-    t.parallel();
-    let content: &str = r"interface SuperFoo {
+    fourslash::run_generated_test(t, r"interface SuperFoo {
     hello (): void;
 }
 
@@ -467,8 +436,7 @@ class NotFoo implements SuperFoo {
 
 function (x: Foo) {
     x.he/*function_call*/llo()
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["function_call"]);
     });
 }
@@ -480,8 +448,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterfaceMethod_08_test.go:10
 pub fn test_go_to_implementation_interface_method_08(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Foo {
+    fourslash::run_generated_test(t, r"interface Foo {
     hello (): void;
 }
 
@@ -495,8 +462,7 @@ class Bar extends SuperBar {
 
 class SubBar extends Bar {
    [|hello|]() {}
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["function_call"]);
     });
 }
@@ -508,8 +474,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterfaceMethod_09_test.go:10
 pub fn test_go_to_implementation_interface_method_09(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface Foo {
+    fourslash::run_generated_test(t, r#"interface Foo {
     hello (): void;
 }
 
@@ -532,8 +497,7 @@ class SuperBar extends MegaBar {
 
 class MegaBar implements Foo {
     hello() {}
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_go_to_implementation(t, &["function_call", "element_access"]);
     });
 }
@@ -545,8 +509,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterfaceMethod_10_test.go:10
 pub fn test_go_to_implementation_interface_method_10(t: &T) {
-    t.parallel();
-    let content: &str = r"interface BaseFoo {
+    fourslash::run_generated_test(t, r"interface BaseFoo {
 	 hello(): void;
 }
 
@@ -585,8 +548,7 @@ function someFunction(x: Foo | Bar) {
 
 function anotherFunction(x: Foo & Bar) {
 	 x.he/*function_call1*/llo();
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["function_call0", "function_call1"]);
     });
 }
@@ -598,14 +560,12 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterfaceMethod_11_test.go:10
 pub fn test_go_to_implementation_interface_method_11(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Foo {
+    fourslash::run_generated_test(t, r"interface Foo {
    hel/*reference*/lo(): void;
 }
 
 var x = <Foo> { [|hello|]: () => {} };
-var y = <Foo> (((({ [|hello|]: () => {} }))));";
-    fourslash::run_generated_test(t, content, |f, t| {
+var y = <Foo> (((({ [|hello|]: () => {} }))));", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["reference"]);
     });
 }
@@ -617,8 +577,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterfaceObjectLiteral_test.go:10
 pub fn test_go_to_implementation_interface_object_literal(t: &T) {
-    t.parallel();
-    let content: &str = r#"
+    fourslash::run_generated_test(t, r#"
 // @Filename: /file1.ts
 export interface MyInterface { P: number; }
 
@@ -626,8 +585,7 @@ export interface MyInterface { P: number; }
 import { MyInterface } from "./file1";
 
 const x: /*impl*/MyInterface = { P: 2 };
-"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+"#, |f, t| {
         f.verify_baseline_go_to_implementation(t, &["impl"]);
     });
 }
@@ -639,8 +597,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterfaceProperty_00_test.go:10
 pub fn test_go_to_implementation_interface_property_00(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Foo {
+    fourslash::run_generated_test(t, r"interface Foo {
     hello: number
 }
 
@@ -655,8 +612,7 @@ class Bar {
     x: Foo = { [|hello|]: 6 }
 
     constructor(public f: Foo = { [|hello|]: 7 } ) {}
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["reference"]);
     });
 }
@@ -668,8 +624,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationInterfaceProperty_01_test.go:10
 pub fn test_go_to_implementation_interface_property_01(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Foo { hello: number }
+    fourslash::run_generated_test(t, r"interface Foo { hello: number }
 
 class Bar implements Foo {
     [|hello|] = 5 * 9;
@@ -677,8 +632,7 @@ class Bar implements Foo {
 
 function whatever(foo: Foo) {
     foo.he/*reference*/llo;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["reference"]);
     });
 }
@@ -690,11 +644,9 @@ use crate::tests::prelude::*;
 
 // goToImplementationInvalid_test.go:10
 pub fn test_go_to_implementation_invalid(t: &T) {
-    t.parallel();
-    let content: &str = r#"var x1 = 50/*0*/0;
+    fourslash::run_generated_test(t, r#"var x1 = 50/*0*/0;
 var x2 = "hel/*1*/lo";
-/*2*/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*2*/"#, |f, t| {
         f.verify_baseline_go_to_implementation(t, &["0", "1", "2"]);
     });
 }
@@ -706,10 +658,8 @@ use crate::tests::prelude::*;
 
 // goToImplementationLocal_00_test.go:10
 pub fn test_go_to_implementation_local_00(t: &T) {
-    t.parallel();
-    let content: &str = r"he/*function_call*/llo();
-function [|hello|]() {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"he/*function_call*/llo();
+function [|hello|]() {}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["function_call"]);
     });
 }
@@ -721,10 +671,8 @@ use crate::tests::prelude::*;
 
 // goToImplementationLocal_01_test.go:10
 pub fn test_go_to_implementation_local_01(t: &T) {
-    t.parallel();
-    let content: &str = r"const [|hello|] = function() {};
-he/*function_call*/llo();";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"const [|hello|] = function() {};
+he/*function_call*/llo();", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["function_call"]);
     });
 }
@@ -736,12 +684,10 @@ use crate::tests::prelude::*;
 
 // goToImplementationLocal_02_test.go:10
 pub fn test_go_to_implementation_local_02(t: &T) {
-    t.parallel();
-    let content: &str = r"const x = { [|hello|]: () => {} };
+    fourslash::run_generated_test(t, r"const x = { [|hello|]: () => {} };
 
 x.he/*function_call*/llo();
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["function_call"]);
     });
 }
@@ -753,14 +699,12 @@ use crate::tests::prelude::*;
 
 // goToImplementationLocal_03_test.go:10
 pub fn test_go_to_implementation_local_03(t: &T) {
-    t.parallel();
-    let content: &str = r"let [|he/*local_var*/llo|] = {};
+    fourslash::run_generated_test(t, r"let [|he/*local_var*/llo|] = {};
 
 x.hello();
 
 hello = {};
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["local_var"]);
     });
 }
@@ -772,12 +716,10 @@ use crate::tests::prelude::*;
 
 // goToImplementationLocal_04_test.go:10
 pub fn test_go_to_implementation_local_04(t: &T) {
-    t.parallel();
-    let content: &str = r"function [|he/*local_var*/llo|]() {}
+    fourslash::run_generated_test(t, r"function [|he/*local_var*/llo|]() {}
 
 hello();
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["local_var"]);
     });
 }
@@ -789,14 +731,12 @@ use crate::tests::prelude::*;
 
 // goToImplementationLocal_05_test.go:10
 pub fn test_go_to_implementation_local_05(t: &T) {
-    t.parallel();
-    let content: &str = r"class Bar {
+    fourslash::run_generated_test(t, r"class Bar {
     public hello() {}
 }
 
 var [|someVar|] = new Bar();
-someVa/*reference*/r.hello();";
-    fourslash::run_generated_test(t, content, |f, t| {
+someVa/*reference*/r.hello();", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["reference"]);
     });
 }
@@ -808,10 +748,8 @@ use crate::tests::prelude::*;
 
 // goToImplementationLocal_06_test.go:10
 pub fn test_go_to_implementation_local_06(t: &T) {
-    t.parallel();
-    let content: &str = r"declare var [|someVar|]: string;
-someVa/*reference*/r";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"declare var [|someVar|]: string;
+someVa/*reference*/r", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["reference"]);
     });
 }
@@ -823,10 +761,8 @@ use crate::tests::prelude::*;
 
 // goToImplementationLocal_07_test.go:10
 pub fn test_go_to_implementation_local_07(t: &T) {
-    t.parallel();
-    let content: &str = r"declare function [|someFunction|](): () => void;
-someFun/*reference*/ction();";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"declare function [|someFunction|](): () => void;
+someFun/*reference*/ction();", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["reference"]);
     });
 }
@@ -838,10 +774,8 @@ use crate::tests::prelude::*;
 
 // goToImplementationLocal_08_test.go:10
 pub fn test_go_to_implementation_local_08(t: &T) {
-    t.parallel();
-    let content: &str = r"declare function [|someFunction|](): () => void;
-someFun/*reference*/ction();";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"declare function [|someFunction|](): () => void;
+someFun/*reference*/ction();", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["reference"]);
     });
 }
@@ -853,8 +787,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationNamespace_00_test.go:10
 pub fn test_go_to_implementation_namespace_00(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace /*implementation0*/Foo {
+    fourslash::run_generated_test(t, r"namespace /*implementation0*/Foo {
     export function hello() {}
 }
 
@@ -863,8 +796,7 @@ module /*implementation1*/Bar {
 }
 
 let x = Fo/*reference0*/o;
-let y = Ba/*reference1*/r;";
-    fourslash::run_generated_test(t, content, |f, t| {
+let y = Ba/*reference1*/r;", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["reference0", "reference1"]);
     });
 }
@@ -876,13 +808,11 @@ use crate::tests::prelude::*;
 
 // goToImplementationNamespace_01_test.go:10
 pub fn test_go_to_implementation_namespace_01(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace Foo {
+    fourslash::run_generated_test(t, r"namespace Foo {
     export function [|hello|]() {}
 }
 
-Foo.hell/*reference*/o();";
-    fourslash::run_generated_test(t, content, |f, t| {
+Foo.hell/*reference*/o();", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["reference"]);
     });
 }
@@ -894,13 +824,11 @@ use crate::tests::prelude::*;
 
 // goToImplementationNamespace_02_test.go:10
 pub fn test_go_to_implementation_namespace_02(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace Foo {
+    fourslash::run_generated_test(t, r"namespace Foo {
     export function [|hello|]() {}
 }
 
-Foo.hell/*reference*/o();";
-    fourslash::run_generated_test(t, content, |f, t| {
+Foo.hell/*reference*/o();", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["reference"]);
     });
 }
@@ -912,8 +840,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationNamespace_03_test.go:10
 pub fn test_go_to_implementation_namespace_03(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace Foo {
+    fourslash::run_generated_test(t, r"namespace Foo {
     export interface Bar {
         hello(): void;
     }
@@ -933,8 +860,7 @@ var someVar2 = <Foo.Bar> [|{ hello: () => {/**2*/} }|];
 
 function whatever(x: Foo.Ba/*reference*/r) {
 
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["reference"]);
     });
 }
@@ -946,8 +872,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationNamespace_04_test.go:10
 pub fn test_go_to_implementation_namespace_04(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace Foo {
+    fourslash::run_generated_test(t, r"namespace Foo {
     export interface Bar {
         hello(): void;
     }
@@ -967,8 +892,7 @@ var someVar2 = <Foo.Bar> [|{ hello: () => {/**2*/} }|];
 
 function whatever(x: Foo.Ba/*reference*/r) {
 
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["reference"]);
     });
 }
@@ -980,8 +904,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationNamespace_05_test.go:10
 pub fn test_go_to_implementation_namespace_05(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace /*implementation0*/Foo./*implementation2*/Baz {
+    fourslash::run_generated_test(t, r"namespace /*implementation0*/Foo./*implementation2*/Baz {
     export function hello() {}
 }
 
@@ -992,8 +915,7 @@ module /*implementation1*/Bar./*implementation3*/Baz {
 let x = Fo/*reference0*/o;
 let y = Ba/*reference1*/r;
 let x1 = Foo.B/*reference2*/az;
-let y1 = Bar.B/*reference3*/az;";
-    fourslash::run_generated_test(t, content, |f, t| {
+let y1 = Bar.B/*reference3*/az;", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["reference0", "reference1", "reference2", "reference3"]);
     });
 }
@@ -1005,14 +927,12 @@ use crate::tests::prelude::*;
 
 // goToImplementationNamespace_06_test.go:10
 pub fn test_go_to_implementation_namespace_06(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace [|F/*declaration*/oo|] {
+    fourslash::run_generated_test(t, r"namespace [|F/*declaration*/oo|] {
     declare function hello(): void;
 }
 
 
-let x: typeof Foo = [|{ hello() {} }|];";
-    fourslash::run_generated_test(t, content, |f, t| {
+let x: typeof Foo = [|{ hello() {} }|];", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["declaration"]);
     });
 }
@@ -1024,8 +944,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationNoCrashMultiSourceDts_test.go:10
 pub fn test_go_to_implementation_no_crash_multi_source_dts(t: &T) {
-    t.parallel();
-    let content: &str = r#"
+    fourslash::run_generated_test(t, r#"
 // @Filename: /a.ts
 export {};
 // @Filename: /b.ts
@@ -1040,8 +959,7 @@ export declare class Bar {
 // @Filename: /user.ts
 import { Bar } from './combined';
 declare const bar: Bar;
-bar./*impl*/method();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+bar./*impl*/method();"#, |f, t| {
         f.verify_baseline_go_to_implementation(t, &["impl"]);
     });
 }
@@ -1053,12 +971,10 @@ use crate::tests::prelude::*;
 
 // goToImplementationNoCrashTripleSlashRef_test.go:10
 pub fn test_go_to_implementation_no_crash_triple_slash_ref(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /node_modules/@types/mymod/index.d.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /node_modules/@types/mymod/index.d.ts
 export declare function foo(): void;
 // @Filename: /main.d.ts
-/// <reference types="/*m*/mymod" />"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/// <reference types="/*m*/mymod" />"#, |f, t| {
         f.verify_baseline_go_to_implementation(t, &["m"]);
     });
 }
@@ -1070,8 +986,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationNoCrashTripleSlashRef2_test.go:10
 pub fn test_go_to_implementation_no_crash_triple_slash_ref2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /node_modules/@types/react/index.d.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /node_modules/@types/react/index.d.ts
 export type JSX = {};
 
 // @Filename: /node_modules/excalidraw/index.d.ts
@@ -1079,8 +994,7 @@ export type JSX = {};
 
 // @Filename: /index.ts
 import type {JSX} from '/*m*/react';
-"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+"#, |f, t| {
         f.verify_baseline_go_to_implementation(t, &["m"]);
     });
 }
@@ -1092,13 +1006,11 @@ use crate::tests::prelude::*;
 
 // goToImplementationNoCrashUMDWithDynamicImport_test.go:10
 pub fn test_go_to_implementation_no_crash_umd_with_dynamic_import(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /lib.d.ts
+    fourslash::run_generated_test(t, r"// @Filename: /lib.d.ts
 export as namespace Lib;
 export interface /*1*/IFoo {}
 // @Filename: /user.ts
-const p = import('./lib');";
-    fourslash::run_generated_test(t, content, |f, t| {
+const p = import('./lib');", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["1"]);
     });
 }
@@ -1110,8 +1022,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationReachingNonExistentExport1_test.go:10
 pub fn test_go_to_implementation_reaching_non_existent_export1(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 // @Filename: /github.ts
 export { transformRecordedData };
 
@@ -1121,8 +1032,7 @@ import { transformRecordedData as transformGitHub } from './github';
 const methods = { github: {
     transformData: /*impl*/transformGitHub,
 }};
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["impl"]);
     });
 }
@@ -1134,8 +1044,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationReachingNonExistentExport2_test.go:10
 pub fn test_go_to_implementation_reaching_non_existent_export2(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 // @allowJs: true
 // @checkJs: true
 
@@ -1148,8 +1057,7 @@ const { transformRecordedData: transformGitHub } = require('./github');
 const methods = { github: {
     transformData: /*impl*/transformGitHub,
 }};
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["impl"]);
     });
 }
@@ -1161,8 +1069,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationReachingNonExistentExport3_test.go:10
 pub fn test_go_to_implementation_reaching_non_existent_export3(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 // @allowJs: true
 // @checkJs: true
 
@@ -1175,8 +1082,7 @@ import { transformRecordedData as transformGitHub } from './github';
 const methods = { github: {
     transformData: /*impl*/transformGitHub,
 }};
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["impl"]);
     });
 }
@@ -1188,8 +1094,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationReexportedTypeOnlyNamespace1_test.go:10
 pub fn test_go_to_implementation_reexported_type_only_namespace1(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 // @Filename: /node_modules/@typescript-eslint/types/index.d.ts
 export * as TSESTree from './generated/ast-spec';
 
@@ -1204,8 +1109,7 @@ import type {TSE/*impl*/STree} from '@typescript-eslint/utils';
 
 let node: TSESTree.Node | undefined;
 export default node;
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["impl"]);
     });
 }
@@ -1217,8 +1121,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationReexportedTypeOnlyNamespace2_test.go:10
 pub fn test_go_to_implementation_reexported_type_only_namespace2(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 // @Filename: /node_modules/@typescript-eslint/types/index.d.ts
 export type * as TSESTree from './generated/ast-spec';
 
@@ -1233,8 +1136,7 @@ import type {TSE/*impl*/STree} from '@typescript-eslint/utils';
 
 let node: TSESTree.Node | undefined;
 export default node;
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["impl"]);
     });
 }
@@ -1246,8 +1148,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationReexportedTypeOnlyNamespace3_test.go:10
 pub fn test_go_to_implementation_reexported_type_only_namespace3(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 // @Filename: /node_modules/@typescript-eslint/types/index.d.ts
 export * as TSESTree from './generated/ast-spec';
 export type * as TSESTree from './generated/ast-spec';
@@ -1263,8 +1164,7 @@ import type {TSE/*impl*/STree} from '@typescript-eslint/utils';
 
 let node: TSESTree.Node | undefined;
 export default node;
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["impl"]);
     });
 }
@@ -1276,16 +1176,14 @@ use crate::tests::prelude::*;
 
 // goToImplementation_satisfies_test.go:10
 pub fn test_go_to_implementation_satisfies(t: &T) {
-    t.parallel();
-    let content: &str = r"// @filename: /a.ts
+    fourslash::run_generated_test(t, r"// @filename: /a.ts
 interface /*def*/I {
 	foo: string;
 }
 
 function f() {
     const foo = { foo: '' } satisfies [|I|];
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["def"]);
     });
 }
@@ -1297,8 +1195,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationShorthandPropertyAssignment_00_test.go:10
 pub fn test_go_to_implementation_shorthand_property_assignment_00(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Foo {
+    fourslash::run_generated_test(t, r"interface Foo {
     someFunction(): void;
 }
 
@@ -1328,8 +1225,7 @@ function createBarUsingClassDeclaration(): Bar {
     return {
         Fo/*declaredClassRef*/o
     };
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["classExpressionRef", "declaredClassRef"]);
     });
 }
@@ -1341,8 +1237,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationShorthandPropertyAssignment_01_test.go:10
 pub fn test_go_to_implementation_shorthand_property_assignment_01(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Foo {
+    fourslash::run_generated_test(t, r"interface Foo {
     someFunction(): void;
 }
 
@@ -1382,8 +1277,7 @@ var y = class Foo {
     someFunction() {}
 };
 
-createBarUsingClassDeclaration().Fo/*reference*/o;";
-    fourslash::run_generated_test(t, content, |f, t| {
+createBarUsingClassDeclaration().Fo/*reference*/o;", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["reference"]);
     });
 }
@@ -1395,8 +1289,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationShorthandPropertyAssignment_02_test.go:10
 pub fn test_go_to_implementation_shorthand_property_assignment_02(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Foo {
+    fourslash::run_generated_test(t, r"interface Foo {
 	 hello(): void;
 }
 
@@ -1410,8 +1303,7 @@ function createFoo(): Foo {
 
 function whatever(x: Foo) {
      x.h/*function_call*/ello();
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["function_call"]);
     });
 }
@@ -1423,8 +1315,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationSuper_00_test.go:10
 pub fn test_go_to_implementation_super_00(t: &T) {
-    t.parallel();
-    let content: &str = r"class [|Foo|] {
+    fourslash::run_generated_test(t, r"class [|Foo|] {
     constructor() {}
 }
 
@@ -1432,8 +1323,7 @@ class Bar extends Foo {
     constructor() {
         su/*super_call*/per();
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["super_call"]);
     });
 }
@@ -1445,8 +1335,7 @@ use crate::tests::prelude::*;
 
 // goToImplementationSuper_01_test.go:10
 pub fn test_go_to_implementation_super_01(t: &T) {
-    t.parallel();
-    let content: &str = r"class [|Foo|] {
+    fourslash::run_generated_test(t, r"class [|Foo|] {
     hello() {}
 }
 
@@ -1454,8 +1343,7 @@ class Bar extends Foo {
     hello() {
         sup/*super_call*/er.hello();
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["super_call"]);
     });
 }
@@ -1467,15 +1355,13 @@ use crate::tests::prelude::*;
 
 // goToImplementationThis_00_test.go:10
 pub fn test_go_to_implementation_this_00(t: &T) {
-    t.parallel();
-    let content: &str = r"class [|Bar|] extends Foo {
+    fourslash::run_generated_test(t, r"class [|Bar|] extends Foo {
     hello() {
         thi/*this_call*/s.whatever();
     }
 
     whatever() {}
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["this_call"]);
     });
 }
@@ -1487,13 +1373,11 @@ use crate::tests::prelude::*;
 
 // goToImplementationThis_01_test.go:10
 pub fn test_go_to_implementation_this_01(t: &T) {
-    t.parallel();
-    let content: &str = r"class [|Bar|] extends Foo {
+    fourslash::run_generated_test(t, r"class [|Bar|] extends Foo {
     hello(): th/*this_type*/is {
         return this;
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_implementation(t, &["this_type"]);
     });
 }
@@ -1505,13 +1389,11 @@ use crate::tests::prelude::*;
 
 // goToImplementationTypeAlias_00_test.go:10
 pub fn test_go_to_implementation_type_alias_00(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: def.d.ts
+    fourslash::run_generated_test(t, r#"// @Filename: def.d.ts
 export type TypeAlias = { P: number }
 // @Filename: ref.ts
 import { TypeAlias } from "./def";
-const c: T/*ref*/ypeAlias = [|{ P: 2 }|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const c: T/*ref*/ypeAlias = [|{ P: 2 }|];"#, |f, t| {
         f.verify_baseline_go_to_implementation(t, &["ref"]);
     });
 }
@@ -1523,13 +1405,11 @@ use crate::tests::prelude::*;
 
 // goToModuleAliasDefinition_test.go:10
 pub fn test_go_to_module_alias_definition(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: a.ts
+    fourslash::run_generated_test(t, r"// @Filename: a.ts
 export class /*2*/Foo {}
 // @Filename: b.ts
  import /*3*/n = require('a');
- var x = new [|/*1*/n|].Foo();";
-    fourslash::run_generated_test(t, content, |f, t| {
+ var x = new [|/*1*/n|].Foo();", |f, t| {
         f.verify_baseline_go_to_definition(t, true, &["1"]);
     });
 }
@@ -1541,8 +1421,7 @@ use crate::tests::prelude::*;
 
 // goToSource10_mapFromAtTypes3_test.go:10
 pub fn test_go_to_source10_map_from_at_types3(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/lodash/package.json
 { "name": "lodash", "version": "4.17.15", "main": "./lodash.js" }
@@ -1601,8 +1480,7 @@ declare namespace _ {
     interface LoDashStatic {}
 }
 // @Filename: /home/src/workspaces/project/index.ts
-import { [|/*start*/add|] } from 'lodash';"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { [|/*start*/add|] } from 'lodash';"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &["start"]);
     });
@@ -1615,8 +1493,7 @@ use crate::tests::prelude::*;
 
 // goToSource11_propertyOfAlias_test.go:10
 pub fn test_go_to_source11_property_of_alias(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 // @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/a.js
 export const a = { /*end*/a: 'a' };
@@ -1624,8 +1501,7 @@ export const a = { /*end*/a: 'a' };
 export declare const a: { a: string };
 // @Filename: /home/src/workspaces/project/b.ts
 import { a } from './a';
-a.[|a/*start*/|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+a.[|a/*start*/|]", |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &["start"]);
     });
@@ -1638,8 +1514,7 @@ use crate::tests::prelude::*;
 
 // goToSource12_callbackParam_test.go:10
 pub fn test_go_to_source12_callback_param(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/@types/yargs/package.json
 {
@@ -1662,8 +1537,7 @@ export function command(cmd, cb) { cb({ /*end*/positional: "This is obviously no
 import { command } from "yargs";
 command("foo", yargs => {
     yargs.[|/*start*/positional|]();
-});"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+});"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &["start"]);
     });
@@ -1676,8 +1550,7 @@ use crate::tests::prelude::*;
 
 // goToSource13_nodenext_test.go:10
 pub fn test_go_to_source13_nodenext(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /home/src/workspaces/project/node_modules/left-pad/package.json
+    fourslash::run_generated_test(t, r#"// @Filename: /home/src/workspaces/project/node_modules/left-pad/package.json
 {
   "name": "left-pad",
   "version": "1.3.0",
@@ -1704,8 +1577,7 @@ function /*end*/leftPad(str, len, ch) {}
 }
 // @Filename: /home/src/workspaces/project/index.mts
 import leftPad = require("left-pad");
-/*start*/leftPad("", 4);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*start*/leftPad("", 4);"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &["start"]);
     });
@@ -1718,12 +1590,10 @@ use crate::tests::prelude::*;
 
 // goToSource14_unresolvedRequireDestructuring_test.go:10
 pub fn test_go_to_source14_unresolved_require_destructuring(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @allowJs: true
 // @Filename: /home/src/workspaces/project/index.js
-const { blah/**/ } = require("unresolved");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const { blah/**/ } = require("unresolved");"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &[""]);
     });
@@ -1736,8 +1606,7 @@ use crate::tests::prelude::*;
 
 // goToSource15_bundler_test.go:10
 pub fn test_go_to_source15_bundler(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /home/src/workspaces/project/tsconfig.json
+    fourslash::run_generated_test(t, r#"// @Filename: /home/src/workspaces/project/tsconfig.json
 { "compilerOptions": { "module": "esnext", "moduleResolution": "bundler", "lib": ["es5"] } }
 // @Filename: /home/src/workspaces/project/node_modules/react/package.json
 { "name": "react", "version": "16.8.6", "main": "index.js" }
@@ -1761,8 +1630,7 @@ if (process.env.NODE_ENV !== 'production') {
   }());
 }
 // @Filename: /home/src/workspaces/project/index.ts
-import { [|/*start*/useState|] } from 'react';"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { [|/*start*/useState|] } from 'react';"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &["start"]);
     });
@@ -1775,8 +1643,7 @@ use crate::tests::prelude::*;
 
 // goToSource16_callbackParamDifferentFile_test.go:10
 pub fn test_go_to_source16_callback_param_different_file(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/@types/yargs/package.json
 {
@@ -1804,8 +1671,7 @@ export function command(cmd, cb) { cb(Yargs) }
 import { command } from "yargs";
 command("foo", yargs => {
     yargs.[|/*start*/positional|]();
-});"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+});"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &["start"]);
     });
@@ -1818,8 +1684,7 @@ use crate::tests::prelude::*;
 
 // goToSource17_AddsFileToProject_test.go:10
 pub fn test_go_to_source17_adds_file_to_project(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/@types/yargs/package.json
 {
@@ -1847,8 +1712,7 @@ export function command(cmd, cb) { cb(Yargs) }
 import { command } from "yargs";
 command("foo", yargs => {
     yargs.[|/*start*/positional|]();
-});"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+});"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &["start"]);
     });
@@ -1861,8 +1725,7 @@ use crate::tests::prelude::*;
 
 // goToSource18_reusedFromDifferentFolder_test.go:10
 pub fn test_go_to_source18_reused_from_different_folder(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/@types/yargs/package.json
 {
@@ -1893,8 +1756,7 @@ import { random } from "../folder/random";
 import { command } from "yargs";
 command("foo", yargs => {
     yargs.[|/*start*/positional|]();
-});"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+});"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &["start"]);
     });
@@ -1907,16 +1769,14 @@ use crate::tests::prelude::*;
 
 // goToSource1_localJsBesideDts_test.go:10
 pub fn test_go_to_source1_local_js_beside_dts(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @Filename: /home/src/workspaces/project/a.js
 export const /*end*/a = "a";
 // @Filename: /home/src/workspaces/project/a.d.ts
 export declare const a: string;
 // @Filename: /home/src/workspaces/project/index.ts
 import { a } from [|"./a"/*moduleSpecifier*/|];
-[|a/*identifier*/|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|a/*identifier*/|]"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &["identifier", "moduleSpecifier"]);
     });
@@ -1929,8 +1789,7 @@ use crate::tests::prelude::*;
 
 // goToSource2_nodeModulesWithTypes_test.go:10
 pub fn test_go_to_source2_node_modules_with_types(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/foo/package.json
 { "name": "foo", "version": "1.0.0", "main": "./lib/main.js", "types": "./types/main.d.ts" }
@@ -1940,8 +1799,7 @@ export const /*end*/a = "a";
 export declare const a: string;
 // @Filename: /home/src/workspaces/project/index.ts
 import { a } from "foo";
-[|a/*start*/|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|a/*start*/|]"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &["start"]);
     });
@@ -1954,8 +1812,7 @@ use crate::tests::prelude::*;
 
 // goToSource3_nodeModulesAtTypes_test.go:10
 pub fn test_go_to_source3_node_modules_at_types(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/foo/package.json
 { "name": "foo", "version": "1.0.0", "main": "./lib/main.js" }
@@ -1967,8 +1824,7 @@ export const /*end*/a = "a";
 export declare const a: string;
 // @Filename: /home/src/workspaces/project/index.ts
 import { a } from "foo";
-[|a/*start*/|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|a/*start*/|]"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &["start"]);
     });
@@ -1981,8 +1837,7 @@ use crate::tests::prelude::*;
 
 // goToSource5_sameAsGoToDef1_test.go:10
 pub fn test_go_to_source5_same_as_go_to_def1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 // @Filename: /home/src/workspaces/project/a.ts
 export const /*end*/a = 'a';
 // @Filename: /home/src/workspaces/project/a.d.ts
@@ -1991,8 +1846,7 @@ export declare const a: string;
 export const a = 'a';
 // @Filename: /home/src/workspaces/project/b.ts
 import { a } from './a';
-[|a/*start*/|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+[|a/*start*/|]", |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &["start"]);
         f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -2006,8 +1860,7 @@ use crate::tests::prelude::*;
 
 // goToSource6_sameAsGoToDef2_test.go:10
 pub fn test_go_to_source6_same_as_go_to_def2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @Filename: /home/src/workspaces/project/node_modules/foo/package.json
 { "name": "foo", "version": "1.2.3", "typesVersions": { "*": { "*": ["./types/*"] } } }
 // @Filename: /home/src/workspaces/project/node_modules/foo/src/a.ts
@@ -2021,8 +1874,7 @@ export declare const a: string;
 export const a = 'a';
 // @Filename: /home/src/workspaces/project/b.ts
 import { a } from 'foo/a';
-[|a/*start*/|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|a/*start*/|]"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &["start"]);
         f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -2036,8 +1888,7 @@ use crate::tests::prelude::*;
 
 // goToSource7_conditionallyMinified_test.go:10
 pub fn test_go_to_source7_conditionally_minified(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/react/package.json
 { "name": "react", "version": "16.8.6", "main": "index.js" }
@@ -2061,8 +1912,7 @@ if (process.env.NODE_ENV !== 'production') {
   }());
 }
 // @Filename: /home/src/workspaces/project/index.ts
-import { [|/*start*/useState|] } from 'react';"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { [|/*start*/useState|] } from 'react';"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &["start"]);
     });
@@ -2075,8 +1925,7 @@ use crate::tests::prelude::*;
 
 // goToSource8_mapFromAtTypes_test.go:10
 pub fn test_go_to_source8_map_from_at_types(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/lodash/package.json
 { "name": "lodash", "version": "4.17.15", "main": "./lodash.js" }
@@ -2143,8 +1992,7 @@ declare module "../index" {
     }
 }
 // @Filename: /home/src/workspaces/project/index.ts
-import { [|/*start*/add|] } from 'lodash';"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { [|/*start*/add|] } from 'lodash';"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &["start"]);
     });
@@ -2157,8 +2005,7 @@ use crate::tests::prelude::*;
 
 // goToSource9_mapFromAtTypes2_test.go:10
 pub fn test_go_to_source9_map_from_at_types2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/lodash/package.json
 { "name": "lodash", "version": "4.17.15", "main": "./lodash.js" }
@@ -2226,8 +2073,7 @@ declare module "../index" {
 }
 // @Filename: /home/src/workspaces/project/index.ts
 import [|/*defaultImport*/_|], { [|/*unresolvableNamedImport*/foo|] } from [|/*moduleSpecifier*/'lodash'|];
-_.[|/*propertyAccess*/add|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+_.[|/*propertyAccess*/add|]"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_source_definition(t, &["defaultImport", "unresolvableNamedImport", "moduleSpecifier"]);
     });
@@ -2240,8 +2086,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinition_test.go:10
 pub fn test_go_to_source_node_modules_with_types(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/foo/package.json
 { "name": "foo", "version": "1.0.0", "main": "./lib/main.js", "types": "./types/main.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/foo/lib/main.js
@@ -2250,61 +2095,53 @@ export const /*end*/a = "a";
 export declare const a: string;
 // @Filename: /home/src/workspaces/project/index.ts
 import { a } from "foo";
-[|a/*start*/|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|a/*start*/|]"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["start"]);
     });
 }
 
 // goToSourceDefinition_test.go:28
 pub fn test_go_to_source_local_js_beside_dts(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /home/src/workspaces/project/a.js
+    fourslash::run_generated_test(t, r#"// @Filename: /home/src/workspaces/project/a.js
 export const /*end*/a = "a";
 // @Filename: /home/src/workspaces/project/a.d.ts
 export declare const a: string;
 // @Filename: /home/src/workspaces/project/index.ts
 import { a } from [|"./a"/*moduleSpecifier*/|];
-[|a/*identifier*/|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|a/*identifier*/|]"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["identifier", "moduleSpecifier"]);
     });
 }
 
 // goToSourceDefinition_test.go:43
 pub fn test_go_to_source_non_declaration_file(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/utils.ts
 export function /*target*/helper() { return 1; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { helper } from "./utils";
-helper/*usage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+helper/*usage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage"]);
     });
 }
 
 // goToSourceDefinition_test.go:59
 pub fn test_go_to_source_no_implementation_file(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
 export declare function typesOnly(): void;
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importName*/typesOnly } from "pkg";
-typesOnly/*callSite*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+typesOnly/*callSite*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importName", "callSite"]);
     });
 }
 
 // goToSourceDefinition_test.go:76
 pub fn test_go_to_source_declaration_map_source_map(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./dist/index.js", "types": "./dist/index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/src/index.ts
@@ -2321,16 +2158,14 @@ exports.greet = greet;
 function greet() { return "hi"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { greet } from "pkg";
-greet/*usage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+greet/*usage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage"]);
     });
 }
 
 // goToSourceDefinition_test.go:103
 pub fn test_go_to_source_declaration_map_fallback(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./dist/index.js", "types": "./dist/index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/src/index.ts
@@ -2349,16 +2184,14 @@ console.log("side effect");
 function greet() { return "hi"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { greet } from "pkg";
-greet/*usage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+greet/*usage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage"]);
     });
 }
 
 // goToSourceDefinition_test.go:134
 pub fn test_go_to_source_named_exports_specifier(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2367,31 +2200,27 @@ export declare function foo(): string;
 export function /*target*/foo() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { foo } from "pkg";
-const result = foo/*valueUsage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const result = foo/*valueUsage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["valueUsage"]);
     });
 }
 
 // goToSourceDefinition_test.go:152
 pub fn test_go_to_source_triple_slash_reference(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: /home/src/workspaces/project/helper.js
 /*target*/function helper() { return 1; }
 // @Filename: /home/src/workspaces/project/index.ts
 /// <reference path="./[|helper.js/*refPath*/|]" />
 declare function helper(): number;
-helper();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+helper();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["refPath"]);
     });
 }
 
 // goToSourceDefinition_test.go:168
 pub fn test_go_to_source_fallback_to_module_specifier(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @allowJs: true
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
@@ -2400,16 +2229,14 @@ export declare function internalHelper(): void;
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.js
 /*entryPoint*/Object.defineProperty(exports, "internalHelper", { value: function() {} });
 // @Filename: /home/src/workspaces/project/index.ts
-import { /*importName*/internalHelper } from "pkg";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { /*importName*/internalHelper } from "pkg";"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importName"]);
     });
 }
 
 // goToSourceDefinition_test.go:189
 pub fn test_go_to_source_filter_preferred_fallback_all(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @allowJs: true
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./barrel.js", "types": "./barrel.d.ts" }
@@ -2423,8 +2250,7 @@ export { value } from "./impl.js";
 export const /*target*/value = 42;
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importName*/value } from "pkg";
-console.log(value);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+console.log(value);"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importName"]);
     });
 }
@@ -2436,8 +2262,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionAliasedImportUsage_test.go:10
 pub fn test_go_to_source_aliased_import_at_usage_site(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2448,16 +2273,14 @@ export function unrelated() {}
 export function /*target*/original() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { original as renamed } from "pkg";
-renamed/*usage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+renamed/*usage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage"]);
     });
 }
 
 // goToSourceDefinitionAliasedImportUsage_test.go:36
 pub fn test_go_to_source_aliased_import_at_usage_site_namespace_import(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2466,8 +2289,7 @@ export declare function helper(): string;
 export function /*target*/helper() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import * as ns from "pkg";
-ns./*usage*/helper();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+ns./*usage*/helper();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage"]);
     });
 }
@@ -2479,8 +2301,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionAliasedImportWithPrecedingExports_test.go:10
 pub fn test_go_to_source_aliased_import_with_preceding_exports(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2491,16 +2312,14 @@ export function unrelated() {}
 export function /*target*/original() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { original as /*aliasedImport*/renamed } from "pkg";
-renamed();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+renamed();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["aliasedImport"]);
     });
 }
 
 // goToSourceDefinitionAliasedImportWithPrecedingExports_test.go:34
 pub fn test_go_to_source_re_export_alias_with_preceding_exports(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2510,8 +2329,7 @@ export declare function original(): string;
 export function unrelated() {}
 export function /*target*/original() { return "ok"; }
 // @Filename: /home/src/workspaces/project/reexport.ts
-export { original as /*reExportAlias*/renamed } from "pkg";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export { original as /*reExportAlias*/renamed } from "pkg";"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["reExportAlias"]);
     });
 }
@@ -2523,8 +2341,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionDefaultExport_test.go:10
 pub fn test_go_to_source_named_and_default_export(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2536,16 +2353,14 @@ export function /*targetHelper*/helper() {}
 // @Filename: /home/src/workspaces/project/index.ts
 import /*importDefault*/Widget, { /*importHelper*/helper } from "pkg";
 Widget;
-helper();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+helper();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importDefault", "importHelper"]);
     });
 }
 
 // goToSourceDefinitionDefaultExport_test.go:33
 pub fn test_go_to_source_default_import_not_first_statement(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2556,16 +2371,14 @@ export const version = "1.0";
 export default class /*targetWidget*/Widget {}
 // @Filename: /home/src/workspaces/project/index.ts
 import /*importDefault*/Widget from "pkg";
-Widget;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+Widget;"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importDefault"]);
     });
 }
 
 // goToSourceDefinitionDefaultExport_test.go:55
 pub fn test_go_to_source_unnamed_default_export(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2574,16 +2387,14 @@ export default function(): string;
 export default /*targetDefault*/function() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import /*importDefault*/myFunc from "pkg";
-myFunc/*usage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+myFunc/*usage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importDefault", "usage"]);
     });
 }
 
 // goToSourceDefinitionDefaultExport_test.go:73
 pub fn test_go_to_source_empty_names_entry_fallback(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2593,16 +2404,14 @@ export default _default;
 export default { run() {} };
 // @Filename: /home/src/workspaces/project/index.ts
 import /*defaultImport*/pkg from "pkg";
-pkg.run();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+pkg.run();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["defaultImport"]);
     });
 }
 
 // goToSourceDefinitionDefaultExport_test.go:94
 pub fn test_go_to_source_export_assignment_default(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2612,16 +2421,14 @@ export default _default;
 /*target*/export default { run() {} };
 // @Filename: /home/src/workspaces/project/index.ts
 import pkg from "pkg";
-pkg/*usage*/;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+pkg/*usage*/;"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage"]);
     });
 }
 
 // goToSourceDefinitionDefaultExport_test.go:115
 pub fn test_go_to_source_export_assignment(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/legacy/package.json
 { "name": "legacy", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/legacy/index.d.ts
@@ -2632,16 +2439,14 @@ function /*targetFn*/legacyFn() { return "ok"; }
 module.exports = legacyFn;
 // @Filename: /home/src/workspaces/project/index.ts
 import /*importName*/legacyFn from "legacy";
-legacyFn();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+legacyFn();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importName"]);
     });
 }
 
 // goToSourceDefinitionDefaultExport_test.go:137
 pub fn test_go_to_source_export_assignment_expression(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2650,8 +2455,7 @@ export default function createThing(): { value: number };
 export default function createThing() { return { value: 42 }; }
 // @Filename: /home/src/workspaces/project/index.ts
 import /*defaultName*/createThing from "pkg";
-createThing/*callDefault*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+createThing/*callDefault*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["defaultName", "callDefault"]);
     });
 }
@@ -2663,8 +2467,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionDefaultUsageSite_test.go:10
 pub fn test_go_to_source_default_import_usage_site_checker(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2678,16 +2481,14 @@ export default class /*targetWidget*/Widget {
 // @Filename: /home/src/workspaces/project/index.ts
 import Widget from "pkg";
 const w = new Widget/*constructUsage*/("test");
-w./*methodUsage*/render();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+w./*methodUsage*/render();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["constructUsage", "methodUsage"]);
     });
 }
 
 // goToSourceDefinitionDefaultUsageSite_test.go:37
 pub fn test_go_to_source_default_import_re_export_usage(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2696,8 +2497,7 @@ export default function greet(name: string): string;
 export default function /*targetGreet*/greet(name) { return "Hello, " + name; }
 // @Filename: /home/src/workspaces/project/index.ts
 import greet from "pkg";
-greet/*callUsage*/("world");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+greet/*callUsage*/("world");"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["callUsage"]);
     });
 }
@@ -2709,8 +2509,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionEmptyAndMissing_test.go:10
 pub fn test_go_to_source_definition_empty_js_file(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2718,16 +2517,14 @@ export declare function foo(): void;
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.js
 // @Filename: /home/src/workspaces/project/index.ts
 import { foo } from /*specifier*/"pkg";
-foo();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+foo();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["specifier"]);
     });
 }
 
 // goToSourceDefinitionEmptyAndMissing_test.go:29
 pub fn test_go_to_source_default_import_no_default_in_js(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2737,8 +2534,7 @@ export default function create(): void;
 module.exports = { create: internalCreate };
 // @Filename: /home/src/workspaces/project/index.ts
 import /*importDefault*/create from "pkg";
-create();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+create();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importDefault"]);
     });
 }
@@ -2750,8 +2546,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionExtensionlessMappedSource_test.go:13
 pub fn test_go_to_source_definition_extensionless_mapped_source(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /lib/helper.d.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /lib/helper.d.ts
 export declare function helper(): string;
 //# sourceMappingURL=helper.d.ts.map
 // @Filename: /lib/helper.d.ts.map
@@ -2760,8 +2555,7 @@ export declare function helper(): string;
 export function helper(): string { return ""; }
 // @Filename: /index.ts
 import { /*usage*/helper } from "./lib/helper";
-helper();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+helper();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage"]);
     });
 }
@@ -2773,8 +2567,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionImportVariants_test.go:10
 pub fn test_go_to_source_require_call(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @allowJs: true
 // @checkJs: true
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
@@ -2785,16 +2578,14 @@ export declare function helper(): string;
 exports./*target*/helper = function() { return "ok"; };
 // @Filename: /home/src/workspaces/project/index.js
 const { /*importName*/helper } = require("pkg");
-helper/*usage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+helper/*usage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importName", "usage"]);
     });
 }
 
 // goToSourceDefinitionImportVariants_test.go:31
 pub fn test_go_to_source_dynamic_import(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @target: esnext
 // @module: esnext
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
@@ -2807,8 +2598,7 @@ export function /*target*/dynHelper() { return "dynamic"; }
 async function main() {
     const mod = await import("pkg");
     mod./*usage*/dynHelper();
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage"]);
     });
 }
@@ -2820,8 +2610,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionImports_test.go:10
 pub fn test_go_to_source_aliased_import_export(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2832,16 +2621,14 @@ exports./*target*/foo = 1;
 import { foo as /*importAlias*/bar } from "pkg";
 bar;
 // @Filename: /home/src/workspaces/project/reexport.ts
-export { foo as /*reExportAlias*/bar } from "pkg";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export { foo as /*reExportAlias*/bar } from "pkg";"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importAlias", "reExportAlias"]);
     });
 }
 
 // goToSourceDefinitionImports_test.go:30
 pub fn test_go_to_source_aliased_import_specifier(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2850,16 +2637,14 @@ export declare function original(): string;
 export function /*target*/original() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { original as /*aliasedImport*/renamed } from "pkg";
-renamed();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+renamed();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["aliasedImport"]);
     });
 }
 
 // goToSourceDefinitionImports_test.go:49
 pub fn test_go_to_source_call_through_import(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2875,16 +2660,14 @@ export class /*targetWidget*/Widget {
 // @Filename: /home/src/workspaces/project/index.ts
 import { Widget } from "pkg";
 const w = new /*constructorCall*/Widget("test");
-w./*methodCall*/render();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+w./*methodCall*/render();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["constructorCall", "methodCall"]);
     });
 }
 
 // goToSourceDefinitionImports_test.go:76
 pub fn test_go_to_source_callback_param(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/@types/yargs/package.json
 {
     "name": "@types/yargs",
@@ -2906,16 +2689,14 @@ export function command(cmd, cb) { cb({ /*end*/positional: "This is obviously no
 import { command } from "yargs";
 command("foo", yargs => {
     yargs.[|/*start*/positional|]();
-});"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+});"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["start"]);
     });
 }
 
 // goToSourceDefinitionImports_test.go:107
 pub fn test_go_to_source_re_export_names(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2927,16 +2708,14 @@ export function /*targetBar*/bar() { return 42; }
 // @Filename: /home/src/workspaces/project/reexport.ts
 export { /*reExportFoo*/foo, /*reExportBar*/bar } from "pkg";
 // @Filename: /home/src/workspaces/project/index.ts
-import { foo, bar } from [|"pkg"/*moduleSpecifier*/|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { foo, bar } from [|"pkg"/*moduleSpecifier*/|];"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["reExportFoo", "reExportBar", "moduleSpecifier"]);
     });
 }
 
 // goToSourceDefinitionImports_test.go:128
 pub fn test_go_to_source_re_export_module_specifier(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2946,16 +2725,14 @@ export declare function beta(): number;
 export function /*targetAlpha*/alpha() { return "a"; }
 export function /*targetBeta*/beta() { return 2; }
 // @Filename: /home/src/workspaces/project/reexport.ts
-export { alpha, beta } from [|"pkg"/*reExportSpecifier*/|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export { alpha, beta } from [|"pkg"/*reExportSpecifier*/|];"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["reExportSpecifier"]);
     });
 }
 
 // goToSourceDefinitionImports_test.go:147
 pub fn test_go_to_source_re_exported_implementation(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts", "type": "module" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2968,16 +2745,14 @@ export declare function foo(): string;
 export function /*target*/foo() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importName*/foo } from "pkg";
-foo/*start*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+foo/*start*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importName", "start"]);
     });
 }
 
 // goToSourceDefinitionImports_test.go:169
 pub fn test_go_to_source_import_filtered_by_external_declaration(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -2987,16 +2762,14 @@ export function /*target*/helper() {}
 // @Filename: /home/src/workspaces/project/index.ts
 import { helper } from "pkg";
 helper/*usage*/();
-export { helper as /*reExport*/myHelper } from "pkg";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export { helper as /*reExport*/myHelper } from "pkg";"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage", "reExport"]);
     });
 }
 
 // goToSourceDefinitionImports_test.go:188
 pub fn test_go_to_source_dts_re_export(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/impl.d.ts
@@ -3009,16 +2782,14 @@ export { helper } from "./impl";
 export { helper } from "./impl.js";
 // @Filename: /home/src/workspaces/project/index.ts
 import { helper } from "pkg";
-helper/*usage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+helper/*usage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage"]);
     });
 }
 
 // goToSourceDefinitionImports_test.go:212
 pub fn test_go_to_source_barrel_re_export_chain(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/impl.js
@@ -3031,16 +2802,14 @@ export { doWork } from "./impl";
 export { doWork } from "./impl.js";
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importName*/doWork } from "pkg";
-doWork/*callSite*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+doWork/*callSite*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importName", "callSite"]);
     });
 }
 
 // goToSourceDefinitionImports_test.go:236
 pub fn test_go_to_source_cjs_re_export_via_define_property(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3075,8 +2844,7 @@ var /*targetPopulationImpl*/TargetPopulation;
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*namedImport*/greet, /*enumImport*/TargetPopulation } from "pkg";
 greet/*call*/("world");
-TargetPopulation/*enumAccess*/.Team;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+TargetPopulation/*enumAccess*/.Team;"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["namedImport", "enumImport", "call", "enumAccess"]);
     });
 }
@@ -3088,8 +2856,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionMergedDeclarations_test.go:10
 pub fn test_go_to_source_merged_declaration_dedup(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3106,8 +2873,7 @@ export class /*targetUtil*/Util {
 Util.version = "1.0";
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importUtil*/Util } from "pkg";
-const u: /*typeRef*/Util = new Util();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const u: /*typeRef*/Util = new Util();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importUtil", "typeRef"]);
     });
 }
@@ -3119,8 +2885,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionNestedNodeModules_test.go:10
 pub fn test_go_to_source_nested_node_modules(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/outer/package.json
 { "name": "outer", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/outer/index.d.ts
@@ -3135,8 +2900,7 @@ export declare function inner(): string;
 export function /*target*/inner() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importName*/inner } from "outer";
-inner/*usage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+inner/*usage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importName", "usage"]);
     });
 }
@@ -3148,8 +2912,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionNestedScope_test.go:10
 pub fn test_go_to_source_nested_scope_shadowing(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3162,16 +2925,14 @@ function unrelated() {
 }
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importHelper*/helper } from "pkg";
-helper/*usage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+helper/*usage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importHelper", "usage"]);
     });
 }
 
 // goToSourceDefinitionNestedScope_test.go:36
 pub fn test_go_to_source_nested_class_shadowing(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3184,8 +2945,7 @@ function factory() {
 }
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importWidget*/Widget } from "pkg";
-new Widget();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+new Widget();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importWidget"]);
     });
 }
@@ -3197,15 +2957,13 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionNonNodeModulesDts_test.go:10
 pub fn test_go_to_source_find_implementation_non_node_modules(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @declaration: true
 // @Filename: /home/src/workspaces/project/lib/helper.d.ts
 export declare function helper(): string;
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*usage*/helper } from "./lib/helper";
-helper();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+helper();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage"]);
     });
 }
@@ -3217,8 +2975,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionPackageResolution_test.go:10
 pub fn test_go_to_source_at_types_package(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/@types/foo/package.json
 { "name": "@types/foo", "version": "1.0.0" }
 // @Filename: /home/src/workspaces/project/node_modules/@types/foo/index.d.ts
@@ -3229,16 +2986,14 @@ export declare function bar(): string;
 export function /*target*/bar() { return "hello"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { bar } from "foo";
-bar/*usage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+bar/*usage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage"]);
     });
 }
 
 // goToSourceDefinitionPackageResolution_test.go:32
 pub fn test_go_to_source_package_index_dts(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./lib/index.js", "types": "./lib/index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/lib/index.d.ts
@@ -3247,16 +3002,14 @@ export declare function greet(): string;
 export function /*target*/greet() { return "hi"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { greet } from "pkg";
-greet/*usage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+greet/*usage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage"]);
     });
 }
 
 // goToSourceDefinitionPackageResolution_test.go:52
 pub fn test_go_to_source_package_root_then_subpath(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3265,16 +3018,14 @@ export declare function work(): void;
 export function /*target*/work() {}
 // @Filename: /home/src/workspaces/project/index.ts
 import { work } from "pkg";
-work/*usage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+work/*usage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage"]);
     });
 }
 
 // goToSourceDefinitionPackageResolution_test.go:72
 pub fn test_go_to_source_package_root_falls_back_to_subpath(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3283,16 +3034,14 @@ export declare function work(): void;
 export function /*target*/work() {}
 // @Filename: /home/src/workspaces/project/index.ts
 import { work } from "pkg";
-work/*usage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+work/*usage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage"]);
     });
 }
 
 // goToSourceDefinitionPackageResolution_test.go:92
 pub fn test_go_to_source_subpath_not_index(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "types": "./lib/utils.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/lib/utils.d.ts
@@ -3301,8 +3050,7 @@ export declare function util(): void;
 export function /*target*/util() {}
 // @Filename: /home/src/workspaces/project/index.ts
 import { util } from "pkg";
-util/*usage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+util/*usage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage"]);
     });
 }
@@ -3314,8 +3062,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionProperties_test.go:10
 pub fn test_go_to_source_access_expression_property(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3325,32 +3072,28 @@ export const /*targetObj*/obj = { /*targetGreet*/greet(name) { return name; }, /
 // @Filename: /home/src/workspaces/project/index.ts
 import { obj } from "pkg";
 obj./*propAccess*/greet("world");
-obj./*propAccess2*/count;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+obj./*propAccess2*/count;"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["propAccess", "propAccess2"]);
     });
 }
 
 // goToSourceDefinitionProperties_test.go:29
 pub fn test_go_to_source_property_of_alias(t: &T) {
-    t.parallel();
-    let content: &str = r"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/a.js
 export const a = { /*end*/a: 'a' };
 // @Filename: /home/src/workspaces/project/a.d.ts
 export declare const a: { a: string };
 // @Filename: /home/src/workspaces/project/b.ts
 import { a } from './a';
-a.[|a/*start*/|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+a.[|a/*start*/|]", |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["start"]);
     });
 }
 
 // goToSourceDefinitionProperties_test.go:45
 pub fn test_go_to_source_index_signature_property(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3359,16 +3102,14 @@ export declare const config: { readonly [key: string]: string; name: string };
 export const config = { /*targetName*/name: "test" };
 // @Filename: /home/src/workspaces/project/index.ts
 import { config } from "pkg";
-config./*propAccess*/name;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+config./*propAccess*/name;"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["propAccess"]);
     });
 }
 
 // goToSourceDefinitionProperties_test.go:65
 pub fn test_go_to_source_mapped_type_property(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3378,16 +3119,14 @@ export declare const obj: { [K in Keys]: number };
 export const obj = { a: 1, /*target*/b: 2 };
 // @Filename: /home/src/workspaces/project/index.ts
 import { obj } from "pkg";
-obj./*propAccess*/b;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+obj./*propAccess*/b;"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["propAccess"]);
     });
 }
 
 // goToSourceDefinitionProperties_test.go:86
 pub fn test_go_to_source_common_js_alias_prefers_declaration(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3410,8 +3149,7 @@ var TargetPopulation;
 })(TargetPopulation || (exports.TargetPopulation = TargetPopulation = {}));
 // @Filename: /home/src/workspaces/project/index.ts
 import * as tas from "pkg";
-tas./*start*/TargetPopulation.Public;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+tas./*start*/TargetPopulation.Public;"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["start"]);
     });
 }
@@ -3423,8 +3161,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionPropertyAccess_test.go:10
 pub fn test_go_to_source_mapped_type_property_with_match(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3434,16 +3171,14 @@ export const obj = { /*targetA*/a: 1, /*targetB*/b: 2 };
 // @Filename: /home/src/workspaces/project/index.ts
 import { obj } from "pkg";
 obj./*propA*/a;
-obj./*propB*/b;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+obj./*propB*/b;"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["propA", "propB"]);
     });
 }
 
 // goToSourceDefinitionPropertyAccess_test.go:34
 pub fn test_go_to_source_namespace_import_property(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3455,8 +3190,7 @@ export const /*targetValue*/value = 42;
 // @Filename: /home/src/workspaces/project/index.ts
 import * as pkg from "pkg";
 pkg./*helperAccess*/helper();
-pkg./*valueAccess*/value;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+pkg./*valueAccess*/value;"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["helperAccess", "valueAccess"]);
     });
 }
@@ -3468,8 +3202,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionPropertyAccessNoDecl_test.go:10
 pub fn test_go_to_source_property_access_no_declaration(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3480,16 +3213,14 @@ export const config = { /*targetAlpha*/alpha: "a", /*targetBeta*/beta: "b" };
 // @Filename: /home/src/workspaces/project/index.ts
 import { config } from "pkg";
 config./*accessAlpha*/alpha;
-config./*accessBeta*/beta;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+config./*accessBeta*/beta;"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["accessAlpha", "accessBeta"]);
     });
 }
 
 // goToSourceDefinitionPropertyAccessNoDecl_test.go:34
 pub fn test_go_to_source_property_access_deep_chain(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3498,16 +3229,14 @@ export declare const nested: { inner: { value: number } };
 export const nested = { inner: { /*targetValue*/value: 42 } };
 // @Filename: /home/src/workspaces/project/index.ts
 import { nested } from "pkg";
-nested.inner./*accessValue*/value;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+nested.inner./*accessValue*/value;"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["accessValue"]);
     });
 }
 
 // goToSourceDefinitionPropertyAccessNoDecl_test.go:55
 pub fn test_go_to_source_property_access_namespace_import(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3518,8 +3247,7 @@ export const coords = { /*targetX*/x: 10, /*targetY*/y: 20 };
 // @Filename: /home/src/workspaces/project/index.ts
 import { coords } from "pkg";
 coords./*accessX*/x;
-coords./*accessY*/y;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+coords./*accessY*/y;"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["accessX", "accessY"]);
     });
 }
@@ -3531,8 +3259,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionReExportChain_test.go:10
 pub fn test_go_to_source_forwarded_re_export_chain(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3543,8 +3270,7 @@ export { helper } from './impl.js';
 export function /*targetHelper*/helper() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importHelper*/helper } from "pkg";
-helper();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+helper();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importHelper"]);
     });
 }
@@ -3556,8 +3282,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionScopedPackage_test.go:10
 pub fn test_go_to_source_scoped_package(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/@myscope/mylib/package.json
 { "name": "@myscope/mylib", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/@myscope/mylib/index.d.ts
@@ -3566,16 +3291,14 @@ export declare function scopedHelper(): string;
 export function /*target*/scopedHelper() { return "scoped"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importName*/scopedHelper } from "@myscope/mylib";
-scopedHelper/*usage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+scopedHelper/*usage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importName", "usage"]);
     });
 }
 
 // goToSourceDefinitionScopedPackage_test.go:30
 pub fn test_go_to_source_scoped_at_types_package(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/@types/myns__mylib/package.json
 { "name": "@types/myns__mylib", "version": "1.0.0" }
 // @Filename: /home/src/workspaces/project/node_modules/@types/myns__mylib/index.d.ts
@@ -3586,8 +3309,7 @@ export declare function nsHelper(): number;
 export function /*target*/nsHelper() { return 42; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { nsHelper } from "@myns/mylib";
-nsHelper/*usage*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+nsHelper/*usage*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usage"]);
     });
 }
@@ -3599,8 +3321,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionTripleSlash_test.go:10
 pub fn test_go_to_source_reference_types_to_js(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/@types/foo/package.json
 { "name": "@types/foo", "version": "1.0.0" }
 // @Filename: /home/src/workspaces/project/node_modules/@types/foo/index.d.ts
@@ -3612,16 +3333,14 @@ export function /*target*/bar() { return "hello"; }
 // @Filename: /home/src/workspaces/project/index.ts
 /// <reference types="[|foo/*refTypes*/|]" />
 import { bar } from "foo";
-bar();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+bar();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["refTypes"]);
     });
 }
 
 // goToSourceDefinitionTripleSlash_test.go:33
 pub fn test_go_to_source_reference_path_to_dts(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3635,8 +3354,7 @@ export function /*target*/helper() { return "ok"; }
 export function main() {}
 // @Filename: /home/src/workspaces/project/index.ts
 /// <reference path="./node_modules/pkg/[|lib.d.ts/*refPath*/|]" />
-declare function helper(): string;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+declare function helper(): string;"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["refPath"]);
     });
 }
@@ -3648,11 +3366,9 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionTripleSlashUnresolved_test.go:10
 pub fn test_go_to_source_definition_unresolved_triple_slash(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /home/src/workspaces/project/index.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /home/src/workspaces/project/index.ts
 /// <reference /*marker*/path="nonexistent.ts" />
-export {};"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export {};"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["marker"]);
     });
 }
@@ -3664,8 +3380,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionTypeOnlySymbol_test.go:10
 pub fn test_go_to_source_definition_type_only_import_falls_back_to_declaration(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3679,16 +3394,14 @@ export function create(config) { return config; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importConfig*/Config, create } from "pkg";
 const c: Config = { name: "test", value: 1 };
-create(c);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+create(c);"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importConfig"]);
     });
 }
 
 // goToSourceDefinitionTypeOnlySymbol_test.go:37
 pub fn test_go_to_source_definition_type_only_usage_falls_back_to_declaration(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3701,16 +3414,14 @@ export function create(config) { return config; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { Config, create } from "pkg";
 const c: /*usageSite*/Config = { name: "test" };
-create(c);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+create(c);"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["usageSite"]);
     });
 }
 
 // goToSourceDefinitionTypeOnlySymbol_test.go:63
 pub fn test_go_to_source_definition_value_import_still_works(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3719,8 +3430,7 @@ export declare function /*dtsCreate*/create(): void;
 export function /*targetCreate*/create() {}
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importCreate*/create } from "pkg";
-create();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+create();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importCreate"]);
     });
 }
@@ -3732,8 +3442,7 @@ use crate::tests::prelude::*;
 
 // goToSourceDefinitionTypes_test.go:10
 pub fn test_go_to_source_fallbacks_to_definition_for_interface(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/index.d.ts
@@ -3744,16 +3453,14 @@ export interface /*target*/Config {
 exports.makeConfig = () => ({ enabled: true });
 // @Filename: /home/src/workspaces/project/index.ts
 import type { /*importName*/Config } from "pkg";
-let value: /*typeRef*/Config;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+let value: /*typeRef*/Config;"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importName", "typeRef"]);
     });
 }
 
 // goToSourceDefinitionTypes_test.go:30
 pub fn test_go_to_source_type_only_symbol_fallback(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
 // @Filename: /home/src/workspaces/project/node_modules/pkg/types.d.ts
@@ -3769,16 +3476,14 @@ export function makeConfig() { return { enabled: true }; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { Config, makeConfig } from "pkg";
 let c: /*typeRef*/Config;
-makeConfig/*callRef*/();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+makeConfig/*callRef*/();"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["typeRef", "callRef"]);
     });
 }
 
 // goToSourceDefinitionTypes_test.go:58
 pub fn test_go_to_source_forwarded_non_concrete_merge(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @allowJs: true
 // @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 { "name": "pkg", "main": "./index.js", "types": "./index.d.ts" }
@@ -3792,8 +3497,7 @@ export { Config } from "./types.js";
 // Config is a type, no runtime value
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importName*/Config } from "pkg";
-let c: Config;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+let c: Config;"#, |f, t| {
         f.verify_baseline_go_to_source_definition(t, &["importName"]);
     });
 }
@@ -3805,15 +3509,13 @@ use crate::tests::prelude::*;
 
 // goToTypeDefinition_test.go:10
 pub fn test_go_to_type_definition(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: goToTypeDefinition_Definition.ts
+    fourslash::run_generated_test(t, r"// @Filename: goToTypeDefinition_Definition.ts
 class /*definition*/C {
     p;
 }
 var c: C;
 // @Filename: goToTypeDefinition_Consumption.ts
-/*reference*/c = undefined;";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*reference*/c = undefined;", |f, t| {
         f.verify_baseline_go_to_type_definition(t, &["reference"]);
     });
 }
@@ -3825,8 +3527,7 @@ use crate::tests::prelude::*;
 
 // goToTypeDefinition2_test.go:10
 pub fn test_go_to_type_definition2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: goToTypeDefinition2_Definition.ts
+    fourslash::run_generated_test(t, r"// @Filename: goToTypeDefinition2_Definition.ts
 interface /*definition*/I1 {
     p;
 }
@@ -3836,8 +3537,7 @@ interface I2 {
 }
 // @Filename: goToTypeDefinition2_Consumption.ts
 var i2: I2;
-i2.prop/*reference*/erty;";
-    fourslash::run_generated_test(t, content, |f, t| {
+i2.prop/*reference*/erty;", |f, t| {
         f.verify_baseline_go_to_type_definition(t, &["reference"]);
     });
 }

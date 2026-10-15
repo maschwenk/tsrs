@@ -5,8 +5,7 @@ use crate::tests::prelude::*;
 
 // pathCompletionsTypesVersionsLocal_test.go:11
 pub fn test_path_completions_types_versions_local(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /package.json
+    fourslash::run_generated_test(t, r#"// @Filename: /package.json
 {
   "typesVersions": {
     "*": {
@@ -17,8 +16,7 @@ pub fn test_path_completions_types_versions_local(t: &T) {
 // @Filename: /src/add.ts
 export function add(a: number, b: number) { return a + b; }
 // @Filename: /src/index.ts
-import { add } from ".//**/";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { add } from ".//**/";"#, |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("add".to_string())]), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -30,8 +28,7 @@ use crate::tests::prelude::*;
 
 // pathCompletionsTypesVersionsWildcard1_test.go:11
 pub fn test_path_completions_types_versions_wildcard1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: commonjs
+    fourslash::run_generated_test(t, r#"// @module: commonjs
 // @Filename: /node_modules/foo/package.json
 {
   "types": "index.d.ts",
@@ -50,8 +47,7 @@ export const blah = 0;
 // @Filename: /node_modules/foo/dist/subfolder/one.d.ts
 export const one = 0;
 // @Filename: /a.ts
-import { } from "foo//**/";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { } from "foo//**/";"#, |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("blah".to_string()), Any::String("index".to_string()), Any::String("subfolder".to_string())]), ..Default::default() }), ..Default::default() }));
         f.insert(t, "subfolder/");
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("one".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -65,8 +61,7 @@ use crate::tests::prelude::*;
 
 // pathCompletionsTypesVersionsWildcard2_test.go:11
 pub fn test_path_completions_types_versions_wildcard2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: commonjs
+    fourslash::run_generated_test(t, r#"// @module: commonjs
 // @resolveJsonModule: false
 // @Filename: /node_modules/foo/package.json
 {
@@ -86,8 +81,7 @@ export const blah = 0;
 // @Filename: /node_modules/foo/ts-old/subfolder/one.d.ts
 export const one = 0;
 // @Filename: /a.ts
-import { } from "foo//**/";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { } from "foo//**/";"#, |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("nope".to_string()), Any::String("ts-old".to_string())]), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -99,8 +93,7 @@ use crate::tests::prelude::*;
 
 // pathCompletionsTypesVersionsWildcard3_test.go:11
 pub fn test_path_completions_types_versions_wildcard3(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: commonjs
+    fourslash::run_generated_test(t, r#"// @module: commonjs
 // @resolveJsonModule: false
 // @Filename: /node_modules/foo/package.json
 {
@@ -120,8 +113,7 @@ export const blah = 0;
 // @Filename: /node_modules/foo/dist/subfolder/one.d.ts
 export const one = 0;
 // @Filename: /a.ts
-import { } from "foo//**/";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { } from "foo//**/";"#, |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("browser".to_string()), Any::String("nope".to_string()), Any::String("dist".to_string())]), ..Default::default() }), ..Default::default() }));
         f.insert(t, "browser/");
         f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("blah".to_string()), Any::String("index".to_string()), Any::String("subfolder".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -137,8 +129,7 @@ use crate::tests::prelude::*;
 
 // pathCompletionsTypesVersionsWildcard4_test.go:11
 pub fn test_path_completions_types_versions_wildcard4(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: commonjs
+    fourslash::run_generated_test(t, r#"// @module: commonjs
 // @resolveJsonModule: false
 // @Filename: /node_modules/foo/package.json
 {
@@ -158,8 +149,7 @@ export const blah = 0;
 // @Filename: /node_modules/foo/cjs/components/subfolder/one.d.ts
 export const one = 0;
 // @Filename: /a.ts
-import { } from "foo//**/";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { } from "foo//**/";"#, |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("component-blah".to_string()), Any::String("component-index".to_string()), Any::String("component-subfolder".to_string()), Any::String("nope".to_string()), Any::String("cjs".to_string())]), ..Default::default() }), ..Default::default() }));
         f.insert(t, "component-subfolder/");
         f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("one".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -173,8 +163,7 @@ use crate::tests::prelude::*;
 
 // pathCompletionsTypesVersionsWildcard5_test.go:11
 pub fn test_path_completions_types_versions_wildcard5(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: commonjs
+    fourslash::run_generated_test(t, r#"// @module: commonjs
 // @Filename: /node_modules/foo/package.json
 {
   "types": "index.d.ts",
@@ -198,8 +187,7 @@ export const foo = 0;
 // @Filename: /node_modules/foo/dist/subfolder/one.d.ts
 export const one = 0;
 // @Filename: /a.ts
-import { } from "foo//**/";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { } from "foo//**/";"#, |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("blah".to_string()), Any::String("index".to_string()), Any::String("foo".to_string()), Any::String("subfolder".to_string()), Any::String("bar".to_string()), Any::String("exact-match".to_string())]), ..Default::default() }), ..Default::default() }));
         f.insert(t, "foo/");
         f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("blah".to_string()), Any::String("index".to_string()), Any::String("foo".to_string()), Any::String("subfolder".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -215,8 +203,7 @@ use crate::tests::prelude::*;
 
 // pathCompletionsTypesVersionsWildcard6_test.go:11
 pub fn test_path_completions_types_versions_wildcard6(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: commonjs
+    fourslash::run_generated_test(t, r#"// @module: commonjs
 // @Filename: /node_modules/foo/package.json
 {
   "types": "index.d.ts",
@@ -240,8 +227,7 @@ export const foo = 0;
 // @Filename: /node_modules/foo/dist/subfolder/one.d.ts
 export const one = 0;
 // @Filename: /a.ts
-import { } from "foo//**/";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { } from "foo//**/";"#, |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("bar".to_string()), Any::String("exact-match".to_string()), Any::String("foo".to_string()), Any::String("blah".to_string()), Any::String("index".to_string()), Any::String("subfolder".to_string())]), ..Default::default() }), ..Default::default() }));
         f.insert(t, "foo/");
         f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("blah".to_string()), Any::String("index".to_string()), Any::String("foo".to_string()), Any::String("subfolder".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -257,29 +243,25 @@ use crate::tests::prelude::*;
 
 // privatePropertyOfUndefinedThis_test.go:10
 pub fn test_private_property_of_undefined_this1(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 // @strict: true
 this.#a = {};
 export {};
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_baseline_non_suggestion_diagnostics(t);
     });
 }
 
 // privatePropertyOfUndefinedThis_test.go:23
 pub fn test_private_property_of_undefined_this2(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 // @strict: true
 export class C {
     wat(this: any): boolean {
         return this.#prop = {};
     }
 }
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_baseline_non_suggestion_diagnostics(t);
     });
 }
@@ -291,8 +273,7 @@ use crate::tests::prelude::*;
 
 // processInvalidSyntax1_test.go:10
 pub fn test_process_invalid_syntax1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: decl.js
 var obj = {};
 // @Filename: unicode1.js
@@ -304,8 +285,7 @@ obj¬
 // @Filename: forof.js
 for (obj/**/.prop of arr) {
 
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -317,8 +297,7 @@ use crate::tests::prelude::*;
 
 // promiseTyping1_test.go:10
 pub fn test_promise_typing1(t: &T) {
-    t.parallel();
-    let content: &str = r"interface IPromise<T> {
+    fourslash::run_generated_test(t, r"interface IPromise<T> {
     then<U>(success: (value: T) => IPromise<U>, error?: (error: any) => IPromise<U>, progress?: (progress: any) => void ): IPromise<U>;
     then<U>(success: (value: T) => IPromise<U>, error?: (error: any) => U, progress?: (progress: any) => void ): IPromise<U>;
     then<U>(success: (value: T) => U, error?: (error: any) => IPromise<U>, progress?: (progress: any) => void ): IPromise<U>;
@@ -330,8 +309,7 @@ var p/*1*/2 = p1.then(function (x/*2*/x) {
     return xx;
 });
 p2.then(function (x/*3*/x) {
-} );";
-    fourslash::run_generated_test(t, content, |f, t| {
+} );", |f, t| {
         f.verify_quick_info_at(t, "1", "var p2: IPromise<string>", "");
         f.verify_quick_info_at(t, "2", "(parameter) xx: string", "");
         f.verify_quick_info_at(t, "3", "(parameter) xx: string", "");
@@ -345,8 +323,7 @@ use crate::tests::prelude::*;
 
 // promiseTyping2_test.go:10
 pub fn test_promise_typing2(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface IPromise<T> {
+    fourslash::run_generated_test(t, r#"interface IPromise<T> {
     then<U>(success?: (value: T) => IPromise<U>, error?: (error: any) => IPromise<U>, progress?: (progress: any) => void ): IPromise<U>;
     then<U>(success?: (value: T) => IPromise<U>, error?: (error: any) => U, progress?: (progress: any) => void ): IPromise<U>;
     then<U>(success?: (value: T) => U, error?: (error: any) => IPromise<U>, progress?: (progress: any) => void ): IPromise<U>;
@@ -358,8 +335,7 @@ p/*1*/1.then(function (x/*2*/x) { });
 var p/*3*/2 = p1.then(function (x/*4*/x) { return "hello"; })
 var p/*5*/3 = p2.then(function (x/*6*/x) {
     return x/*7*/x;
-});"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+});"#, |f, t| {
         f.verify_quick_info_at(t, "1", "var p1: IPromise<number>", "");
         f.verify_quick_info_at(t, "2", "(parameter) xx: number", "");
         f.verify_quick_info_at(t, "3", "var p2: IPromise<string>", "");
@@ -377,12 +353,10 @@ use crate::tests::prelude::*;
 
 // propertyDuplicateIdentifierError_test.go:10
 pub fn test_property_duplicate_identifier_error(t: &T) {
-    t.parallel();
-    let content: &str = r"export class C {
+    fourslash::run_generated_test(t, r"export class C {
     x: number;
     get x(): number { return 1; }
-}/*1*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+}/*1*/", |f, t| {
         f.go_to_marker(t, "1");
         f.insert(t, "/n");
     });
@@ -395,16 +369,14 @@ use crate::tests::prelude::*;
 
 // protoPropertyInObjectLiteral_test.go:12
 pub fn test_proto_property_in_object_literal(t: &T) {
-    t.parallel();
-    let content: &str = r#"var o1 = {
+    fourslash::run_generated_test(t, r#"var o1 = {
     "__proto__": 10
 };
 var o2 = {
     __proto__: 10
 };
 o1./*1*/
-o2./*2*/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+o2./*2*/"#, |f, t| {
         f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "__proto__".to_string(), detail: Some(r#"(property) "__proto__": number"#.to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
         f.insert(t, "__proto__ = 10;");
         f.verify_quick_info_at(t, "1", r#"(property) "__proto__": number"#, "");
@@ -421,8 +393,7 @@ use crate::tests::prelude::*;
 
 // protoVarInContextualObjectLiteral_test.go:12
 pub fn test_proto_var_in_contextual_object_literal(t: &T) {
-    t.parallel();
-    let content: &str = r#"var o1 : {
+    fourslash::run_generated_test(t, r#"var o1 : {
     __proto__: number;
     p: number;
 } = {
@@ -459,8 +430,7 @@ var o6: {
     p: number;
 } = {
         /*6*/
-    };"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    };"#, |f, t| {
         f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "__proto__".to_string(), detail: Some("(property) __proto__: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "p".to_string(), detail: Some("(property) p: number".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
         f.insert(t, "__proto__: 10,");
         f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "p".to_string(), detail: Some("(property) p: number".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -493,14 +463,12 @@ use crate::tests::prelude::*;
 
 // protoVarVisibleWithOuterScopeUnderscoreProto_test.go:12
 pub fn test_proto_var_visible_with_outer_scope_underscore_proto(t: &T) {
-    t.parallel();
-    let content: &str = r#"// outer
+    fourslash::run_generated_test(t, r#"// outer
 var ___proto__ = 10;
 function foo() {
     var __proto__ = "hello";
     /**/
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "__proto__".to_string(), detail: Some("(local var) __proto__: string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "___proto__".to_string(), detail: Some("var ___proto__: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
 }
@@ -512,11 +480,9 @@ use crate::tests::prelude::*;
 
 // prototypeProperty_test.go:12
 pub fn test_prototype_property(t: &T) {
-    t.parallel();
-    let content: &str = r"class A {}
+    fourslash::run_generated_test(t, r"class A {}
 A./*1*/prototype;
-A./*2*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+A./*2*/", |f, t| {
         f.verify_quick_info_at(t, "1", "(property) A.prototype: A", "");
         f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "prototype".to_string(), detail: Some("(property) A.prototype: A".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
@@ -529,10 +495,8 @@ use crate::tests::prelude::*;
 
 // publicBreak_test.go:10
 pub fn test_public_break(t: &T) {
-    t.parallel();
-    let content: &str = r"public break;
-/**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"public break;
+/**/", |f, t| {
         f.go_to_marker(t, "");
         f.insert(t, " ");
     });
@@ -545,8 +509,7 @@ use crate::tests::prelude::*;
 
 // qualifiedName_import-declaration-with-variable-entity-names_test.go:12
 pub fn test_qualified_name_import_declaration_with_variable_entity_names(t: &T) {
-    t.parallel();
-    let content: &str = r#"namespace Alpha {
+    fourslash::run_generated_test(t, r#"namespace Alpha {
     export var [|{| "name" : "def" |}x|] = 100;
 }
 
@@ -554,8 +517,7 @@ namespace Beta {
     import p = Alpha.[|{| "name" : "import" |}x|];
 }
 
-var x = Alpha.[|{| "name" : "mem" |}x|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var x = Alpha.[|{| "name" : "mem" |}x|]"#, |f, t| {
         f.go_to_marker(t, "import");
         f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), detail: Some("var Alpha.x: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
         f.verify_baseline_document_highlights(t, None, &[Any::String("import".to_string())]);
@@ -570,11 +532,9 @@ use crate::tests::prelude::*;
 
 // qualifyModuleTypeNames_test.go:10
 pub fn test_qualify_module_type_names(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace m { export class c { } };
+    fourslash::run_generated_test(t, r"namespace m { export class c { } };
 function x(arg: m.c) { return arg; }
-x(/**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+x(/**/", |f, t| {
         f.go_to_marker(t, "");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "x(arg: m.c): m.c".to_string(), ..Default::default() });
     });
@@ -587,8 +547,7 @@ use crate::tests::prelude::*;
 
 // quickInfoAlias_test.go:10
 pub fn test_quick_info_alias(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 /**
  * Doc
  * @tag Tag text
@@ -609,8 +568,7 @@ import {
      */
     x
 } from "./a";
-x/*c*/;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+x/*c*/;"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -664,29 +622,24 @@ use crate::tests::prelude::*;
 
 // quickInfoAmbientModule_test.go:10
 pub fn test_quick_info_ambient_module(t: &T) {
-    t.parallel();
-    let content: &str = r#"declare module "*.css"/*1*/;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"declare module "*.css"/*1*/;"#, |f, t| {
         f.verify_quick_info_at(t, "1", r#"module "*.css""#, "");
     });
 }
 
 // quickInfoAmbientModule_test.go:21
 pub fn test_quick_info_pattern_ambient_module_with_import_attributes(t: &T) {
-    t.parallel();
-    let content: &str = r#"declare module "*.css"/*1*/ with { type: "css" } {
+    fourslash::run_generated_test(t, r#"declare module "*.css"/*1*/ with { type: "css" } {
     const styles: { readonly [className: string]: string };
     export default styles;
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_hover_with_verbosity(t, go::map_of([("1".to_string(), vec![0, 1])]));
     });
 }
 
 // quickInfoAmbientModule_test.go:35
 pub fn test_quick_info_merged_pattern_ambient_module_with_import_attributes(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /first.d.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /first.d.ts
 declare module "*.asset"/*css*/ with { type: "css" } {
     export const cssOnly: "css";
 }
@@ -700,8 +653,7 @@ declare module "*.asset" with { type: "css" } {
 }
 declare module "*.asset" with { type: "text" } {
     export const textAlso: "text-also";
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_hover_with_verbosity(t, go::map_of([("css".to_string(), vec![0, 1]), ("text".to_string(), vec![0, 1])]));
     });
 }
@@ -713,8 +665,7 @@ use crate::tests::prelude::*;
 
 // quickInfoAssertionNodeNotReusedWhenTypeNotEquivalent1_test.go:10
 pub fn test_quick_info_assertion_node_not_reused_when_type_not_equivalent1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @strict: true
+    fourslash::run_generated_test(t, r#"// @strict: true
 type Wrapper<T> = {
   _type: T;
 };
@@ -740,8 +691,7 @@ type Unwrap<T extends Wrapper<any>> = T["_type"] extends Record<
   ? { [Key in keyof T["_type"]]: Unwrap<T["_type"][Key]> }
   : T["_type"];
 
-type Test/*1*/ = Unwrap<typeof value>;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+type Test/*1*/ = Unwrap<typeof value>;"#, |f, t| {
         f.verify_quick_info_at(t, "1", r#"type Test = {
     prop1: "hello";
 }"#, "");
@@ -755,8 +705,7 @@ use crate::tests::prelude::*;
 
 // quickInfoAssignToExistingClass_test.go:10
 pub fn test_quick_info_assign_to_existing_class(t: &T) {
-    t.parallel();
-    let content: &str = r#"namespace Test {
+    fourslash::run_generated_test(t, r#"namespace Test {
     class Mocked {
         myProp: string;
     }
@@ -767,8 +716,7 @@ pub fn test_quick_info_assign_to_existing_class(t: &T) {
             };
         }
     }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.go_to_marker(t, "");
         f.verify_quick_info_exists(t);
     });
@@ -781,8 +729,7 @@ use crate::tests::prelude::*;
 
 // quickInfoAtPropWithAmbientDeclarationInJs_test.go:10
 pub fn test_quick_info_at_prop_with_ambient_declaration_in_js(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @filename: /a.js
 class C {
     constructor() {
@@ -792,8 +739,7 @@ class C {
     method() {
         this.prop.foo/**/
     }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -805,14 +751,12 @@ use crate::tests::prelude::*;
 
 // quickInfoBindingPatternInJsdocNoCrash1_test.go:10
 pub fn test_quick_info_binding_pattern_in_jsdoc_no_crash1(t: &T) {
-    t.parallel();
-    let content: &str = r"/** @type {({ /*1*/data: any }?) => { data: string[] }} */
+    fourslash::run_generated_test(t, r"/** @type {({ /*1*/data: any }?) => { data: string[] }} */
 function useQuery({ data }): { data: string[] } {
   return {
     data,
   };
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_quick_info_at(t, "1", "", "");
     });
 }
@@ -824,15 +768,13 @@ use crate::tests::prelude::*;
 
 // quickInfoCallProperty_test.go:10
 pub fn test_quick_info_call_property(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I {
+    fourslash::run_generated_test(t, r"interface I {
     /** Doc */
     m: () => void;
 }
 function f(x: I): void {
     x./**/m();
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_quick_info_at(t, "", "(property) I.m: () => void", "Doc");
     });
 }
@@ -844,8 +786,7 @@ use crate::tests::prelude::*;
 
 // quickInfoCanBeTruncated_test.go:10
 pub fn test_quick_info_can_be_truncated(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @stableTypeOrdering: true
+    fourslash::run_generated_test(t, r#"// @stableTypeOrdering: true
 // @noLib: true
 interface Foo {
   _0: 0;
@@ -1356,8 +1297,7 @@ function f<T extends A>(s: T, x: Exclude<A, T>, y: string) {}
 f("_499", /*3*/);
 type Decomposed/*4*/ = {[K in A]: Foo[K]}
 type LongTuple/*5*/ = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17.18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70];
-type DeeplyMapped/*6*/ = {[K in keyof Foo]: {[K2 in keyof Foo]: [K, K2, Foo[K], Foo[K2]]}}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+type DeeplyMapped/*6*/ = {[K in keyof Foo]: {[K2 in keyof Foo]: [K, K2, Foo[K], Foo[K2]]}}"#, |f, t| {
         f.go_to_marker(t, "1");
         f.verify_quick_info_is(t, "type A = keyof Foo", "");
         f.go_to_marker(t, "2");
@@ -1479,9 +1419,7 @@ use crate::tests::prelude::*;
 
 // quickInfoCatch_test.go:10
 pub fn test_quick_catch_info(t: &T) {
-    t.parallel();
-    let content: &str = "try {} catch(/*1*/error) {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "try {} catch(/*1*/error) {}", |f, t| {
         f.verify_quick_info_at(t, "1", "var error: unknown", "");
     });
 }
@@ -1493,10 +1431,8 @@ use crate::tests::prelude::*;
 
 // quickInfoCircularInstantiationExpression_test.go:10
 pub fn test_quick_info_circular_instantiation_expression(t: &T) {
-    t.parallel();
-    let content: &str = r#"declare function foo<T>(t: T): typeof foo<T>;
-/**/foo("");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"declare function foo<T>(t: T): typeof foo<T>;
+/**/foo("");"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -1508,10 +1444,8 @@ use crate::tests::prelude::*;
 
 // quickInfoClassKeyword_test.go:10
 pub fn test_quick_info_class_keyword(t: &T) {
-    t.parallel();
-    let content: &str = r"[1].forEach(cla/*1*/ss {});
-[1].forEach(cla/*2*/ss OK{});";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"[1].forEach(cla/*1*/ss {});
+[1].forEach(cla/*2*/ss OK{});", |f, t| {
         f.verify_quick_info_at(t, "1", "(local class) (Anonymous class)", "");
         f.verify_quick_info_at(t, "2", "(local class) OK", "");
     });
@@ -1524,16 +1458,14 @@ use crate::tests::prelude::*;
 
 // quickInfoCloduleWithRecursiveReference_test.go:10
 pub fn test_quick_info_clodule_with_recursive_reference(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace M {
+    fourslash::run_generated_test(t, r"namespace M {
     export class C {
         foo() { }
     }
     export namespace C {
     export var /**/C = M.C
   }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_quick_info_at(t, "", "var M.C.C: typeof M.C", "");
         f.verify_no_errors(t);
     });
@@ -1546,8 +1478,7 @@ use crate::tests::prelude::*;
 
 // quickInfoCommentsClass_test.go:10
 pub fn test_quick_info_comments_class(t: &T) {
-    t.parallel();
-    let content: &str = r#"/** This is class c2 without constructor*/
+    fourslash::run_generated_test(t, r#"/** This is class c2 without constructor*/
 class c/*1*/2 {
 }
 var i/*2*/2 = new c/*28*/2();
@@ -1603,8 +1534,7 @@ namespace m {
         }
     }
 }
-var myVar = new m.m2.c/*33*/1();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var myVar = new m.m2.c/*33*/1();"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -1616,8 +1546,7 @@ use crate::tests::prelude::*;
 
 // quickInfoCommentsClassMembers_test.go:10
 pub fn test_quick_info_comments_class_members(t: &T) {
-    t.parallel();
-    let content: &str = r"/** This is comment for c1*/
+    fourslash::run_generated_test(t, r"/** This is comment for c1*/
 class c/*1*/1 {
     /** p1 is property of c1*/
     public p/*2*/1: number;
@@ -1747,8 +1676,7 @@ class cWithConstructorProperty {
         var b/*118*/bbb = 10;
         th/*116*/is./*114*/a = /*115*/a + 2 + bb/*117*/bb;
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -1760,8 +1688,7 @@ use crate::tests::prelude::*;
 
 // quickInfoCommentsCommentParsing_test.go:10
 pub fn test_quick_info_comments_comment_parsing(t: &T) {
-    t.parallel();
-    let content: &str = r#"/// This is simple /// comments
+    fourslash::run_generated_test(t, r#"/// This is simple /// comments
 function simple() {
 }
 
@@ -1961,8 +1888,7 @@ function jsDocCommentAlignmentTest3(/*47aq*/a: string, /*48aq*/b, /*49aq*/c) {
 jsDocComme/*47q*/ntAlignmentTest3("hello",1, 2);
 /**/
 class NoQuic/*50q*/kInfoClass {
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -1974,8 +1900,7 @@ use crate::tests::prelude::*;
 
 // quickInfoCommentsFunctionDeclaration_test.go:10
 pub fn test_quick_info_comments_function_declaration(t: &T) {
-    t.parallel();
-    let content: &str = r#"/** This comment should appear for foo*/
+    fourslash::run_generated_test(t, r#"/** This comment should appear for foo*/
 function f/*1*/oo() {
 }
 f/*2*/oo();
@@ -1991,8 +1916,7 @@ fooWithParam/*8*/eters("a",10);
 * @param a a string
 */
 declare function fn(a: string);
-fn("hello");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+fn("hello");"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2041,8 +1965,7 @@ use crate::tests::prelude::*;
 
 // quickInfoCommentsFunctionExpression_test.go:10
 pub fn test_quick_info_comments_function_expression(t: &T) {
-    t.parallel();
-    let content: &str = r#"/** lambdaFoo var comment*/
+    fourslash::run_generated_test(t, r#"/** lambdaFoo var comment*/
 var lamb/*1*/daFoo = /** this is lambda comment*/ (/**param a*/a: number, /**param b*/b: number) => a + b;
 var lambddaN/*3*/oVarComment = /** this is lambda multiplication*/ (/**param a*/a: number, /**param b*/b: number) => a * b;
 lambdaFoo(10, 20);
@@ -2067,8 +1990,7 @@ var assi/*14*/gned = /**
                 */function(/** On parameter */s: string) {
   return s.length;
 }
-assig/*16*/ned("hey");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+assig/*16*/ned("hey");"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2080,9 +2002,7 @@ use crate::tests::prelude::*;
 
 // quickInfoConstAssertion_test.go:10
 pub fn test_quick_info_const_assertion(t: &T) {
-    t.parallel();
-    let content: &str = "const foo = 42 as /*1*/const";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "const foo = 42 as /*1*/const", |f, t| {
         f.verify_quick_info_at(t, "1", "type const = 42", "");
     });
 }
@@ -2094,8 +2014,7 @@ use crate::tests::prelude::*;
 
 // quickInfoContextualObjectMethodJSDoc_test.go:10
 pub fn test_quick_info_contextual_object_method_jsdoc(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 interface I {
     /**
      * Description of func.
@@ -2109,8 +2028,7 @@ class Foo {
 }
 
 new Foo({ func/*1*/() {} })
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_quick_info_at(t, "1", "(method) I.func(arg: number): void", r"Description of func.
 
 *@param* `arg` — Description of arg.");
@@ -2124,8 +2042,7 @@ use crate::tests::prelude::*;
 
 // quickInfoContextualTyping_test.go:10
 pub fn test_quick_info_contextual_typing(t: &T) {
-    t.parallel();
-    let content: &str = r"// DEFAULT INTERFACES
+    fourslash::run_generated_test(t, r"// DEFAULT INTERFACES
 interface IFoo {
     n: number;
     s: string;
@@ -2316,8 +2233,7 @@ Point.prototype = {
     /*115*/add: function (/*116*/dx, /*117*/dy) {
         return new Point(this.x + dx, this.y + dy);
     }
-};";
-    fourslash::run_generated_test(t, content, |f, t| {
+};", |f, t| {
         f.verify_quick_info_at(t, "1", "(property) C1T5.foo: (i: number, s: string) => number", "");
         f.verify_quick_info_at(t, "2", "(parameter) i: number", "");
         f.verify_quick_info_at(t, "3", "(parameter) i: number", "");
@@ -2441,12 +2357,10 @@ use crate::tests::prelude::*;
 
 // quickInfoContextuallyTypedSignatureOptionalParameterFromIntersection1_test.go:10
 pub fn test_quick_info_contextually_typed_signature_optional_parameter_from_intersection1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @strict: true
+    fourslash::run_generated_test(t, r"// @strict: true
 const optionals: ((a?: number) => unknown) & ((b?: string) => unknown) = (
   arg,
-) =/**/> {};";
-    fourslash::run_generated_test(t, content, |f, t| {
+) =/**/> {};", |f, t| {
         f.verify_quick_info_at(t, "", "function(arg: string | number | undefined): void", "");
     });
 }
@@ -2458,9 +2372,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDefaultTypeParameter1_test.go:10
 pub fn test_quick_info_default_type_parameter1(t: &T) {
-    t.parallel();
-    let content: &str = "type /*1*/X</*2*/T = string> = T";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "type /*1*/X</*2*/T = string> = T", |f, t| {
         f.verify_quick_info_at(t, "1", "type X<T = string> = T", "");
         f.verify_quick_info_at(t, "2", "(type parameter) T in type X<T = string>", "");
     });
@@ -2473,16 +2385,14 @@ use crate::tests::prelude::*;
 
 // quickInfoDestructuredBinding_test.go:10
 pub fn test_quick_info_destructured_binding(t: &T) {
-    t.parallel();
-    let content: &str = r#"
+    fourslash::run_generated_test(t, r#"
 function f({ /*1*/x }: { x: number }) {}
 function g([/*2*/y]: number[]) {}
 function h({ a: { /*3*/b } }: { a: { b: string } }) {}
 const { /*4*/c } = { c: 42 };
 let { /*5*/d } = { d: "hello" };
 var { /*6*/e } = { e: true };
-"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+"#, |f, t| {
         f.verify_quick_info_at(t, "1", "(parameter) x: number", "");
         f.verify_quick_info_at(t, "2", "(parameter) y: number", "");
         f.verify_quick_info_at(t, "3", "(parameter) b: string", "");
@@ -2499,12 +2409,10 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsArrowFunctionExpression_test.go:10
 pub fn test_quick_info_display_parts_arrow_function_expression(t: &T) {
-    t.parallel();
-    let content: &str = r"var /*1*/x = /*5*/a => 10;
+    fourslash::run_generated_test(t, r"var /*1*/x = /*5*/a => 10;
 var /*2*/y = (/*6*/a, /*7*/b) => 10;
 var /*3*/z = (/*8*/a: number) => 10;
-var /*4*/z2 = () => 10;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*4*/z2 = () => 10;", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2516,12 +2424,10 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsClass_test.go:10
 pub fn test_quick_info_display_parts_class(t: &T) {
-    t.parallel();
-    let content: &str = r"class /*1*/c {
+    fourslash::run_generated_test(t, r"class /*1*/c {
 }
 var /*2*/cInstance = new /*3*/c();
-var /*4*/cVal = /*5*/c;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*4*/cVal = /*5*/c;", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2533,8 +2439,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsClassAccessors_test.go:10
 pub fn test_quick_info_display_parts_class_accessors(t: &T) {
-    t.parallel();
-    let content: &str = r#"class c {
+    fourslash::run_generated_test(t, r#"class c {
     public get /*1*/publicProperty() { return ""; }
     public set /*1s*/publicProperty(x: string) { }
     private get /*2*/privateProperty() { return ""; }
@@ -2568,8 +2473,7 @@ var y: string;
 y = /*9*/cInstance./*10*/publicProperty;
 y = /*11*/c./*12*/staticProperty;
 /*9s*/cInstance./*10s*/publicProperty = y;
-/*11s*/c./*12s*/staticProperty = y;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*11s*/c./*12s*/staticProperty = y;"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2581,8 +2485,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsClassAutoAccessors_test.go:10
 pub fn test_quick_info_display_parts_class_auto_accessors(t: &T) {
-    t.parallel();
-    let content: &str = r#"class c {
+    fourslash::run_generated_test(t, r#"class c {
     public accessor /*1a*/publicProperty: string;
     private accessor /*2a*/privateProperty: string;
     protected accessor /*3a*/protectedProperty: string;
@@ -2610,8 +2513,7 @@ var y: string;
 y = /*7g*/cInstance./*8g*/publicProperty;
 y = /*9g*/c./*10g*/staticProperty;
 /*7s*/cInstance./*8s*/publicProperty = y;
-/*9s*/c./*10s*/staticProperty = y;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*9s*/c./*10s*/staticProperty = y;"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2623,8 +2525,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsClassConstructor_test.go:10
 pub fn test_quick_info_display_parts_class_constructor(t: &T) {
-    t.parallel();
-    let content: &str = r#"class c {
+    fourslash::run_generated_test(t, r#"class c {
     /*1*/constructor() {
     }
 }
@@ -2649,8 +2550,7 @@ class cWithMultipleOverloads {
 var /*19*/cWithMultipleOverloadsInstance = new /*20*/cWithMultipleOverloads("hello");
 var /*21*/cWithMultipleOverloadsInstance2 = new /*22*/cWithMultipleOverloads(10);
 var /*23*/cWithMultipleOverloadsInstance3 = new /*24*/cWithMultipleOverloads(true);
-var /*25*/cWithMultipleOverloadsVal = /*26*/cWithMultipleOverloads;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*25*/cWithMultipleOverloadsVal = /*26*/cWithMultipleOverloads;"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2662,10 +2562,8 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsClassDefaultAnonymous_test.go:10
 pub fn test_quick_info_display_parts_class_default_anonymous(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*/export /*2*/default /*3*/class /*4*/ {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"/*1*/export /*2*/default /*3*/class /*4*/ {
+}", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2677,10 +2575,8 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsClassDefaultNamed_test.go:10
 pub fn test_quick_info_display_parts_class_default_named(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*/export /*2*/default /*3*/class /*4*/C /*5*/ {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"/*1*/export /*2*/default /*3*/class /*4*/C /*5*/ {
+}", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2692,10 +2588,8 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsClassIncomplete_test.go:10
 pub fn test_quick_info_display_parts_class_incomplete(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*/class /*2*/ {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"/*1*/class /*2*/ {
+}", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2707,8 +2601,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsClassMethod_test.go:10
 pub fn test_quick_info_display_parts_class_method(t: &T) {
-    t.parallel();
-    let content: &str = r"class c {
+    fourslash::run_generated_test(t, r"class c {
     public /*1*/publicMethod() { }
     private /*2*/privateMethod() { }
     protected /*21*/protectedMethod() { }
@@ -2726,8 +2619,7 @@ pub fn test_quick_info_display_parts_class_method(t: &T) {
 }
 var cInstance = new c();
 /*9*/cInstance./*10*/publicMethod();
-/*11*/c./*12*/staticMethod();";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*11*/c./*12*/staticMethod();", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2778,8 +2670,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsClassProperty_test.go:10
 pub fn test_quick_info_display_parts_class_property(t: &T) {
-    t.parallel();
-    let content: &str = r"class c {
+    fourslash::run_generated_test(t, r"class c {
     public /*1*/publicProperty: string;
     private /*2*/privateProperty: string;
     protected /*21*/protectedProperty: string;
@@ -2797,8 +2688,7 @@ pub fn test_quick_info_display_parts_class_property(t: &T) {
 }
 var cInstance = new c();
 /*9*/cInstance./*10*/publicProperty;
-/*11*/c./*12*/staticProperty;";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*11*/c./*12*/staticProperty;", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2849,8 +2739,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsConst_test.go:10
 pub fn test_quick_info_display_parts_const(t: &T) {
-    t.parallel();
-    let content: &str = r#"const /*1*/a = 10;
+    fourslash::run_generated_test(t, r#"const /*1*/a = 10;
 function foo() {
     const /*2*/b = /*3*/a;
     if (b) {
@@ -2870,8 +2759,7 @@ const /*9*/g = /*10*/f;
 const /*12*/h: { (a: string): number; (a: number): string; } = a => a;
 const /*13*/i = /*14*/h;
 /*15*/h(10);
-/*16*/h("hello");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*16*/h("hello");"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2883,8 +2771,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsEnum1_test.go:10
 pub fn test_quick_info_display_parts_enum1(t: &T) {
-    t.parallel();
-    let content: &str = r"enum /*1*/E {
+    fourslash::run_generated_test(t, r"enum /*1*/E {
     /*2*/e1,
     /*3*/e2 = 10,
     /*4*/e3
@@ -2901,8 +2788,7 @@ const enum /*16*/constE {
 var /*20*/eInstance1: /*21*/constE;
 /*22*/eInstance1 = /*23*/constE./*24*/e1;
 /*25*/eInstance1 = /*26*/constE./*27*/e2;
-/*28*/eInstance1 = /*29*/constE./*30*/e3;";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*28*/eInstance1 = /*29*/constE./*30*/e3;", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2914,8 +2800,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsEnum2_test.go:10
 pub fn test_quick_info_display_parts_enum2(t: &T) {
-    t.parallel();
-    let content: &str = r#"enum /*1*/E {
+    fourslash::run_generated_test(t, r#"enum /*1*/E {
     /*2*/"e1",
     /*3*/'e2' = 10,
     /*4*/"e3"
@@ -2932,8 +2817,7 @@ const enum /*16*/constE {
 var /*20*/eInstance1: /*21*/constE;
 /*22*/eInstance1 = /*23*/constE./*24*/e1;
 /*25*/eInstance1 = /*26*/constE./*27*/e2;
-/*28*/eInstance1 = /*29*/constE./*30*/e3;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*28*/eInstance1 = /*29*/constE./*30*/e3;"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2945,8 +2829,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsEnum3_test.go:10
 pub fn test_quick_info_display_parts_enum3(t: &T) {
-    t.parallel();
-    let content: &str = r#"enum /*1*/E {
+    fourslash::run_generated_test(t, r#"enum /*1*/E {
     /*2*/"e1",
     /*3*/'e2' = 10,
     /*4*/"e3"
@@ -2963,8 +2846,7 @@ const enum /*16*/constE {
 var /*20*/eInstance1: /*21*/constE;
 /*22*/eInstance1 = /*23*/constE[/*24*/"e1"];
 /*25*/eInstance1 = /*26*/constE[/*27*/"e2"];
-/*28*/eInstance1 = /*29*/constE[/*30*/'e3'];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*28*/eInstance1 = /*29*/constE[/*30*/'e3'];"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2976,14 +2858,12 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsEnum4_test.go:10
 pub fn test_quick_info_display_parts_enum4(t: &T) {
-    t.parallel();
-    let content: &str = r#"const enum Foo {
+    fourslash::run_generated_test(t, r#"const enum Foo {
 	"\t" = 9,
 	"\u007f" = 127,
 }
 Foo[/*1*/"\t"]
-Foo[/*2*/"\u007f"]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+Foo[/*2*/"\u007f"]"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -2995,8 +2875,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsExternalModuleAlias_test.go:10
 pub fn test_quick_info_display_parts_external_module_alias(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: quickInfoDisplayPartsExternalModuleAlias_file0.ts
+    fourslash::run_generated_test(t, r#"// @Filename: quickInfoDisplayPartsExternalModuleAlias_file0.ts
 export namespace m1 {
     export class c {
     }
@@ -3005,8 +2884,7 @@ export namespace m1 {
 import /*1*/a1 = require(/*mod1*/"./quickInfoDisplayPartsExternalModuleAlias_file0");
 new /*2*/a1.m1.c();
 export import /*3*/a2 = require(/*mod2*/"./quickInfoDisplayPartsExternalModuleAlias_file0");
-new /*4*/a2.m1.c();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+new /*4*/a2.m1.c();"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3018,8 +2896,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsExternalModules_test.go:10
 pub fn test_quick_info_display_parts_external_modules(t: &T) {
-    t.parallel();
-    let content: &str = r"export namespace /*1*/m {
+    fourslash::run_generated_test(t, r"export namespace /*1*/m {
     var /*2*/namespaceElemWithoutExport = 10;
     export var /*3*/namespaceElemWithExport = 10;
 }
@@ -3030,8 +2907,7 @@ export namespace /*8*/m1./*9*/m2 {
     export var /*11*/namespaceElemWithExport = 10;
 }
 export var /*12*/x = /*13*/m1./*14*/m2;
-export var /*15*/y: typeof /*16*/m1./*17*/m2;";
-    fourslash::run_generated_test(t, content, |f, t| {
+export var /*15*/y: typeof /*16*/m1./*17*/m2;", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3043,8 +2919,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsFunction_test.go:10
 pub fn test_quick_info_display_parts_function(t: &T) {
-    t.parallel();
-    let content: &str = r#"function /*1*/foo(param: string, optionalParam?: string, paramWithInitializer = "hello", ...restParam: string[]) {
+    fourslash::run_generated_test(t, r#"function /*1*/foo(param: string, optionalParam?: string, paramWithInitializer = "hello", ...restParam: string[]) {
 }
 function /*2*/foowithoverload(a: string): string;
 function /*3*/foowithoverload(a: number): number;
@@ -3062,8 +2937,7 @@ function /*8*/foowith3overload(a: any): any {
 /*11*/foowithoverload(10);
 /*12*/foowith3overload("hello");
 /*13*/foowith3overload(10);
-/*14*/foowith3overload(true);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*14*/foowith3overload(true);"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3075,16 +2949,14 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsFunctionExpression_test.go:10
 pub fn test_quick_info_display_parts_function_expression(t: &T) {
-    t.parallel();
-    let content: &str = r"var /*1*/x = function /*2*/foo() {
+    fourslash::run_generated_test(t, r"var /*1*/x = function /*2*/foo() {
     /*3*/foo();
 };
 var /*4*/y = function () {
 };
 (function /*5*/foo1() {
     /*6*/foo1();
-})();";
-    fourslash::run_generated_test(t, content, |f, t| {
+})();", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3096,12 +2968,10 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsFunctionIncomplete_test.go:10
 pub fn test_quick_info_display_parts_function_incomplete(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*/function /*2*/(param: string) {
+    fourslash::run_generated_test(t, r"/*1*/function /*2*/(param: string) {
 }\
 /*3*/function /*4*/ {
-}\";
-    fourslash::run_generated_test(t, content, |f, t| {
+}\", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3152,10 +3022,8 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsIife_test.go:10
 pub fn test_quick_info_display_parts_iife(t: &T) {
-    t.parallel();
-    let content: &str = r"// @strictNullChecks: true
-var iife = (function foo/*1*/(x, y) { return x })(12);";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"// @strictNullChecks: true
+var iife = (function foo/*1*/(x, y) { return x })(12);", |f, t| {
         f.verify_quick_info_at(t, "1", "(local function) foo(x: number, y?: undefined): number", "");
     });
 }
@@ -3167,11 +3035,9 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsInterface_test.go:10
 pub fn test_quick_info_display_parts_interface(t: &T) {
-    t.parallel();
-    let content: &str = r"interface /*1*/i {
+    fourslash::run_generated_test(t, r"interface /*1*/i {
 }
-var /*2*/iInstance: /*3*/i;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*2*/iInstance: /*3*/i;", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3183,8 +3049,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsInterfaceMembers_test.go:10
 pub fn test_quick_info_display_parts_interface_members(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I {
+    fourslash::run_generated_test(t, r"interface I {
     /*1*/property: string;
     /*2*/method(): string;
     (): string;
@@ -3193,8 +3058,7 @@ pub fn test_quick_info_display_parts_interface_members(t: &T) {
 var iInstance: I;
 /*3*/iInstance./*4*/property = /*5*/iInstance./*6*/method();
 /*7*/iInstance();
-var /*8*/anotherInstance = new /*9*/iInstance();";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*8*/anotherInstance = new /*9*/iInstance();", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3206,8 +3070,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsInternalModuleAlias_test.go:10
 pub fn test_quick_info_display_parts_internal_module_alias(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace m.m1 {
+    fourslash::run_generated_test(t, r"namespace m.m1 {
     export class c {
     }
 }
@@ -3220,8 +3083,7 @@ namespace m2 {
     new /*6*/a3.m1.c();
     export import /*7*/a4 = m.m1;
     new /*8*/a4.c();
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3233,8 +3095,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsLet_test.go:10
 pub fn test_quick_info_display_parts_let(t: &T) {
-    t.parallel();
-    let content: &str = r#"let /*1*/a = 10;
+    fourslash::run_generated_test(t, r#"let /*1*/a = 10;
 function foo() {
     let /*2*/b = /*3*/a;
     if (b) {
@@ -3254,8 +3115,7 @@ let /*9*/g = /*10*/f;
 let /*12*/h: { (a: string): number; (a: number): string; };
 let /*13*/i = /*14*/h;
 /*15*/h(10);
-/*16*/h("hello");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*16*/h("hello");"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3267,8 +3127,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsLiteralLikeNames01_test.go:10
 pub fn test_quick_info_display_parts_literal_like_names01(t: &T) {
-    t.parallel();
-    let content: &str = r#"class C {
+    fourslash::run_generated_test(t, r#"class C {
     public /*1*/1() { }
     private /*2*/Infinity() { }
     protected /*3*/NaN() { }
@@ -3280,8 +3139,7 @@ pub fn test_quick_info_display_parts_literal_like_names01(t: &T) {
         this[/*8*/"Infinity"]();
         this./*9*/NaN();
         C./*10*/stringLiteralName();
-    }"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    }"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3293,8 +3151,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsLocalFunction_test.go:10
 pub fn test_quick_info_display_parts_local_function(t: &T) {
-    t.parallel();
-    let content: &str = r#"function /*1*/outerFoo() {
+    fourslash::run_generated_test(t, r#"function /*1*/outerFoo() {
     function /*2*/foo(param: string, optionalParam?: string, paramWithInitializer = "hello", ...restParam: string[]) {
     }
     function /*3*/foowithoverload(a: string): string;
@@ -3315,8 +3172,7 @@ pub fn test_quick_info_display_parts_local_function(t: &T) {
     /*14*/foowith3overload(10);
     /*15*/foowith3overload(true);
 }
-/*16*/outerFoo();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*16*/outerFoo();"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3328,8 +3184,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsModules_test.go:10
 pub fn test_quick_info_display_parts_modules(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace /*1*/m {
+    fourslash::run_generated_test(t, r"namespace /*1*/m {
     var /*2*/namespaceElemWithoutExport = 10;
     export var /*3*/namespaceElemWithExport = 10;
 }
@@ -3340,8 +3195,7 @@ namespace /*8*/m1./*9*/m2 {
     export var /*11*/namespaceElemWithExport = 10;
 }
 var /*12*/x = /*13*/m1./*14*/m2;
-var /*15*/y: typeof /*16*/m1./*17*/m2;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*15*/y: typeof /*16*/m1./*17*/m2;", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3353,15 +3207,13 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsParameters_test.go:10
 pub fn test_quick_info_display_parts_parameters(t: &T) {
-    t.parallel();
-    let content: &str = r#"/** @return *crunch* */
+    fourslash::run_generated_test(t, r#"/** @return *crunch* */
 function /*1*/foo(/*2*/param: string, /*3*/optionalParam?: string, /*4*/paramWithInitializer = "hello", .../*5*/restParam: string[]) {
     /*6*/param = "Hello";
     /*7*/optionalParam = "World";
     /*8*/paramWithInitializer = "Hello";
     /*9*/restParam[0] = "World";
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3373,12 +3225,10 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsTypeAlias_test.go:10
 pub fn test_quick_info_display_parts_type_alias(t: &T) {
-    t.parallel();
-    let content: &str = r"class /*1*/c {
+    fourslash::run_generated_test(t, r"class /*1*/c {
 }
 type /*2*/t1 = /*3*/c;
-var /*4*/cInstance: /*5*/t1 = new /*6*/c();";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*4*/cInstance: /*5*/t1 = new /*6*/c();", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3390,8 +3240,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsTypeParameterInClass_test.go:10
 pub fn test_quick_info_display_parts_type_parameter_in_class(t: &T) {
-    t.parallel();
-    let content: &str = r#"class /*1*/c</*2*/T> {
+    fourslash::run_generated_test(t, r#"class /*1*/c</*2*/T> {
     /*3*/constructor(/*4*/a: /*5*/T) {
     }
     /*6*/method</*7*/U>(/*8*/a: /*9*/U, /*10*/b: /*11*/T) {
@@ -3410,8 +3259,7 @@ class /*19*/c2</*20*/T extends /*21*/c<string>> {
 }
 var /*33*/cInstance1 = new /*34*/c2(/*35*/cInstance);
 var /*36*/cVal2 = /*37*/c2;
-/*38*/cInstance1./*39*/method(/*40*/cInstance, /*41*/cInstance);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*38*/cInstance1./*39*/method(/*40*/cInstance, /*41*/cInstance);"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3423,16 +3271,14 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsTypeParameterInFunction_test.go:10
 pub fn test_quick_info_display_parts_type_parameter_in_function(t: &T) {
-    t.parallel();
-    let content: &str = r#"function /*1*/foo</*2*/U>(/*3*/a: /*4*/U) {
+    fourslash::run_generated_test(t, r#"function /*1*/foo</*2*/U>(/*3*/a: /*4*/U) {
     return /*5*/a;
 }
 /*6*/foo("Hello");
 function /*7*/foo2</*8*/U extends string>(/*9*/a: /*10*/U) {
     return /*11*/a;
 }
-/*12*/foo2("hello");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*12*/foo2("hello");"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3444,10 +3290,8 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsTypeParameterInFunctionLikeInTypeAlias_test.go:10
 pub fn test_quick_info_display_parts_type_parameter_in_function_like_in_type_alias(t: &T) {
-    t.parallel();
-    let content: &str = r"type MixinCtor<A> = new () => /*0*/A & { constructor: MixinCtor</*1*/A> };
-type MixinCtor<A> = new () => A & { constructor: { constructor: MixinCtor</*2*/A> } };";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"type MixinCtor<A> = new () => /*0*/A & { constructor: MixinCtor</*1*/A> };
+type MixinCtor<A> = new () => A & { constructor: { constructor: MixinCtor</*2*/A> } };", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3459,8 +3303,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsTypeParameterInInterface_test.go:10
 pub fn test_quick_info_display_parts_type_parameter_in_interface(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface /*1*/I</*2*/T> {
+    fourslash::run_generated_test(t, r#"interface /*1*/I</*2*/T> {
     new </*3*/U>(/*4*/a: /*5*/U, /*6*/b: /*7*/T): /*8*/U;
     </*9*/U>(/*10*/a: /*11*/U, /*12*/b: /*13*/T): /*14*/U;
     /*15*/method</*16*/U>(/*17*/a: /*18*/U, /*19*/b: /*20*/T): /*21*/U;
@@ -3477,8 +3320,7 @@ interface /*28*/I1</*29*/T extends /*30*/I<string>> {
 var /*53*/iVal1: /*54*/I1</*55*/I<string>>;
 new /*56*/iVal1(/*57*/iVal, /*58*/iVal);
 /*59*/iVal1(/*60*/iVal, /*61*/iVal);
-/*62*/iVal1./*63*/method(/*64*/iVal, /*65*/iVal);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*62*/iVal1./*63*/method(/*64*/iVal, /*65*/iVal);"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3490,10 +3332,8 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsTypeParameterInTypeAlias_test.go:10
 pub fn test_quick_info_display_parts_type_parameter_in_type_alias(t: &T) {
-    t.parallel();
-    let content: &str = r"type /*0*/List</*1*/T> = /*2*/T[]
-type /*3*/List2</*4*/T extends string> = /*5*/T[];";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"type /*0*/List</*1*/T> = /*2*/T[]
+type /*3*/List2</*4*/T extends string> = /*5*/T[];", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3505,13 +3345,11 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsUsing_test.go:10
 pub fn test_quick_info_display_parts_using(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: esnext
+    fourslash::run_generated_test(t, r#"// @lib: esnext
 using a/*a*/ = "a";
 const f = async () => {
     await using /*b*/b = { async [Symbol.asyncDispose]() {} };
-};"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+};"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3523,8 +3361,7 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsVar_test.go:10
 pub fn test_quick_info_display_parts_var(t: &T) {
-    t.parallel();
-    let content: &str = r#"var /*1*/a = 10;
+    fourslash::run_generated_test(t, r#"var /*1*/a = 10;
 function foo() {
     var /*2*/b = /*3*/a;
 }
@@ -3538,8 +3375,7 @@ var /*7*/g = /*8*/f;
 var /*10*/h: { (a: string): number; (a: number): string; };
 var /*11*/i = /*12*/h;
 /*13*/h(10);
-/*14*/h("hello");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*14*/h("hello");"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3551,11 +3387,9 @@ use crate::tests::prelude::*;
 
 // quickInfoDisplayPartsVarWithStringTypes01_test.go:10
 pub fn test_quick_info_display_parts_var_with_string_types01(t: &T) {
-    t.parallel();
-    let content: &str = r#"let /*1*/hello: "hello" | 'hello' = "hello";
+    fourslash::run_generated_test(t, r#"let /*1*/hello: "hello" | 'hello' = "hello";
 let /*2*/world: 'world' = "world";
-let /*3*/helloOrWorld: "hello" | 'world';"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+let /*3*/helloOrWorld: "hello" | 'world';"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3567,14 +3401,12 @@ use crate::tests::prelude::*;
 
 // quickInfoDistributedTypeParameter_test.go:10
 pub fn test_quick_info_distributed_type_parameter(t: &T) {
-    t.parallel();
-    let content: &str = r"type Conditional<T> =
+    fourslash::run_generated_test(t, r"type Conditional<T> =
     T/*check*/ extends T/*extends*/
         ? T/*trueType*/
         : T/*falseType*/;
 
-type NonDistributed<T> = [T/*nonDistributed*/] extends [unknown] ? T : never;";
-    fourslash::run_generated_test(t, content, |f, t| {
+type NonDistributed<T> = [T/*nonDistributed*/] extends [unknown] ? T : never;", |f, t| {
         f.verify_quick_info_at(t, "check", "(type parameter) (distributed) T in type Conditional<T>", "");
         f.verify_quick_info_at(t, "extends", "(type parameter) (distributed) T in type Conditional<T>", "");
         f.verify_quick_info_at(t, "trueType", "(type parameter) (distributed) T in type Conditional<T>", "");
@@ -3590,14 +3422,12 @@ use crate::tests::prelude::*;
 
 // quickInfoElementAccessDeclaration_test.go:10
 pub fn test_quick_info_element_access_declaration(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @checkJs: true
+    fourslash::run_generated_test(t, r#"// @checkJs: true
 // @allowJs: true
 // @Filename: a.js
 const mod = {};
 mod["@@thing1"] = {};
-mod["/**/@@thing1"]["@@thing2"] = 0;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+mod["/**/@@thing1"]["@@thing2"] = 0;"#, |f, t| {
         f.go_to_marker(t, "");
         f.verify_quick_info_is(t, r#"module mod["@@thing1"]
 (property) mod["@@thing1"]: typeof mod.@@thing1"#, "");
@@ -3611,14 +3441,12 @@ use crate::tests::prelude::*;
 
 // quickInfoEnumMembersAcceptNonAsciiStrings_test.go:10
 pub fn test_quick_info_enum_members_accept_non_ascii_strings(t: &T) {
-    t.parallel();
-    let content: &str = r"enum Demo {
+    fourslash::run_generated_test(t, r"enum Demo {
     /*Emoji*/Emoji = '🍎',
     /*Hebrew*/Hebrew = 'תפוח',
     /*Chinese*/Chinese = '苹果',
     /*Japanese*/Japanese = 'りんご',
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_quick_info_at(t, "Emoji", r#"(enum member) Demo.Emoji = "🍎""#, "");
         f.verify_quick_info_at(t, "Hebrew", r#"(enum member) Demo.Hebrew = "תפוח""#, "");
         f.verify_quick_info_at(t, "Chinese", r#"(enum member) Demo.Chinese = "苹果""#, "");
@@ -3633,10 +3461,8 @@ use crate::tests::prelude::*;
 
 // quickInfo_errorSignatureFillsInTypeParameter_test.go:10
 pub fn test_quick_info_error_signature_fills_in_type_parameter(t: &T) {
-    t.parallel();
-    let content: &str = r"declare function f<T>(x: number): T;
-const x/**/ = f();";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"declare function f<T>(x: number): T;
+const x/**/ = f();", |f, t| {
         f.verify_quick_info_at(t, "", "const x: unknown", "");
     });
 }
@@ -3648,8 +3474,7 @@ use crate::tests::prelude::*;
 
 // quickInfoExportAssignmentOfGenericInterface_test.go:10
 pub fn test_quick_info_export_assignment_of_generic_interface(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: quickInfoExportAssignmentOfGenericInterface_0.ts
+    fourslash::run_generated_test(t, r"// @Filename: quickInfoExportAssignmentOfGenericInterface_0.ts
 interface Foo<T> {
     a: string;
 }
@@ -3657,8 +3482,7 @@ export = Foo;
 // @Filename: quickInfoExportAssignmentOfGenericInterface_1.ts
 import a = require('./quickInfoExportAssignmentOfGenericInterface_0');
 export var /*1*/x: a<a<string>>;
-x.a;";
-    fourslash::run_generated_test(t, content, |f, t| {
+x.a;", |f, t| {
         f.verify_quick_info_at(t, "1", "var x: a<a<string>>", "");
     });
 }
@@ -3670,14 +3494,12 @@ use crate::tests::prelude::*;
 
 // quickInfoExtendArray_test.go:10
 pub fn test_quick_info_extend_array(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Foo<T> extends Array<T> { }
+    fourslash::run_generated_test(t, r"interface Foo<T> extends Array<T> { }
 var x: Foo<string>;
 var /*1*/r = x[0];
 interface Foo2 extends Array<string> { }
 var x2: Foo2;
-var /*2*/r2 = x2[0];";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*2*/r2 = x2[0];", |f, t| {
         f.verify_quick_info_at(t, "1", "var r: string", "");
         f.verify_quick_info_at(t, "2", "var r2: string", "");
     });
@@ -3690,8 +3512,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForAliasedGeneric_test.go:10
 pub fn test_quick_info_for_aliased_generic(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace M {
+    fourslash::run_generated_test(t, r"namespace M {
     export namespace N {
         export class C<T> { }
         export class D { }
@@ -3699,8 +3520,7 @@ pub fn test_quick_info_for_aliased_generic(t: &T) {
 }
 import d = M.N;
 var /*1*/aa: d.C<number>;
-var /*2*/bb: d.D;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*2*/bb: d.D;", |f, t| {
         f.verify_quick_info_at(t, "1", "var aa: d.C<number>", "");
         f.verify_quick_info_at(t, "2", "var bb: d.D", "");
     });
@@ -3713,8 +3533,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForArgumentsPropertyNameInJsMode1_test.go:10
 pub fn test_quick_info_for_arguments_property_name_in_js_mode1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @filename: a.js
 const foo = {
     f1: (params) => { }
@@ -3724,8 +3543,7 @@ function /*1*/f2(x) {
    foo.f1({ x, arguments: [] });
 }
 
-/*2*/f2('');";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*2*/f2('');", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3737,15 +3555,13 @@ use crate::tests::prelude::*;
 
 // quickInfoForArgumentsPropertyNameInJsMode2_test.go:10
 pub fn test_quick_info_for_arguments_property_name_in_js_mode2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @filename: a.js
 function /*1*/f(x) {
    arguments;
 }
 
-/*2*/f('');";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*2*/f('');", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3757,12 +3573,10 @@ use crate::tests::prelude::*;
 
 // quickInfoForConstAssertions_test.go:10
 pub fn test_quick_info_for_const_assertions(t: &T) {
-    t.parallel();
-    let content: &str = r#"const a = { a: 1 } as /*1*/const;
+    fourslash::run_generated_test(t, r#"const a = { a: 1 } as /*1*/const;
 const b = 1 as /*2*/const;
 const c = "c" as /*3*/const;
-const d = [1, 2] as /*4*/const;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const d = [1, 2] as /*4*/const;"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -3774,9 +3588,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForConstDeclaration_test.go:10
 pub fn test_quick_info_for_const_declaration(t: &T) {
-    t.parallel();
-    let content: &str = "const /**/c = 0 ;";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "const /**/c = 0 ;", |f, t| {
         f.verify_quick_info_at(t, "", "const c: 0", "");
     });
 }
@@ -3788,9 +3600,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForConstTypeReference_test.go:10
 pub fn test_quick_info_for_const_type_reference(t: &T) {
-    t.parallel();
-    let content: &str = r#""" as /**/const;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#""" as /**/const;"#, |f, t| {
         f.verify_not_quick_info_exists(t);
     });
 }
@@ -3802,8 +3612,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForContextuallyTypedArrowFunctionInSuperCall_test.go:10
 pub fn test_quick_info_for_contextually_typed_arrow_function_in_super_call(t: &T) {
-    t.parallel();
-    let content: &str = r"class A<T1, T2> {
+    fourslash::run_generated_test(t, r"class A<T1, T2> {
     constructor(private map: (value: T1) => T2) {
 
     }
@@ -3811,8 +3620,7 @@ pub fn test_quick_info_for_contextually_typed_arrow_function_in_super_call(t: &T
 
 class B extends A<number, string> {
     constructor() { super(va/*1*/lue => String(va/*2*/lue.toExpone/*3*/ntial())); }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_quick_info_at(t, "1", "(parameter) value: number", "");
         f.verify_quick_info_at(t, "2", "(parameter) value: number", "");
         f.verify_quick_info_at(t, "3", "(method) Number.toExponential(fractionDigits?: number): string", "Returns a string containing a number represented in exponential notation.");
@@ -3826,8 +3634,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForContextuallyTypedFunctionInReturnStatement_test.go:10
 pub fn test_quick_info_for_contextually_typed_function_in_return_statement(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Accumulator {
+    fourslash::run_generated_test(t, r"interface Accumulator {
     clear(): void;
     add(x: number): void;
     result(): number;
@@ -3840,8 +3647,7 @@ function makeAccumulator(): Accumulator {
         add: function (val/**/ue) { sum += value; },
         result: function () { return sum; }
     };
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_quick_info_at(t, "", "(parameter) value: number", "");
     });
 }
@@ -3853,15 +3659,13 @@ use crate::tests::prelude::*;
 
 // quickInfoForContextuallyTypedIife_test.go:10
 pub fn test_quick_info_for_contextually_typed_iife(t: &T) {
-    t.parallel();
-    let content: &str = r#"(({ q/*1*/, qq/*2*/ }, x/*3*/, { p/*4*/ }) => {
+    fourslash::run_generated_test(t, r#"(({ q/*1*/, qq/*2*/ }, x/*3*/, { p/*4*/ }) => {
     var s: number = q/*5*/;
     var t: number = qq/*6*/;
     var u: number = p/*7*/;
     var v: number = x/*8*/;
     return q; })({ q: 13, qq: 12 }, 1, { p: 14 });
-((a/*9*/, b/*10*/, c/*11*/) => [a/*12*/,b/*13*/,c/*14*/])("foo", 101, false);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+((a/*9*/, b/*10*/, c/*11*/) => [a/*12*/,b/*13*/,c/*14*/])("foo", 101, false);"#, |f, t| {
         f.verify_quick_info_at(t, "1", "(parameter) q: number", "");
         f.verify_quick_info_at(t, "2", "(parameter) qq: number", "");
         f.verify_quick_info_at(t, "3", "(parameter) x: number", "");
@@ -3886,8 +3690,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForContextuallyTypedParameters_test.go:10
 pub fn test_quick_info_for_contextually_typed_parameters(t: &T) {
-    t.parallel();
-    let content: &str = r#"declare function foo1<T>(obj: T, settings: (row: T) => { value: string, func?: Function }): void;
+    fourslash::run_generated_test(t, r#"declare function foo1<T>(obj: T, settings: (row: T) => { value: string, func?: Function }): void;
 
 foo1(new Error(),
     o/*1*/ => ({
@@ -3911,8 +3714,7 @@ function q<T extends { name: string }>(x: T): T["name"] {
     return foof/*3*/(o => ({ value: o.name, func: x => 'foo' }), x, "name");
 }
 
-foof/*4*/(o => ({ value: o.name, func: x => 'foo' }), new Error(), "name");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+foof/*4*/(o => ({ value: o.name, func: x => 'foo' }), new Error(), "name");"#, |f, t| {
         f.verify_quick_info_at(t, "1", "(parameter) o: Error", "");
         f.verify_quick_info_at(t, "2", "(parameter) o: Error", "");
         f.verify_quick_info_at(t, "3", r#"function foof<T, "name">(settings: (row: T) => {
@@ -3933,13 +3735,11 @@ use crate::tests::prelude::*;
 
 // quickInfoForDecorators_test.go:10
 pub fn test_quick_info_for_decorators(t: &T) {
-    t.parallel();
-    let content: &str = r"@/*1*/decorator
+    fourslash::run_generated_test(t, r"@/*1*/decorator
 class C {
 }
 /** decorator documentation*/
-var decorator = t=> t;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var decorator = t=> t;", |f, t| {
         f.verify_quick_info_at(t, "1", "var decorator: (t: any) => any", "decorator documentation");
     });
 }
@@ -3951,8 +3751,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForDerivedGenericTypeWithConstructor_test.go:10
 pub fn test_quick_info_for_derived_generic_type_with_constructor(t: &T) {
-    t.parallel();
-    let content: &str = r"class A<T> {
+    fourslash::run_generated_test(t, r"class A<T> {
     foo() { }
 }
 class B<T> extends A<T> {
@@ -3963,8 +3762,7 @@ class B2<T> extends A<T> {
     bar() { }
 }
 var /*1*/b: B<number>;
-var /*2*/b2: B<number>;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*2*/b2: B<number>;", |f, t| {
         f.verify_quick_info_at(t, "1", "var b: B<number>", "");
         f.verify_quick_info_at(t, "2", "var b2: B<number>", "");
     });
@@ -3977,11 +3775,9 @@ use crate::tests::prelude::*;
 
 // quickInfoForDestructuringShorthandInitializer_test.go:10
 pub fn test_quick_info_for_destructuring_shorthand_initializer(t: &T) {
-    t.parallel();
-    let content: &str = r"let a = '';
+    fourslash::run_generated_test(t, r"let a = '';
 let b: string;
-({b = /**/a} = {b: 'b'});";
-    fourslash::run_generated_test(t, content, |f, t| {
+({b = /**/a} = {b: 'b'});", |f, t| {
         f.verify_quick_info_at(t, "", "let a: string", "");
     });
 }
@@ -3993,8 +3789,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForFunctionDeclaration_test.go:10
 pub fn test_quick_info_for_function_declaration(t: &T) {
-    t.parallel();
-    let content: &str = r"interface A<T> { }
+    fourslash::run_generated_test(t, r"interface A<T> { }
 
 function ma/*makeA*/keA<T>(t: T): A<T> { return null; }
 
@@ -4003,8 +3798,7 @@ function /*f*/f<T>(t: T) {
 }
 
 var x = f(0);
-var y = makeA(0);";
-    fourslash::run_generated_test(t, content, |f, t| {
+var y = makeA(0);", |f, t| {
         f.verify_quick_info_at(t, "makeA", "function makeA<T>(t: T): A<T>", "");
         f.verify_quick_info_at(t, "f", "function f<T>(t: T): A<T>", "");
     });
@@ -4017,10 +3811,8 @@ use crate::tests::prelude::*;
 
 // quickInfoForGenericConstraints1_test.go:10
 pub fn test_quick_info_for_generic_constraints1(t: &T) {
-    t.parallel();
-    let content: &str = r"function foo4<T extends Date>(te/**/st: T): T;
-function foo4<T extends Date>(test: any): any { return null; }";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"function foo4<T extends Date>(te/**/st: T): T;
+function foo4<T extends Date>(test: any): any { return null; }", |f, t| {
         f.verify_quick_info_at(t, "", "(parameter) test: T extends Date", "");
     });
 }
@@ -4032,13 +3824,11 @@ use crate::tests::prelude::*;
 
 // quickInfoForGenericPrototypeMember_test.go:10
 pub fn test_quick_info_for_generic_prototype_member(t: &T) {
-    t.parallel();
-    let content: &str = r"class C<T> {
+    fourslash::run_generated_test(t, r"class C<T> {
    foo(x: T) { }
 }
 var x = new /*1*/C<any>();
-var y = C.proto/*2*/type;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var y = C.proto/*2*/type;", |f, t| {
         f.verify_quick_info_at(t, "1", "constructor C<any>(): C<any>", "");
         f.verify_quick_info_at(t, "2", "(property) C<T>.prototype: C<any>", "");
     });
@@ -4051,8 +3841,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForGenericTaggedTemplateExpression_test.go:10
 pub fn test_quick_info_for_generic_tagged_template_expression(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface T1 {}
+    fourslash::run_generated_test(t, r#"interface T1 {}
 class T2 {}
 type T3 = "a" | "b";
 
@@ -4064,8 +3853,7 @@ declare function foo<T>(strings: TemplateStringsArray, ...values: T[]): void;
 /*4*/foo<T1>``;
 /*5*/foo<T2>``;
 /*6*/foo<T3>``;
-/*7*/foo``;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*7*/foo``;"#, |f, t| {
         f.verify_quick_info_at(t, "1", "function foo<number>(strings: TemplateStringsArray, ...values: number[]): void", "");
         f.verify_quick_info_at(t, "2", "function foo<string | number>(strings: TemplateStringsArray, ...values: (string | number)[]): void", "");
         f.verify_quick_info_at(t, "3", r"function foo<{
@@ -4087,8 +3875,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForGetterAndSetter_test.go:10
 pub fn test_quick_info_for_getter_and_setter(t: &T) {
-    t.parallel();
-    let content: &str = r"class Test {
+    fourslash::run_generated_test(t, r"class Test {
     constructor() {
         this.value;
     }
@@ -4102,8 +3889,7 @@ pub fn test_quick_info_for_getter_and_setter(t: &T) {
     set val/*2*/ue(value) {
         this.value = value;
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_marker(t, "1");
         f.verify_quick_info_is(t, "(getter) Test.value: any", "Getter text");
         f.go_to_marker(t, "2");
@@ -4118,10 +3904,8 @@ use crate::tests::prelude::*;
 
 // quickInfoForIn_test.go:10
 pub fn test_quick_info_for_in(t: &T) {
-    t.parallel();
-    let content: &str = r"var obj;
-for (var /**/p in obj) { }";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"var obj;
+for (var /**/p in obj) { }", |f, t| {
         f.verify_quick_info_at(t, "", "var p: string", "");
     });
 }
@@ -4133,15 +3917,13 @@ use crate::tests::prelude::*;
 
 // quickInfoForIndexerResultWithConstraint_test.go:10
 pub fn test_quick_info_for_indexer_result_with_constraint(t: &T) {
-    t.parallel();
-    let content: &str = r"function foo<T>(x: T) {
+    fourslash::run_generated_test(t, r"function foo<T>(x: T) {
         return x;
 }
 function other2<T extends Date>(arg: T) {
     var b: { [x: string]: T };
     var /*1*/r2 = foo(b); // just shows T
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_quick_info_at(t, "1", r"(local var) r2: {
     [x: string]: T;
 }", "");
@@ -4155,8 +3937,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForJSDocCodefence_test.go:10
 pub fn test_quick_info_for_jsdoc_codefence(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * @example
  * ```
  * 1 + 2
@@ -4173,8 +3954,7 @@ function fo/*1*/o() {
  */
 function bo/*2*/o() {
     return '2';
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -4186,8 +3966,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForJSDocUnknownTag_test.go:10
 pub fn test_quick_info_for_jsdoc_unknown_tag(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * @example
  * if (true) {
  *     foo()
@@ -4232,8 +4011,7 @@ function b/*4*/oo() {
  */
 function go/*5*/o() {
     return '2';
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -4245,8 +4023,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForJSDocWithHttpLinks_test.go:10
 pub fn test_quick_info_for_jsdoc_with_http_links(t: &T) {
-    t.parallel();
-    let content: &str = r"// @checkJs: true
+    fourslash::run_generated_test(t, r"// @checkJs: true
 // @filename: quickInfoForJSDocWithHttpLinks.js
 /** @typedef {number} /*1*/https://wat */
 
@@ -4265,8 +4042,7 @@ var /*4*/see1 = true
 var /*5*/see2 = true
 
 /** {@link https://hvaD} */
-var /*6*/see3 = true";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*6*/see3 = true", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -4278,15 +4054,13 @@ use crate::tests::prelude::*;
 
 // quickInfoForJSDocWithUnresolvedHttpLinks_test.go:10
 pub fn test_quick_info_for_jsdoc_with_unresolved_http_links(t: &T) {
-    t.parallel();
-    let content: &str = r"// @checkJs: true
+    fourslash::run_generated_test(t, r"// @checkJs: true
 // @filename: quickInfoForJSDocWithHttpLinks.js
 /** @see {@link https://hva} */
 var /*5*/see2 = true
 
 /** {@link https://hvaD} */
-var /*6*/see3 = true";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*6*/see3 = true", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -4298,9 +4072,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForNamedTupleMember_test.go:10
 pub fn test_quick_info_for_named_tuple_member(t: &T) {
-    t.parallel();
-    let content: &str = "type foo = [/**/x: string];";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "type foo = [/**/x: string];", |f, t| {
         f.verify_quick_info_at(t, "", "string", "");
     });
 }
@@ -4312,15 +4084,13 @@ use crate::tests::prelude::*;
 
 // quickInfoForObjectBindingElementName01_test.go:10
 pub fn test_quick_info_for_object_binding_element_name01(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I {
+    fourslash::run_generated_test(t, r"interface I {
     property1: number;
     property2: string;
 }
 
 var foo: I;
-var { /**/property1 } = foo;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var { /**/property1 } = foo;", |f, t| {
         f.go_to_marker(t, "");
         f.verify_quick_info_at(t, "", "var property1: number", "");
     });
@@ -4333,15 +4103,13 @@ use crate::tests::prelude::*;
 
 // quickInfoForObjectBindingElementName02_test.go:10
 pub fn test_quick_info_for_object_binding_element_name02(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I {
+    fourslash::run_generated_test(t, r"interface I {
     property1: number;
     property2: string;
 }
 
 var foo: I;
-var { property1: /**/prop1 } = foo;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var { property1: /**/prop1 } = foo;", |f, t| {
         f.verify_quick_info_at(t, "", "var prop1: number", "");
     });
 }
@@ -4353,8 +4121,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForObjectBindingElementName03_test.go:10
 pub fn test_quick_info_for_object_binding_element_name03(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Options {
+    fourslash::run_generated_test(t, r"interface Options {
     /**
      * A description of foo
      */
@@ -4363,8 +4130,7 @@ pub fn test_quick_info_for_object_binding_element_name03(t: &T) {
 
 function f({ foo }: Options) {
     foo/*1*/;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -4376,8 +4142,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForObjectBindingElementName04_test.go:10
 pub fn test_quick_info_for_object_binding_element_name04(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Options {
+    fourslash::run_generated_test(t, r"interface Options {
    /**
     * A description of 'a'
     */
@@ -4392,8 +4157,7 @@ pub fn test_quick_info_for_object_binding_element_name04(t: &T) {
 function f({ a, a: { b } }: Options) {
     a/*1*/;
     b/*2*/;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -4405,8 +4169,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForObjectBindingElementName05_test.go:10
 pub fn test_quick_info_for_object_binding_element_name05(t: &T) {
-    t.parallel();
-    let content: &str = r"interface A {
+    fourslash::run_generated_test(t, r"interface A {
     /**
      * A description of a
      */
@@ -4418,8 +4181,7 @@ interface B {
 
 function f({ a }: A | B) {
     a/**/;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -4431,8 +4193,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForObjectBindingElementName06_test.go:10
 pub fn test_quick_info_for_object_binding_element_name06(t: &T) {
-    t.parallel();
-    let content: &str = r"type Foo = {
+    fourslash::run_generated_test(t, r"type Foo = {
     /**
      * Thing is a bar
      */
@@ -4449,8 +4210,7 @@ function f(): Foo {
 }
 
 const { isBaz: isBar } = f();
-isBar/**/;";
-    fourslash::run_generated_test(t, content, |f, t| {
+isBar/**/;", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -4462,15 +4222,13 @@ use crate::tests::prelude::*;
 
 // quickInfoForObjectBindingElementPropertyName01_test.go:10
 pub fn test_quick_info_for_object_binding_element_property_name01(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I {
+    fourslash::run_generated_test(t, r"interface I {
     property1: number;
     property2: string;
 }
 
 var foo: I;
-var { /**/property1: prop1 } = foo;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var { /**/property1: prop1 } = foo;", |f, t| {
         f.verify_quick_info_at(t, "", "(property) I.property1: number", "");
     });
 }
@@ -4482,15 +4240,13 @@ use crate::tests::prelude::*;
 
 // quickInfoForObjectBindingElementPropertyName02_test.go:10
 pub fn test_quick_info_for_object_binding_element_property_name02(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I {
+    fourslash::run_generated_test(t, r"interface I {
     property1: number;
     property2: string;
 }
 
 var foo: I;
-var { /**/property1: {} } = foo;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var { /**/property1: {} } = foo;", |f, t| {
         f.verify_quick_info_at(t, "", "(property) I.property1: number", "");
     });
 }
@@ -4502,15 +4258,13 @@ use crate::tests::prelude::*;
 
 // quickInfoForObjectBindingElementPropertyName04_test.go:10
 pub fn test_quick_info_for_object_binding_element_property_name04(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Recursive {
+    fourslash::run_generated_test(t, r"interface Recursive {
     next?: Recursive;
     value: any;
 }
 
 function f ({ /*1*/next: { /*2*/next: x} }) {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_quick_info_at(t, "1", r"(property) next: {
     next: any;
 }", "");
@@ -4525,8 +4279,7 @@ use crate::tests::prelude::*;
 
 // quickInfoForOverloadOnConst1_test.go:10
 pub fn test_quick_info_for_overload_on_const1(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface I {
+    fourslash::run_generated_test(t, r#"interface I {
     x/*1*/1(a: number, callback: (x: 'hi') => number);
 }
 class C {
@@ -4541,8 +4294,7 @@ class C {
 var c: C;
 c.x/*7*/1(1, (x/*8*/x: 'hi') => { return 1; } );
 c.x1(1, (x/*9*/x: 'bye') => { return 1; } );
-c.x1(1, (x/*10*/x) => { return 1; } );"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+c.x1(1, (x/*10*/x) => { return 1; } );"#, |f, t| {
         f.verify_quick_info_at(t, "1", "(method) I.x1(a: number, callback: (x: 'hi') => number): any", "");
         f.verify_quick_info_at(t, "2", "(method) C.x1(a: number, callback: (x: 'hi') => number): any", "");
         f.verify_quick_info_at(t, "3", "(parameter) callback: (x: 'hi') => number", "");
@@ -4563,13 +4315,11 @@ use crate::tests::prelude::*;
 
 // quickInfoForRequire_test.go:10
 pub fn test_quick_info_for_require(t: &T) {
-    t.parallel();
-    let content: &str = r#"//@Filename: AA/BB.ts
+    fourslash::run_generated_test(t, r#"//@Filename: AA/BB.ts
 export class a{}
 //@Filename: quickInfoForRequire_input.ts
 import a = require("./AA/B/*1*/B");
-import b = require(`./AA/B/*2*/B`);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import b = require(`./AA/B/*2*/B`);"#, |f, t| {
         f.go_to_marker(t, "1");
         f.verify_quick_info_is(t, "module a", "");
         f.go_to_marker(t, "2");
@@ -4584,14 +4334,12 @@ use crate::tests::prelude::*;
 
 // quickInfoForShorthandProperty_test.go:10
 pub fn test_quick_info_for_shorthand_property(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @strict: false
+    fourslash::run_generated_test(t, r#"// @strict: false
 var name1 = undefined, id1 = undefined;
 var /*obj1*/obj1 = {/*name1*/name1, /*id1*/id1};
 var name2 = "Hello";
 var id2 = 10000;
-var /*obj2*/obj2 = {/*name2*/name2, /*id2*/id2};"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*obj2*/obj2 = {/*name2*/name2, /*id2*/id2};"#, |f, t| {
         f.verify_quick_info_at(t, "obj1", r"var obj1: {
     name1: any;
     id1: any;
@@ -4614,12 +4362,10 @@ use crate::tests::prelude::*;
 
 // quickInfoForSyntaxErrorNoError_test.go:10
 pub fn test_quick_info_for_syntax_error_no_error(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace X {
+    fourslash::run_generated_test(t, r"namespace X {
     export =
 }
-X.add/*1*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+X.add/*1*/", |f, t| {
         f.verify_quick_info_at(t, "1", "any", "");
     });
 }
@@ -4631,13 +4377,11 @@ use crate::tests::prelude::*;
 
 // quickInfoForTypeParameterInTypeAlias1_test.go:10
 pub fn test_quick_info_for_type_parameter_in_type_alias1(t: &T) {
-    t.parallel();
-    let content: &str = r"type Ctor<AA> = new () => A/*1*/A;
+    fourslash::run_generated_test(t, r"type Ctor<AA> = new () => A/*1*/A;
 type MixinCtor<AA> = new () => AA & { constructor: MixinCtor<A/*2*/A> };
 type NestedCtor<AA> = new() => AA & (new () => AA & { constructor: NestedCtor<A/*3*/A> });
 type Method<AA> = { method(): A/*4*/A };
-type Construct<AA> = { new(): A/*5*/A };";
-    fourslash::run_generated_test(t, content, |f, t| {
+type Construct<AA> = { new(): A/*5*/A };", |f, t| {
         f.verify_quick_info_at(t, "1", "(type parameter) AA in type Ctor<AA>", "");
         f.verify_quick_info_at(t, "2", "(type parameter) AA in type MixinCtor<AA>", "");
         f.verify_quick_info_at(t, "3", "(type parameter) AA in type NestedCtor<AA>", "");
@@ -4653,12 +4397,10 @@ use crate::tests::prelude::*;
 
 // quickInfoForTypeParameterInTypeAlias2_test.go:10
 pub fn test_quick_info_for_type_parameter_in_type_alias2(t: &T) {
-    t.parallel();
-    let content: &str = r"type Call<AA> = { (): A/*1*/A };
+    fourslash::run_generated_test(t, r"type Call<AA> = { (): A/*1*/A };
 type Index<AA> = {[foo: string]: A/*2*/A};
 type GenericMethod<AA> = { method<BB>(): A/*3*/A & B/*4*/B }
-type Nesting<TT> = { method<UU>(): new <WW>() => T/*5*/T & U/*6*/U & W/*7*/W };";
-    fourslash::run_generated_test(t, content, |f, t| {
+type Nesting<TT> = { method<UU>(): new <WW>() => T/*5*/T & U/*6*/U & W/*7*/W };", |f, t| {
         f.verify_quick_info_at(t, "1", "(type parameter) AA in type Call<AA>", "");
         f.verify_quick_info_at(t, "2", "(type parameter) AA in type Index<AA>", "");
         f.verify_quick_info_at(t, "3", "(type parameter) AA in type GenericMethod<AA>", "");
@@ -4676,12 +4418,10 @@ use crate::tests::prelude::*;
 
 // quickInfoForTypeofParameter_test.go:10
 pub fn test_quick_info_for_typeof_parameter(t: &T) {
-    t.parallel();
-    let content: &str = r"function foo() {
+    fourslash::run_generated_test(t, r"function foo() {
     var y/*ref1*/1: string;
     var x: typeof y/*ref2*/1;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_quick_info_at(t, "ref1", "(local var) y1: string", "");
         f.verify_quick_info_at(t, "ref2", "(local var) y1: string", "");
     });
@@ -4694,15 +4434,13 @@ use crate::tests::prelude::*;
 
 // quickInfoForUMDModuleAlias_test.go:10
 pub fn test_quick_info_for_umd_module_alias(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: 0.d.ts
+    fourslash::run_generated_test(t, r#"// @Filename: 0.d.ts
 export function doThing(): string;
 export function doTheOtherThing(): void;
 export as namespace /*0*/myLib;
 // @Filename: 1.ts
 /// <reference path="0.d.ts" />
-/*1*/myLib.doThing();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*1*/myLib.doThing();"#, |f, t| {
         f.verify_quick_info_at(t, "0", "export namespace myLib", "");
         f.verify_quick_info_at(t, "1", "export namespace myLib", "");
     });
@@ -4715,14 +4453,12 @@ use crate::tests::prelude::*;
 
 // quickInfoFromContextualType_test.go:10
 pub fn test_quick_info_from_contextual_type(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: quickInfoExportAssignmentOfGenericInterface_0.ts
+    fourslash::run_generated_test(t, r"// @Filename: quickInfoExportAssignmentOfGenericInterface_0.ts
 interface I {
     /** Documentation */
     x: number;
 }
-const i: I = { /**/x: 0 };";
-    fourslash::run_generated_test(t, content, |f, t| {
+const i: I = { /**/x: 0 };", |f, t| {
         f.verify_quick_info_at(t, "", "(property) I.x: number", "Documentation");
     });
 }
@@ -4734,8 +4470,7 @@ use crate::tests::prelude::*;
 
 // quickInfoFromContextualUnionType1_test.go:10
 pub fn test_quick_info_from_contextual_union_type1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @strict: true
+    fourslash::run_generated_test(t, r#"// @strict: true
 // based on https://github.com/microsoft/TypeScript/issues/55495
 type X =
   | {
@@ -4747,8 +4482,7 @@ type X =
       someProp: boolean;
     };
 
-const obj = { name: "john", /*1*/someProp: "foo" } satisfies X;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const obj = { name: "john", /*1*/someProp: "foo" } satisfies X;"#, |f, t| {
         f.verify_quick_info_at(t, "1", "(property) someProp: string", "");
     });
 }
@@ -4760,14 +4494,12 @@ use crate::tests::prelude::*;
 
 // quickInfoFromContextualUnionType2_test.go:10
 pub fn test_quick_info_from_contextual_union_type2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @strict: true
+    fourslash::run_generated_test(t, r#"// @strict: true
 function test1(arg: { prop: "foo" }) {}
 test1({ /*1*/prop: "bar" });
 
 function test2(arg: { prop: "foo" } | undefined) {}
-test2({ /*2*/prop: "bar" });"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+test2({ /*2*/prop: "bar" });"#, |f, t| {
         f.verify_quick_info_at(t, "1", r#"(property) prop: "foo""#, "");
         f.verify_quick_info_at(t, "2", r#"(property) prop: "foo""#, "");
     });
@@ -4780,8 +4512,7 @@ use crate::tests::prelude::*;
 
 // quickInfoFromContextualUnionType3_test.go:10
 pub fn test_quick_info_from_contextual_union_type3(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @strict: true
+    fourslash::run_generated_test(t, r#"// @strict: true
 declare const foo1: <D extends Foo1<D>>(definition: D) => D;
 
 type Foo1<D, Bar = Prop<D, "bar">> = {
@@ -4806,8 +4537,7 @@ type Prop<T, K> = K extends keyof T ? T[K] : never;
 
 foo1({ bar: { /*1*/X: "test" } });
 
-foo2({ bar: { /*2*/X: "test" } });"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+foo2({ bar: { /*2*/X: "test" } });"#, |f, t| {
         f.verify_quick_info_at(t, "1", r#"(property) X: "Error: bar should be boolean""#, "");
         f.verify_quick_info_at(t, "2", r#"(property) X: "Error: bar should be boolean""#, "");
     });
@@ -4820,12 +4550,10 @@ use crate::tests::prelude::*;
 
 // quickInfoFromEmptyBlockComment_test.go:10
 pub fn test_quick_info_from_empty_block_comment(t: &T) {
-    t.parallel();
-    let content: &str = r"/**/
+    fourslash::run_generated_test(t, r"/**/
 class Foo {
 }
-var f/*A*/ff = new Foo();";
-    fourslash::run_generated_test(t, content, |f, t| {
+var f/*A*/ff = new Foo();", |f, t| {
         f.verify_quick_info_at(t, "A", "var fff: Foo", "");
     });
 }
@@ -4837,9 +4565,7 @@ use crate::tests::prelude::*;
 
 // quickInfoFunction_test.go:10
 pub fn test_quick_info_function(t: &T) {
-    t.parallel();
-    let content: &str = r#"/**/function foo() { return "hi"; }"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"/**/function foo() { return "hi"; }"#, |f, t| {
         f.verify_quick_info_at(t, "", "function foo(): string", "");
     });
 }
@@ -4851,9 +4577,7 @@ use crate::tests::prelude::*;
 
 // quickInfoFunctionCheckType_test.go:10
 pub fn test_quick_info_function_check_type(t: &T) {
-    t.parallel();
-    let content: &str = "export type /**/Tail<T extends any[]> = ((...t: T) => void) extends (h: any, ...rest: infer R) => void ? R : never;";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "export type /**/Tail<T extends any[]> = ((...t: T) => void) extends (h: any, ...rest: infer R) => void ? R : never;", |f, t| {
         f.verify_quick_info_at(t, "", "type Tail<T extends any[]> = ((...t: T) => void) extends (h: any, ...rest: infer R) => void ? R : never", "");
     });
 }
@@ -4865,10 +4589,8 @@ use crate::tests::prelude::*;
 
 // quickInfoFunctionKeyword_test.go:10
 pub fn test_quick_info_function_keyword(t: &T) {
-    t.parallel();
-    let content: &str = r"[1].forEach(fu/*1*/nction() {});
-[1].map(x =/*2*/> x + 1);";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"[1].forEach(fu/*1*/nction() {});
+[1].map(x =/*2*/> x + 1);", |f, t| {
         f.verify_quick_info_at(t, "1", "(local function)(): void", "");
         f.verify_quick_info_at(t, "2", "function(x: number): number", "");
     });
@@ -4881,9 +4603,7 @@ use crate::tests::prelude::*;
 
 // quickInfoGenericCombinators2_test.go:10
 pub fn test_quick_info_generic_combinators2(t: &T) {
-    t.parallel();
-    let content: &str = "interface Collection<T, U> {\n   length: number;\n   add(x: T, y: U): void ;\n   remove(x: T, y: U): boolean;\n}\n\ninterface Combinators {\n   map<T, U, V>(c: Collection<T, U>, f: (x: T, y: U) => V): Collection<T, V>;\n   map<T, U>(c: Collection<T, U>, f: (x: T, y: U) => any): Collection<any, any>;\n}\n\nclass A {\n   foo<T>(): T { return null; }\n}\n\nclass B<T> {\n   foo(x: T): T { return null; }\n}\n\nvar c1: Collection<any, any>;\nvar c2: Collection<number, string>;\nvar c3: Collection<Collection<number, number>, string>;\nvar c4: Collection<number, A>;\nvar c5: Collection<number, B<any>>;\n\nvar _: Combinators;\n// param help on open paren for arg 2 should show 'number' not T or 'any'\n// x should be contextually typed to number\nvar rf1 = (x: number, y: string) => { return x.toFixed() };\nvar rf2 = (x: Collection<number, number>, y: string) => { return x.length };\nvar rf3 = (x: number, y: A) => { return y.foo() };\n\nvar /*9*/r1a  = _.map/*1c*/(c2, (/*1a*/x, /*1b*/y) => { return x.toFixed() });\nvar /*10*/r1b = _.map(c2, rf1);\n\nvar /*11*/r2a = _.map(c3, (/*2a*/x, /*2b*/y) => { return x.length });\nvar /*12*/r2b = _.map(c3, rf2);\n\nvar /*13*/r3a = _.map(c4, (/*3a*/x, /*3b*/y) => { return y.foo() });\nvar /*14*/r3b = _.map(c4, rf3);\n\nvar /*15*/r4a = _.map(c5, (/*4a*/x, /*4b*/y) => { return y.foo() });\n\nvar /*17*/r5a = _.map<number, string, Date>(c2, /*17error1*/(/*5a*/x, /*5b*/y) => { return x.toFixed() }/*17error2*/); \nvar rf1b = (x: number, y: string) => { return new Date() };\nvar /*18*/r5b = _.map<number, string, Date>(c2, rf1b);\n\nvar /*19*/r6a = _.map<Collection<number, number>, string, Date>(c3, (/*6a*/x,/*6b*/y) => { return new Date(); });\nvar rf2b = (x: Collection<number, number>, y: string) => { return new Date(); };\nvar /*20*/r6b = _.map<Collection<number, number>, string, Date>(c3, rf2b);\n\nvar /*21*/r7a = _.map<number, A, string>(c4, (/*7a*/x,/*7b*/y) => { return y.foo() });\nvar /*22*/r7b = _.map<number, A, string>(c4, /*22error1*/rf3/*22error2*/);\n\nvar /*23*/r8a = _.map<number, /*error1*/B/*error2*/, string>(c5, (/*8a*/x,/*8b*/y) => { return y.foo() }); ";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "interface Collection<T, U> {\n   length: number;\n   add(x: T, y: U): void ;\n   remove(x: T, y: U): boolean;\n}\n\ninterface Combinators {\n   map<T, U, V>(c: Collection<T, U>, f: (x: T, y: U) => V): Collection<T, V>;\n   map<T, U>(c: Collection<T, U>, f: (x: T, y: U) => any): Collection<any, any>;\n}\n\nclass A {\n   foo<T>(): T { return null; }\n}\n\nclass B<T> {\n   foo(x: T): T { return null; }\n}\n\nvar c1: Collection<any, any>;\nvar c2: Collection<number, string>;\nvar c3: Collection<Collection<number, number>, string>;\nvar c4: Collection<number, A>;\nvar c5: Collection<number, B<any>>;\n\nvar _: Combinators;\n// param help on open paren for arg 2 should show 'number' not T or 'any'\n// x should be contextually typed to number\nvar rf1 = (x: number, y: string) => { return x.toFixed() };\nvar rf2 = (x: Collection<number, number>, y: string) => { return x.length };\nvar rf3 = (x: number, y: A) => { return y.foo() };\n\nvar /*9*/r1a  = _.map/*1c*/(c2, (/*1a*/x, /*1b*/y) => { return x.toFixed() });\nvar /*10*/r1b = _.map(c2, rf1);\n\nvar /*11*/r2a = _.map(c3, (/*2a*/x, /*2b*/y) => { return x.length });\nvar /*12*/r2b = _.map(c3, rf2);\n\nvar /*13*/r3a = _.map(c4, (/*3a*/x, /*3b*/y) => { return y.foo() });\nvar /*14*/r3b = _.map(c4, rf3);\n\nvar /*15*/r4a = _.map(c5, (/*4a*/x, /*4b*/y) => { return y.foo() });\n\nvar /*17*/r5a = _.map<number, string, Date>(c2, /*17error1*/(/*5a*/x, /*5b*/y) => { return x.toFixed() }/*17error2*/); \nvar rf1b = (x: number, y: string) => { return new Date() };\nvar /*18*/r5b = _.map<number, string, Date>(c2, rf1b);\n\nvar /*19*/r6a = _.map<Collection<number, number>, string, Date>(c3, (/*6a*/x,/*6b*/y) => { return new Date(); });\nvar rf2b = (x: Collection<number, number>, y: string) => { return new Date(); };\nvar /*20*/r6b = _.map<Collection<number, number>, string, Date>(c3, rf2b);\n\nvar /*21*/r7a = _.map<number, A, string>(c4, (/*7a*/x,/*7b*/y) => { return y.foo() });\nvar /*22*/r7b = _.map<number, A, string>(c4, /*22error1*/rf3/*22error2*/);\n\nvar /*23*/r8a = _.map<number, /*error1*/B/*error2*/, string>(c5, (/*8a*/x,/*8b*/y) => { return y.foo() }); ", |f, t| {
         f.verify_quick_info_at(t, "2a", "(parameter) x: Collection<number, number>", "");
         f.verify_quick_info_at(t, "2b", "(parameter) y: string", "");
         f.verify_quick_info_at(t, "3a", "(parameter) x: number", "");
@@ -4925,8 +4645,7 @@ use crate::tests::prelude::*;
 
 // quickInfoGenericPropertyAccessor_test.go:10
 pub fn test_quick_info_generic_property_accessor(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 declare const o: {
     f: <T>(x: T) => T
     get g(): <T>(x: T) => T
@@ -4936,8 +4655,7 @@ declare const x: number
 
 o.f/*1*/(x)
 o.g/*2*/(x)
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_quick_info_at(t, "1", "(property) f: <number>(x: number) => number", "");
         f.verify_quick_info_at(t, "2", "(accessor) g: <number>(x: number) => number", "");
     });
@@ -4950,8 +4668,7 @@ use crate::tests::prelude::*;
 
 // quickInfoGenericTypeArgumentInference1_test.go:10
 pub fn test_quick_info_generic_type_argument_inference1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @strict: false
+    fourslash::run_generated_test(t, r"// @strict: false
 namespace Underscore {
     export interface Iterator<T, U> {
         (value: T, index: any, list: any): U;
@@ -4967,8 +4684,7 @@ declare var _: Underscore.Static;
 var /*1*/r = _./*11*/all([true, 1, null, 'yes'], x => !x);
 var /*2*/r2 = _./*21*/all([true], _.identity);
 var /*3*/r3 = _./*31*/all([], _.identity);
-var /*4*/r4 = _./*41*/all([<any>true], _.identity);";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*4*/r4 = _./*41*/all([<any>true], _.identity);", |f, t| {
         f.verify_quick_info_at(t, "1", "var r: string | number | boolean", "");
         f.verify_quick_info_at(t, "11", "(method) Underscore.Static.all<string | number | boolean>(list: (string | number | boolean)[], iterator?: Underscore.Iterator<string | number | boolean, boolean>, context?: any): string | number | boolean", "");
         f.verify_quick_info_at(t, "2", "var r2: boolean", "");
@@ -4988,8 +4704,7 @@ use crate::tests::prelude::*;
 
 // quickInfoGenericTypePath_test.go:10
 pub fn test_quick_info_generic_type_path(t: &T) {
-    t.parallel();
-    let content: &str = r#"
+    fourslash::run_generated_test(t, r#"
 function f<T>(x: T) {
   class C {
     value = x
@@ -5007,8 +4722,7 @@ class Box<T> {
 const instance = f/*callF*/("hello");
 const b1/*b1*/ = new Box/*newBox*/(instance);
 declare const b2/*b2*/: Box<typeof instance>;
-"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -5020,8 +4734,7 @@ use crate::tests::prelude::*;
 
 // quickInfoGenerics_test.go:10
 pub fn test_quick_info_generics(t: &T) {
-    t.parallel();
-    let content: &str = r"class Con/*1*/tainer<T> {
+    fourslash::run_generated_test(t, r"class Con/*1*/tainer<T> {
     x: T;
 }
 interface IList</*2*/T> {
@@ -5044,8 +4757,7 @@ var x: List2<IList<number>>;
 var y = x./*14*/getItem(10);
 var x2: IList<IList<number>>;
 var x3: IList<number>;
-var y2 = x./*15*/method(x2, [x3, x3]);";
-    fourslash::run_generated_test(t, content, |f, t| {
+var y2 = x./*15*/method(x2, [x3, x3]);", |f, t| {
         f.verify_quick_info_at(t, "1", "class Container<T>", "");
         f.verify_quick_info_at(t, "2", "(type parameter) T in IList<T>", "");
         f.verify_quick_info_at(t, "3", "(type parameter) T in IList<T>", "");
@@ -5071,8 +4783,7 @@ use crate::tests::prelude::*;
 
 // quickInfoGetterSetter_test.go:10
 pub fn test_quick_info_getter_setter(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @target: es2015
+    fourslash::run_generated_test(t, r#"// @target: es2015
 class C {
     #x = Promise.resolve("")
     set /*setterDef*/myValue(x: Promise<string> | string) {
@@ -5083,8 +4794,7 @@ class C {
     }
 }
 let instance = new C();
-instance./*setterUse*/myValue = instance./*getterUse*/myValue;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+instance./*setterUse*/myValue = instance./*getterUse*/myValue;"#, |f, t| {
         f.verify_quick_info_at(t, "getterUse", "(property) C.myValue: Promise<string>", "");
         f.verify_quick_info_at(t, "getterDef", "(getter) C.myValue: Promise<string>", "");
         f.verify_quick_info_at(t, "setterUse", "(property) C.myValue: string | Promise<string>", "");

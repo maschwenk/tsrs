@@ -5,8 +5,7 @@ use crate::tests::prelude::*;
 
 // jsDocPropertyDescription6_test.go:10
 pub fn test_js_doc_property_description6(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Literal1Example {
+    fourslash::run_generated_test(t, r"interface Literal1Example {
     [key: `prefix${string}`]: number | string;
     /** Something else */
     [key: `prefix${number}`]: number;
@@ -15,8 +14,7 @@ function literal1Example(e: Literal1Example) {
     console.log(e./*literal1*/prefixMember);
     console.log(e./*literal2*/anything);
     console.log(e./*literal3*/prefix0);
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_quick_info_at(t, "literal1", "(index) Literal1Example[`prefix${string}`]: string | number", "");
         f.verify_quick_info_at(t, "literal2", "any", "");
         f.verify_quick_info_at(t, "literal3", "(index) Literal1Example[`prefix${string}` | `prefix${number}`]: number", "Something else");
@@ -30,15 +28,13 @@ use crate::tests::prelude::*;
 
 // jsDocPropertyDescription7_test.go:10
 pub fn test_js_doc_property_description7(t: &T) {
-    t.parallel();
-    let content: &str = r"class StringClass {
+    fourslash::run_generated_test(t, r"class StringClass {
     /** Something generic */
     static [p: string]: any;
 }
 function stringClass(e: typeof StringClass) {
     console.log(e./*stringClass*/anything);
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_quick_info_at(t, "stringClass", "(index) StringClass[string]: any", "Something generic");
     });
 }
@@ -50,15 +46,13 @@ use crate::tests::prelude::*;
 
 // jsDocPropertyDescription8_test.go:10
 pub fn test_js_doc_property_description8(t: &T) {
-    t.parallel();
-    let content: &str = r"class SymbolClass {
+    fourslash::run_generated_test(t, r"class SymbolClass {
     /** Something generic */
     static [p: symbol]: any;
 }
 function symbolClass(e: typeof SymbolClass) {
     console.log(e./*symbolClass*/anything);
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_quick_info_at(t, "symbolClass", "any", "");
     });
 }
@@ -70,8 +64,7 @@ use crate::tests::prelude::*;
 
 // jsDocPropertyDescription9_test.go:10
 pub fn test_js_doc_property_description9(t: &T) {
-    t.parallel();
-    let content: &str = r"class LiteralClass {
+    fourslash::run_generated_test(t, r"class LiteralClass {
     /** Something generic */
     static [key: `prefix${string}`]: any;
     /** Something else */
@@ -81,8 +74,7 @@ function literalClass(e: typeof LiteralClass) {
     console.log(e./*literal1Class*/prefixMember); 
     console.log(e./*literal2Class*/anything);
     console.log(e./*literal3Class*/prefix0);
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_quick_info_at(t, "literal1Class", "(index) LiteralClass[`prefix${string}`]: any", "Something generic");
         f.verify_quick_info_at(t, "literal2Class", "any", "");
         f.verify_quick_info_at(t, "literal3Class", "(index) LiteralClass[`prefix${string}` | `prefix${number}`]: any", r"Something generic
@@ -97,8 +89,7 @@ use crate::tests::prelude::*;
 
 // jsDocSee1_test.go:10
 pub fn test_js_doc_see1(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface [|/*def1*/Foo|] {
+    fourslash::run_generated_test(t, r#"interface [|/*def1*/Foo|] {
     foo: string
 }
 namespace NS {
@@ -115,8 +106,7 @@ const c = ""
 /** @see NS./*use4*/[|Bar|] ns.bar*/
 const [|/*def3*/d|] = ""
 /** @see /*use5*/[|d|] dd*/
-const e = """#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const e = """#, |f, t| {
         f.verify_baseline_go_to_definition(t, false, &["use1", "use2", "use3", "use4", "use5"]);
     });
 }
@@ -128,8 +118,7 @@ use crate::tests::prelude::*;
 
 // jsDocSee2_test.go:10
 pub fn test_js_doc_see2(t: &T) {
-    t.parallel();
-    let content: &str = r#"/** @see {/*use1*/[|foooo|]} unknown reference*/
+    fourslash::run_generated_test(t, r#"/** @see {/*use1*/[|foooo|]} unknown reference*/
 const a = ""
 /** @see {/*use2*/[|@bar|]} invalid tag*/
 const b = ""
@@ -142,8 +131,7 @@ const e = ""
 /** @see /*use6*/[|@@@@@@|] total invalid tag*/
 const f = ""
 /** @see d@{/*use7*/[|fff|]} partial reference */
-const g = """#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const g = """#, |f, t| {
         f.verify_baseline_go_to_definition(t, true, &["use1", "use2", "use3", "use4", "use5", "use6", "use7"]);
     });
 }
@@ -155,15 +143,13 @@ use crate::tests::prelude::*;
 
 // jsDocSee3_test.go:10
 pub fn test_js_doc_see3(t: &T) {
-    t.parallel();
-    let content: &str = r"function foo ([|/*def1*/a|]: string) {
+    fourslash::run_generated_test(t, r"function foo ([|/*def1*/a|]: string) {
     /**
      * @see {/*use1*/[|a|]}
      */
     function bar ([|/*def2*/a|]: string) {
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_go_to_definition(t, false, &["use1"]);
     });
 }
@@ -175,8 +161,7 @@ use crate::tests::prelude::*;
 
 // jsDocSee4_test.go:10
 pub fn test_js_doc_see4(t: &T) {
-    t.parallel();
-    let content: &str = r"class [|/*def1*/A|] {
+    fourslash::run_generated_test(t, r"class [|/*def1*/A|] {
     foo () { }
 }
 declare const [|/*def2*/a|]: A;
@@ -191,8 +176,7 @@ const t2 = 1
 /**
  * @see {@link /*use3*/[|a|].foo()}
  */
-const t3 = 1";
-    fourslash::run_generated_test(t, content, |f, t| {
+const t3 = 1", |f, t| {
         f.verify_baseline_go_to_definition(t, false, &["use1", "use2", "use3"]);
     });
 }
@@ -204,13 +188,11 @@ use crate::tests::prelude::*;
 
 // jsDocSee_rename1_test.go:11
 pub fn test_js_doc_see_rename1(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|interface [|{| "contextRangeIndex": 0 |}A|] {}|]
+    fourslash::run_generated_test(t, r#"[|interface [|{| "contextRangeIndex": 0 |}A|] {}|]
 /**
  * @see {[|A|]}
  */
-declare const a: [|A|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+declare const a: [|A|]"#, |f, t| {
         f.verify_baseline_rename(t, None, &util::to_any(&f.ranges()[1..].to_vec()[..]));
     });
 }
@@ -222,16 +204,14 @@ use crate::tests::prelude::*;
 
 // jsDocServices_test.go:10
 pub fn test_js_doc_services(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface /*I*/I {}
+    fourslash::run_generated_test(t, r#"interface /*I*/I {}
 
 /**
  * @param /*use*/[|foo|] I pity the foo
  */
 function f([|[|/*def*/{| "contextRangeIndex": 1 |}foo|]: I|]) {
     return /*use2*/[|foo|];
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.go_to_marker(t, "use");
         f.verify_quick_info_is(t, "(parameter) foo: I", "I pity the foo");
         f.verify_baseline_find_all_references(t, &["use", "def", "use2"]);
@@ -249,13 +229,11 @@ use crate::tests::prelude::*;
 
 // jsDocSignature-43394_test.go:10
 pub fn test_js_doc_signature_43394(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * @typedef {Object} Foo
  * @property {number} ...
  * /**/@typedef {number} Bar
- */";
-    fourslash::run_generated_test(t, content, |f, t| {
+ */", |f, t| {
         f.verify_baseline_signature_help(t);
     });
 }
@@ -267,8 +245,7 @@ use crate::tests::prelude::*;
 
 // jsDocTagsWithHyphen_test.go:11
 pub fn test_js_doc_tags_with_hyphen(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: dummy.js
 /**
  * @typedef Product
@@ -281,8 +258,7 @@ pub fn test_js_doc_tags_with_hyphen(t: &T) {
  */
 const product = {
     /*3*/
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_quick_info_at(t, "1", "(property) high-top: boolean", "some-comments");
         f.verify_quick_info_at(t, "2", r#"type Product = {
     title: string;
@@ -299,8 +275,7 @@ use crate::tests::prelude::*;
 
 // jsDocTypeTagQuickInfo1_test.go:10
 pub fn test_js_doc_type_tag_quick_info1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 // @strict: true
 // @allowJs: true
 // @Filename: jsDocTypeTag1.js
@@ -329,8 +304,7 @@ var /*11*/AnyType;
 /** @type {?} */
 var /*12*/QType;
 /** @type {String|Number} */
-var /*13*/SOrN;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*13*/SOrN;", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -342,8 +316,7 @@ use crate::tests::prelude::*;
 
 // jsDocTypeTagQuickInfo2_test.go:10
 pub fn test_js_doc_type_tag_quick_info2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 // @strict: true
 // @allowJs: true
 // @Filename: jsDocTypeTag2.js
@@ -370,8 +343,7 @@ var /*10*/func;
 /** @type {function (number): number} */
 var /*11*/func1;
 /** @type {string | number} */
-var /*12*/sOrn;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*12*/sOrn;", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -383,8 +355,7 @@ use crate::tests::prelude::*;
 
 // jsDocTypedefQuickInfo1_test.go:10
 pub fn test_js_doc_typedef_quick_info1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: jsDocTypedef1.js
 /**
  * @typedef {Object} Opts
@@ -411,8 +382,7 @@ foo({x: 'abc'});
 function foo1(/*2*/opts1) {
     opts1.x;
 }
-foo1({x: 'abc'});"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+foo1({x: 'abc'});"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -424,8 +394,7 @@ use crate::tests::prelude::*;
 
 // jsFileImportNoTypes2_test.go:12
 pub fn test_js_file_import_no_types2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: /default.ts
 export default class TestDefaultClass {}
 // @Filename: /defaultType.ts
@@ -443,8 +412,7 @@ export { TestClassExportList, TestInterfaceExportList };
 export class TestClassBaseline {}
 export interface TestInterfaceBaseline {}
 // @Filename: /a.js
-import /**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+import /**/", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "TestClassBaseline".to_string(), insert_text: Some(r#"import { TestClassBaseline } from "./baseline";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./baseline".to_string(), ..Default::default() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "TestClassExportList".to_string(), insert_text: Some(r#"import { TestClassExportList } from "./exportList";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./exportList".to_string(), ..Default::default() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "TestClassReExport".to_string(), insert_text: Some(r#"import { TestClassReExport } from "./reExport";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./reExport".to_string(), ..Default::default() }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "TestDefaultClass".to_string(), insert_text: Some(r#"import TestDefaultClass from "./default";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./default".to_string(), ..Default::default() }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -456,8 +424,7 @@ use crate::tests::prelude::*;
 
 // jsObjectDefinePropertyRenameLocations_test.go:10
 pub fn test_js_object_define_property_rename_locations(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @checkJs: true
 // @noEmit: true
 // @Filename: index.js
@@ -469,8 +436,7 @@ var CircularList = (function () {
         this.[|maxLength|] + this.[|maxLength|]
     }
     return CircularList;
-})()"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+})()"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &[]);
     });
 }
@@ -482,8 +448,7 @@ use crate::tests::prelude::*;
 
 // jsQuickInfoGenerallyAcceptableSize_test.go:10
 pub fn test_js_quick_info_generally_acceptable_size(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @Filename: index.js
 // Data table
@@ -689,8 +654,7 @@ var doSome/*1*/thing = function (dataTable) {
   * Another thing
   * @type {SomeCallback}
   */
-var anotherThing/*2*/ = function(a, b) {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+var anotherThing/*2*/ = function(a, b) {}", |f, t| {
         f.verify_quick_info_at(t, "1", "var doSomething: (dataTable: DataTableThing) => void", "Do something");
         f.verify_quick_info_at(t, "2", "var anotherThing: SomeCallback", "Another thing");
     });
@@ -703,13 +667,11 @@ use crate::tests::prelude::*;
 
 // jsRequireQuickInfo_test.go:10
 pub fn test_js_require_quick_info(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: a.js
 const /**/x = require("./b");
 // @Filename: b.js
-exports.x = 0;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+exports.x = 0;"#, |f, t| {
         f.verify_quick_info_at(t, "", "import x", "");
     });
 }
@@ -721,12 +683,10 @@ use crate::tests::prelude::*;
 
 // jsSignature-41059_test.go:10
 pub fn test_js_signature_41059(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: esnext
+    fourslash::run_generated_test(t, r"// @lib: esnext
 // @allowNonTsExtensions: true
 // @Filename: Foo.js
-a.next(/**/);";
-    fourslash::run_generated_test(t, content, |f, t| {
+a.next(/**/);", |f, t| {
         f.go_to_marker(t, "");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "Generator.next(): IteratorResult<T, TReturn>".to_string(), overloads_count: 2, ..Default::default() });
     });
@@ -739,8 +699,7 @@ use crate::tests::prelude::*;
 
 // jsconfig_test.go:10
 pub fn test_jsconfig(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.js
+    fourslash::run_generated_test(t, r#"// @Filename: /a.js
 function f(/**/x) {
 }
 // @Filename: /jsconfig.json
@@ -749,8 +708,7 @@ function f(/**/x) {
         "checkJs": true,
         "noImplicitAny": true
     }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.go_to_file(t, "/a.js");
         f.verify_error_exists_after_marker(t, "");
     });
@@ -763,8 +721,7 @@ use crate::tests::prelude::*;
 
 // jsdocCallbackTag_test.go:10
 pub fn test_jsdoc_callback_tag(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @strict: false
 // @allowNonTsExtensions: true
 // @Filename: jsdocCallbackTag.js
@@ -789,8 +746,7 @@ var t/*1*/;
  * @type {FooH/*3*/andler2} callback
  */
 var t2/*2*/;
-t(/*4*/"!", /*5*/12, /*6*/false);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+t(/*4*/"!", /*5*/12, /*6*/false);"#, |f, t| {
         f.mark_test_as_strada_server();
         f.go_to_marker(t, "1");
         f.verify_quick_info_is(t, "var t: FooHandler", "");
@@ -810,8 +766,7 @@ use crate::tests::prelude::*;
 
 // jsdocCallbackTagRename01_test.go:10
 pub fn test_jsdoc_callback_tag_rename01(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsDocCallback.js
 
@@ -821,8 +776,7 @@ pub fn test_jsdoc_callback_tag_rename01(t: &T) {
  |]*/
 
 /** @type {/*1*/[|FooCallback|]} */
-var t;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var t;"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1]))]);
     });
@@ -835,8 +789,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion1_test.go:11
 pub fn test_jsdoc_deprecated_suggestion1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @experimentalDecorators: true
+    fourslash::run_generated_test(t, r#"// @experimentalDecorators: true
 // @Filename: a.ts
 export namespace foo {
     /** @deprecated */
@@ -910,8 +863,7 @@ type Z = [|QW|];
 type A = f.[|Foo|];
 type B = f.[|QW|];
 type C = f.WQ;
-type [|O|] = Z | A | B | C;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+type [|O|] = Z | A | B | C;"#, |f, t| {
         f.go_to_file(t, "a.ts");
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6133), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is declared but its value is never read.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Unnecessary]), range: f.ranges()[1].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'foo.faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[2].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[3].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[4].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[5].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'foo.faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[6].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'foo.faff' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[7].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[8].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'Foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[9].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'zzz' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[10].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'QW' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[11].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature 'new (): C' of 'C' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[12].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'c.m' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[13].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'m' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[14].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'D' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[15].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'D' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[16].ls_range, ..Default::default() }]);
         f.go_to_file(t, "j.tsx");
@@ -928,16 +880,14 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion10_test.go:11
 pub fn test_jsdoc_deprecated_suggestion10(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @filename: foo.ts
+    fourslash::run_generated_test(t, r#"// @filename: foo.ts
 export namespace foo {
     /** @deprecated */
     export const bar = 1;
     [|bar|];
 }
 foo.[|bar|];
-foo[[|"bar"|]];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+foo[[|"bar"|]];"#, |f, t| {
         f.go_to_file(t, "foo.ts");
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'bar' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[2].ls_range, ..Default::default() }]);
     });
@@ -950,14 +900,12 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion11_test.go:11
 pub fn test_jsdoc_deprecated_suggestion11(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @filename: /foo.ts
+    fourslash::run_generated_test(t, r#"// @filename: /foo.ts
 /** @deprecated */
 export function foo() {}
 // @filename: /test.ts
 import { [|foo|] } from "./foo";
-[|foo|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|foo|];"#, |f, t| {
         f.go_to_file(t, "/test.ts");
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
     });
@@ -970,8 +918,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion12_test.go:11
 pub fn test_jsdoc_deprecated_suggestion12(t: &T) {
-    t.parallel();
-    let content: &str = r"// @filename: foo.ts
+    fourslash::run_generated_test(t, r"// @filename: foo.ts
 /**
  * @deprecated
  */
@@ -979,8 +926,7 @@ function foo() {};
 function bar(fn: () => void) {
     fn();
 }
-bar([|foo|]);";
-    fourslash::run_generated_test(t, content, |f, t| {
+bar([|foo|]);", |f, t| {
         f.go_to_file(t, "foo.ts");
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }]);
     });
@@ -993,8 +939,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion13_test.go:11
 pub fn test_jsdoc_deprecated_suggestion13(t: &T) {
-    t.parallel();
-    let content: &str = r"// @filename: foo.ts
+    fourslash::run_generated_test(t, r"// @filename: foo.ts
 /**
  * @deprecated
  */
@@ -1005,8 +950,7 @@ class Foo {
         fn();
     }
 }
-new Foo([|foo|]);";
-    fourslash::run_generated_test(t, content, |f, t| {
+new Foo([|foo|]);", |f, t| {
         f.go_to_file(t, "foo.ts");
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'foo' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }]);
     });
@@ -1019,8 +963,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion14_test.go:11
 pub fn test_jsdoc_deprecated_suggestion14(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: esnext
+    fourslash::run_generated_test(t, r#"// @module: esnext
 // @filename: /a.ts
 export const a = 1;
 export const b = 1;
@@ -1031,8 +974,7 @@ export {
 } from "./a";
 // @filename: /c.ts
 import { [|a|] } from "./b";
-[|a|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|a|]"#, |f, t| {
         f.go_to_file(t, "/c.ts");
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
     });
@@ -1045,8 +987,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion15_test.go:11
 pub fn test_jsdoc_deprecated_suggestion15(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: esnext
+    fourslash::run_generated_test(t, r#"// @module: esnext
 // @filename: /a.ts
 export const a = 1;
 export const b = 1;
@@ -1061,8 +1002,7 @@ export {
 } from "./b";
 // @filename: /d.ts
 import { [|a|] } from "./c";
-[|a|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|a|]"#, |f, t| {
         f.go_to_file(t, "/d.ts");
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
     });
@@ -1075,16 +1015,14 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion16_test.go:11
 pub fn test_jsdoc_deprecated_suggestion16(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: esnext
+    fourslash::run_generated_test(t, r#"// @module: esnext
 // @filename: /a.ts
 const a = 1;
 const b = 1;
 export { a, /** @deprecated b is deprecated */ b }
 // @filename: /b.ts
 import { [|b|] } from "./a";
-[|b|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|b|]"#, |f, t| {
         f.go_to_file(t, "/b.ts");
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'b' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'b' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
     });
@@ -1097,8 +1035,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion17_test.go:11
 pub fn test_jsdoc_deprecated_suggestion17(t: &T) {
-    t.parallel();
-    let content: &str = r"// @filename: foo.ts
+    fourslash::run_generated_test(t, r"// @filename: foo.ts
 interface Foo {
     /** @deprecated */
     [k: string]: any;
@@ -1110,8 +1047,7 @@ function f(foo: Foo) {
     foo.[|x|];
     foo.[|y|];
     foo.[|z|];
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'x' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'z' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[2].ls_range, ..Default::default() }]);
     });
 }
@@ -1123,8 +1059,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion18_test.go:11
 pub fn test_jsdoc_deprecated_suggestion18(t: &T) {
-    t.parallel();
-    let content: &str = r"// @jsx: preserve
+    fourslash::run_generated_test(t, r"// @jsx: preserve
 // @filename: foo.tsx
 interface Props {
     /** @deprecated  */
@@ -1136,8 +1071,7 @@ function A(props: Props) {
 }
 function B() {
     return <A [|x|]={1} [|y|]={1} />
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'x' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }]);
     });
 }
@@ -1149,8 +1083,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion19_test.go:11
 pub fn test_jsdoc_deprecated_suggestion19(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I {
+    fourslash::run_generated_test(t, r"interface I {
     x: number;
     y: number;
 }
@@ -1159,8 +1092,7 @@ interface I {
     x: number;
 }
 const foo: I = { [|x|]: 1, y: 1 };
-foo.[|x|];";
-    fourslash::run_generated_test(t, content, |f, t| {
+foo.[|x|];", |f, t| {
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'x' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'x' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
     });
 }
@@ -1172,8 +1104,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion2_test.go:11
 pub fn test_jsdoc_deprecated_suggestion2(t: &T) {
-    t.parallel();
-    let content: &str = r"// overloads
+    fourslash::run_generated_test(t, r"// overloads
 declare function foo(a: string): number;
 /** @deprecated */
 declare function foo(): undefined;
@@ -1231,8 +1162,7 @@ cb;
 [|ca|]();
 cb();
 new ca();
-new [|cb|]();";
-    fourslash::run_generated_test(t, content, |f, t| {
+new [|cb|]();", |f, t| {
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature '(): undefined' of 'foo' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[0].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature '(): number' of 'bar' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[1].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'bar' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[2].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature '(): number' of 'baz' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[3].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'baz' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[4].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'f' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[5].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some(r#"The signature '(tag: "xmp"): void' of 't.createElement' is deprecated."#.to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[6].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature 'new (): C' of 'C' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[7].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature '(): void' of 'ca' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[8].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("The signature 'new (): string' of 'cb' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6387), ..Default::default() }), range: f.ranges()[9].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }]);
     });
 }
@@ -1244,8 +1174,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion20_test.go:11
 pub fn test_jsdoc_deprecated_suggestion20(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: esnext
+    fourslash::run_generated_test(t, r#"// @module: esnext
 // @filename: /a.ts
 export default function a() {}
 // @filename: /b.ts
@@ -1260,8 +1189,7 @@ export const b = (): void => {};
 import * as _ from "./b";
 
 _.[|a|]()
-_.[|b|]()"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+_.[|b|]()"#, |f, t| {
         f.go_to_file(t, "/c.ts");
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'b' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
     });
@@ -1274,8 +1202,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion21_test.go:11
 pub fn test_jsdoc_deprecated_suggestion21(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: esnext
+    fourslash::run_generated_test(t, r#"// @module: esnext
 // @filename: /a.ts
 export const a = 1;
 export const b = 1;
@@ -1290,8 +1217,7 @@ export {
 } from "./b";
 // @filename: /d.ts
 import * as _ from "./c";
-_.[|a|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+_.[|a|]"#, |f, t| {
         f.go_to_file(t, "/d.ts");
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'a' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }]);
     });
@@ -1304,8 +1230,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion22_test.go:10
 pub fn test_jsdoc_deprecated_suggestion22(t: &T) {
-    t.parallel();
-    let content: &str = r"// @filename: /a.ts
+    fourslash::run_generated_test(t, r"// @filename: /a.ts
 const foo: {
     /**
 	 * @deprecated
@@ -1314,8 +1239,7 @@ const foo: {
 	(a: string, b: number): string;
 } = (a: string, b: string | number) => a + b;
 
-[|foo|](1, 1);";
-    fourslash::run_generated_test(t, content, |f, t| {
+[|foo|](1, 1);", |f, t| {
         f.verify_suggestion_diagnostics(t, &[]);
     });
 }
@@ -1327,8 +1251,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion3_test.go:11
 pub fn test_jsdoc_deprecated_suggestion3(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface RequestOptions {
+    fourslash::run_generated_test(t, r#"interface RequestOptions {
     /** @deprecated use signal instead */
     timeout?: number;
 }
@@ -1336,8 +1259,7 @@ declare function request(url: string, opts: RequestOptions): void;
 
 request("/api", { [|timeout|]: 5000 });
 declare const opts: RequestOptions;
-opts.[|timeout|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+opts.[|timeout|];"#, |f, t| {
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'timeout' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[0].ls_range, ..Default::default() }, lsproto::Diagnostic { code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), message: lsproto::StringOrMarkupContent { string: Some("'timeout' is deprecated.".to_string()), ..Default::default() }, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), range: f.ranges()[1].ls_range, ..Default::default() }]);
     });
 }
@@ -1349,8 +1271,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion4_test.go:11
 pub fn test_jsdoc_deprecated_suggestion4(t: &T) {
-    t.parallel();
-    let content: &str = r"// @jsx: preserve
+    fourslash::run_generated_test(t, r"// @jsx: preserve
 // @filename: a.tsx
 interface Props {
     /** @deprecated */
@@ -1362,8 +1283,7 @@ function A(props: Props) {
 }
 function B() {
     return <A [|x|]={1} y={1} />
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_file(t, "a.tsx");
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'x' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[0].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }]);
     });
@@ -1376,8 +1296,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion5_test.go:10
 pub fn test_jsdoc_deprecated_suggestion5(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @checkJs: true
+    fourslash::run_generated_test(t, r#"// @checkJs: true
 // @allowJs: true
 // @Filename: jsdocDeprecated_suggestion5.js
 /** @typedef {{ email: string, nickName?: string }} U2 */
@@ -1393,8 +1312,7 @@ const cc = _k => {}
 /** @enum {number} */
 const DOOM = { e: 1, m: 1 }
 /** @type {DOOM} */
-const kneeDeep = DOOM.e"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const kneeDeep = DOOM.e"#, |f, t| {
         f.verify_suggestion_diagnostics(t, &[]);
     });
 }
@@ -1406,8 +1324,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion6_test.go:11
 pub fn test_jsdoc_deprecated_suggestion6(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: a.tsx
+    fourslash::run_generated_test(t, r#"// @Filename: a.tsx
 /** @deprecated */
 type Props = {}
 /** @deprecated */
@@ -1417,8 +1334,7 @@ const Component = (props: [|Props|]) => props && <div />;
 type Options = {}
 /** @deprecated */
 const deprecatedFunction = (options: [|Options|]) => { options }
-[|deprecatedFunction|]({});"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|deprecatedFunction|]({});"#, |f, t| {
         f.go_to_file(t, "a.tsx");
         f.verify_suggestion_diagnostics(t, &[lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'Props' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[0].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'Component' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[1].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'Options' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[2].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }, lsproto::Diagnostic { message: lsproto::StringOrMarkupContent { string: Some("'deprecatedFunction' is deprecated.".to_string()), ..Default::default() }, code: Some(lsproto::IntegerOrString { integer: Some(6385), ..Default::default() }), range: f.ranges()[3].ls_range, tags: Some(vec![lsproto::DiagnosticTag::Deprecated]), ..Default::default() }]);
     });
@@ -1431,8 +1347,7 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion7_test.go:10
 pub fn test_jsdoc_deprecated_suggestion7(t: &T) {
-    t.parallel();
-    let content: &str = r"enum Direction {
+    fourslash::run_generated_test(t, r"enum Direction {
     Left = -1,
     Right = 1,
 }
@@ -1440,8 +1355,7 @@ type T = Direction.Left
 /** @deprecated */
 const x = 1
 type x = string
-var y: x = 'hi'";
-    fourslash::run_generated_test(t, content, |f, t| {
+var y: x = 'hi'", |f, t| {
         f.verify_suggestion_diagnostics(t, &[]);
     });
 }
@@ -1453,15 +1367,13 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion8_test.go:10
 pub fn test_jsdoc_deprecated_suggestion8(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: first.ts
+    fourslash::run_generated_test(t, r"// @Filename: first.ts
 /** @deprecated */
 export declare function tap<T>(next: null): void;
 export declare function tap<T>(next: T): T;
 // @Filename: second.ts
 import { tap } from './first';
-tap";
-    fourslash::run_generated_test(t, content, |f, t| {
+tap", |f, t| {
         f.go_to_file(t, "second.ts");
         f.verify_no_errors(t);
         f.verify_suggestion_diagnostics(t, &[]);
@@ -1475,13 +1387,11 @@ use crate::tests::prelude::*;
 
 // jsdocDeprecated_suggestion9_test.go:10
 pub fn test_jsdoc_deprecated_suggestion9(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: first.ts
+    fourslash::run_generated_test(t, r"// @Filename: first.ts
 export class logger { }
 // @Filename: second.ts
 import { logger } from './first';
-new logger()";
-    fourslash::run_generated_test(t, content, |f, t| {
+new logger()", |f, t| {
         f.go_to_file(t, "second.ts");
         f.verify_no_errors(t);
         f.verify_suggestion_diagnostics(t, &[]);
@@ -1495,11 +1405,9 @@ use crate::tests::prelude::*;
 
 // jsdocExtendsTagCompletion_test.go:11
 pub fn test_jsdoc_extends_tag_completion(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 /** @extends {/**/} */
-class A {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+class A {}", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_global_types_plus(&[Any::String("A".to_string())])), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -1511,11 +1419,9 @@ use crate::tests::prelude::*;
 
 // jsdocImplementsTagCompletion_test.go:11
 pub fn test_jsdoc_implements_tag_completion(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 /** @implements {/**/} */
-class A {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+class A {}", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_global_types_plus(&[Any::String("A".to_string())])), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -1527,14 +1433,12 @@ use crate::tests::prelude::*;
 
 // jsdocImportTagCompletion1_test.go:11
 pub fn test_jsdoc_import_tag_completion1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJS: true
+    fourslash::run_generated_test(t, r"// @allowJS: true
 // @checkJs: true
 // @filename: /a.js
 /**
  * @/**/
- */";
-    fourslash::run_generated_test(t, content, |f, t| {
+ */", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("import".to_string())], ..Default::default() }), ..Default::default() }));
     });
 }
@@ -1546,8 +1450,7 @@ use crate::tests::prelude::*;
 
 // jsdocLink1_test.go:10
 pub fn test_jsdoc_link1(t: &T) {
-    t.parallel();
-    let content: &str = r"class C {
+    fourslash::run_generated_test(t, r"class C {
 }
 /**
  * {@link C}
@@ -1558,8 +1461,7 @@ pub fn test_jsdoc_link1(t: &T) {
  * @see {@link C} its great
  */
 function /**/CC() {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -1571,8 +1473,7 @@ use crate::tests::prelude::*;
 
 // jsdocLink2_test.go:10
 pub fn test_jsdoc_link2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: jsdocLink2.ts
+    fourslash::run_generated_test(t, r"// @Filename: jsdocLink2.ts
 class C {
 }
 // @Filename: script.ts
@@ -1585,8 +1486,7 @@ class C {
  * @see {@link C} its great
  */
 function /**/CC() {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -1598,8 +1498,7 @@ use crate::tests::prelude::*;
 
 // jsdocLink3_test.go:10
 pub fn test_jsdoc_link3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /jsdocLink3.ts
+    fourslash::run_generated_test(t, r"// @Filename: /jsdocLink3.ts
 export class C {
 }
 // @Filename: /module1.ts
@@ -1613,8 +1512,7 @@ import { C } from './jsdocLink3'
  * @see {@link C} its great
  */
 function /**/CC() {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -1626,8 +1524,7 @@ use crate::tests::prelude::*;
 
 // jsdocLink4_test.go:10
 pub fn test_jsdoc_link4(t: &T) {
-    t.parallel();
-    let content: &str = r"declare class I {
+    fourslash::run_generated_test(t, r"declare class I {
   /** {@link I} */
   bar/*1*/(): void
 }
@@ -1640,8 +1537,7 @@ var n/*2*/ = 1
 function f(x) {
 }
 f/*3*/()
-type Pos = [number, number]";
-    fourslash::run_generated_test(t, content, |f, t| {
+type Pos = [number, number]", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -1653,16 +1549,14 @@ use crate::tests::prelude::*;
 
 // jsdocLink5_test.go:10
 pub fn test_jsdoc_link5(t: &T) {
-    t.parallel();
-    let content: &str = r"function g() { }
+    fourslash::run_generated_test(t, r"function g() { }
 /**
  * {@link g()} {@link g() } {@link g ()} {@link g () 0} {@link g()1} {@link g() 2}
  * {@link u()} {@link u() } {@link u ()} {@link u () 0} {@link u()1} {@link u() 2}
  */
 function f(x) {
 }
-f/*3*/()";
-    fourslash::run_generated_test(t, content, |f, t| {
+f/*3*/()", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -1674,8 +1568,7 @@ use crate::tests::prelude::*;
 
 // jsdocLink6_test.go:10
 pub fn test_jsdoc_link6(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @filename: /a.ts
 export default function A() { }
 export function B() { };
 // @Filename: /b.ts
@@ -1684,8 +1577,7 @@ import A, { B } from "./a";
  * {@link A}
  * {@link B}
  */
-export default function /**/f() { }"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export default function /**/f() { }"#, |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -1697,13 +1589,11 @@ use crate::tests::prelude::*;
 
 // jsdocLink_findAllReferences1_test.go:10
 pub fn test_jsdoc_link_find_all_references1(t: &T) {
-    t.parallel();
-    let content: &str = r"interface A/**/ {}
+    fourslash::run_generated_test(t, r"interface A/**/ {}
 /**
  * {@link A()} is ok
  */
-declare const a: A";
-    fourslash::run_generated_test(t, content, |f, t| {
+declare const a: A", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -1715,13 +1605,11 @@ use crate::tests::prelude::*;
 
 // jsdocLink_rename1_test.go:10
 pub fn test_jsdoc_link_rename1(t: &T) {
-    t.parallel();
-    let content: &str = r"interface A/**/ {}
+    fourslash::run_generated_test(t, r"interface A/**/ {}
 /**
  * {@link A()} is ok
  */
-declare const a: A";
-    fourslash::run_generated_test(t, content, |f, t| {
+declare const a: A", |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -1733,8 +1621,7 @@ use crate::tests::prelude::*;
 
 // jsdocNullableUnion_test.go:11
 pub fn test_jsdoc_nullable_union(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowNonTsExtensions: true
+    fourslash::run_generated_test(t, r"// @allowNonTsExtensions: true
 // @checkJs: true
 // @Filename: Foo.js
 /**
@@ -1747,8 +1634,7 @@ function f(p1, p2, p3) {
     p1./*1*/;
     p2./*2*/;
     p3./*3*/;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("x".to_string())]), ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("y".to_string())]), ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::String("3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("z".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -1762,8 +1648,7 @@ use crate::tests::prelude::*;
 
 // jsdocOnInheritedMembers1_test.go:10
 pub fn test_jsdoc_on_inherited_members1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @filename: /a.js
 /** @template T */
@@ -1778,8 +1663,7 @@ class B extends A {
 }
 
 const b = new B();
-b.method/**/;";
-    fourslash::run_generated_test(t, content, |f, t| {
+b.method/**/;", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -1791,8 +1675,7 @@ use crate::tests::prelude::*;
 
 // jsdocOnInheritedMembers2_test.go:10
 pub fn test_jsdoc_on_inherited_members2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @filename: /a.js
 /** @template T */
@@ -1807,8 +1690,7 @@ const B = class extends A {
 }
 
 const b = new B();
-b.method/**/;";
-    fourslash::run_generated_test(t, content, |f, t| {
+b.method/**/;", |f, t| {
         f.verify_baseline_hover(t);
     });
 }
@@ -1820,14 +1702,12 @@ use crate::tests::prelude::*;
 
 // jsdocOverloadTagCompletion_test.go:11
 pub fn test_jsdoc_overload_tag_completion(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJS: true
+    fourslash::run_generated_test(t, r"// @allowJS: true
 // @checkJs: true
 // @filename: /a.js
 /**
  * @/**/
- */";
-    fourslash::run_generated_test(t, content, |f, t| {
+ */", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("overload".to_string())], ..Default::default() }), ..Default::default() }));
     });
 }
@@ -1839,8 +1719,7 @@ use crate::tests::prelude::*;
 
 // jsdocParam_suggestion1_test.go:10
 pub fn test_jsdoc_param_suggestion1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: a.ts
+    fourslash::run_generated_test(t, r"// @Filename: a.ts
 /**
  * @param options - whatever
  * @param options.zone - equally bad
@@ -1852,8 +1731,7 @@ declare function bad(options: any): void
  */
 function worse(): void {
     arguments
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_file(t, "a.ts");
         f.verify_suggestion_diagnostics(t, &[]);
     });
@@ -1866,8 +1744,7 @@ use crate::tests::prelude::*;
 
 // jsdocParamTagSpecialKeywords_test.go:11
 pub fn test_jsdoc_param_tag_special_keywords(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: test.js
 /**
@@ -1875,8 +1752,7 @@ pub fn test_jsdoc_param_tag_special_keywords(t: &T) {
  */
 function test(type) {
     type./**/
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.mark_test_as_strada_server();
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
     });
@@ -1889,8 +1765,7 @@ use crate::tests::prelude::*;
 
 // jsdocParameterNameCompletion_test.go:11
 pub fn test_jsdoc_parameter_name_completion(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * @param /*0*/
  */
 function f(foo, bar) {}
@@ -1907,8 +1782,7 @@ function h(cat, canary, canoodle, cantaloupe, zebra) {}
 /**
  * @param /*3*/ {string} /*4*/
  */
-function i(foo, bar) {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+function i(foo, bar) {}", |f, t| {
         f.verify_completions(t, Any::StringSlice(vec!["0".to_string(), "3".to_string(), "4".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("bar".to_string()), Any::String("foo".to_string())]), ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("bar".to_string())]), ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("canary".to_string()), Any::String("canoodle".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -1922,12 +1796,10 @@ use crate::tests::prelude::*;
 
 // jsdocPropTagCompletion_test.go:11
 pub fn test_jsdoc_prop_tag_completion(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * @typedef Foo
  * @pr/**/
- */";
-    fourslash::run_generated_test(t, content, |f, t| {
+ */", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("prop".to_string())], ..Default::default() }), ..Default::default() }));
     });
 }
@@ -1939,13 +1811,11 @@ use crate::tests::prelude::*;
 
 // jsdocPropertyTagCompletion_test.go:11
 pub fn test_jsdoc_property_tag_completion(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 /**
  * @typedef {Object} Foo
  * @property {/**/}
- */";
-    fourslash::run_generated_test(t, content, |f, t| {
+ */", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBAL_TYPES.clone()), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -1957,8 +1827,7 @@ use crate::tests::prelude::*;
 
 // jsdocReturnsTag_test.go:10
 pub fn test_jsdoc_returns_tag(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: dummy.js
 /**
  * Find an item
@@ -1969,8 +1838,7 @@ pub fn test_jsdoc_returns_tag(t: &T) {
  */
 function find(l, x) {
 }
-find(''/**/);";
-    fourslash::run_generated_test(t, content, |f, t| {
+find(''/**/);", |f, t| {
         f.verify_baseline_signature_help(t);
     });
 }
@@ -2014,8 +1882,7 @@ use crate::tests::prelude::*;
 
 // jsdocSatisfiesTagCompletion1_test.go:11
 pub fn test_jsdoc_satisfies_tag_completion1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 // @noEmit: true
 // @allowJS: true
 // @checkJs: true
@@ -2023,8 +1890,7 @@ pub fn test_jsdoc_satisfies_tag_completion1(t: &T) {
 /**
  * @satisfies {/**/}
  */
-const t = { a: 1 };";
-    fourslash::run_generated_test(t, content, |f, t| {
+const t = { a: 1 };", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBAL_TYPES.clone()), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -2036,16 +1902,14 @@ use crate::tests::prelude::*;
 
 // jsdocSatisfiesTagCompletion2_test.go:11
 pub fn test_jsdoc_satisfies_tag_completion2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noEmit: true
+    fourslash::run_generated_test(t, r"// @noEmit: true
 // @allowJS: true
 // @checkJs: true
 // @filename: /a.js
 /**
  * @/**/
  */
-const t = { a: 1 };";
-    fourslash::run_generated_test(t, content, |f, t| {
+const t = { a: 1 };", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("satisfies".to_string())], ..Default::default() }), ..Default::default() }));
     });
 }
@@ -2057,8 +1921,7 @@ use crate::tests::prelude::*;
 
 // jsdocSatisfiesTagFindAllReferences_test.go:10
 pub fn test_jsdoc_satisfies_tag_find_all_references(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noEmit: true
+    fourslash::run_generated_test(t, r"// @noEmit: true
 // @allowJS: true
 // @checkJs: true
 // @filename: /a.js
@@ -2068,8 +1931,7 @@ pub fn test_jsdoc_satisfies_tag_find_all_references(t: &T) {
  */
 
 /** @satisfies {/**/T} comment */
-const foo = { a: 1 };";
-    fourslash::run_generated_test(t, content, |f, t| {
+const foo = { a: 1 };", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -2081,8 +1943,7 @@ use crate::tests::prelude::*;
 
 // jsdocSatisfiesTagRename_test.go:10
 pub fn test_jsdoc_satisfies_tag_rename(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noEmit: true
+    fourslash::run_generated_test(t, r"// @noEmit: true
 // @allowJS: true
 // @checkJs: true
 // @filename: /a.js
@@ -2092,8 +1953,7 @@ pub fn test_jsdoc_satisfies_tag_rename(t: &T) {
  */
 
 /** @satisfies {/**/T} comment */
-const foo = { a: 1 };";
-    fourslash::run_generated_test(t, content, |f, t| {
+const foo = { a: 1 };", |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -2230,11 +2090,9 @@ function abcdef(x) { return x; }
 
 // jsdocSnippetCompletion_test.go:111
 pub fn test_jsdoc_snippet_completion_respects_enabled_preference(t: &T) {
-    t.parallel();
-    let content: &str = r"/*completion*/ */
+    fourslash::run_generated_test(t, r"/*completion*/ */
 function abcdef(x) { }
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.go_to_marker(t, "completion");
         f.insert(t, "/**");
         let mut user_preferences = lsutil::new_default_user_preferences();
@@ -2278,11 +2136,9 @@ class C {
 
 // jsdocSnippetCompletion_test.go:152
 pub fn test_jsdoc_snippet_completion_not_in_non_empty_comment(t: &T) {
-    t.parallel();
-    let content: &str = r"/** text /*completion*/ */
+    fourslash::run_generated_test(t, r"/** text /*completion*/ */
 function abcdef(x) { }
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_completions(t, Any::String("completion".to_string()), None);
     });
 }
@@ -2294,8 +2150,7 @@ use crate::tests::prelude::*;
 
 // jsdocTemplatePrototypeCompletions_test.go:11
 pub fn test_jsdoc_template_prototype_completions(t: &T) {
-    t.parallel();
-    let content: &str = r"// @checkJs: true
+    fourslash::run_generated_test(t, r"// @checkJs: true
 // @filename: index.js
 https://github.com/microsoft/TypeScript/issues/11492
 /** @constructor */
@@ -2306,8 +2161,7 @@ function Foo() {}
  * @returns {T}
  */
 Foo.prototype.foo = function (bar) {};
-new Foo().foo({ id: 1234 })./**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+new Foo().foo({ id: 1234 })./**/", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("id".to_string())]), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -2319,14 +2173,12 @@ use crate::tests::prelude::*;
 
 // jsdocTemplateTagCompletion_test.go:11
 pub fn test_jsdoc_template_tag_completion(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 /**
  * @template {/**/} T
  * @typedef {Object} Foo
  * @property {T} foo
- */";
-    fourslash::run_generated_test(t, content, |f, t| {
+ */", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBAL_TYPES.clone()), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -2338,13 +2190,11 @@ use crate::tests::prelude::*;
 
 // jsdocThrowsTagCompletion_test.go:11
 pub fn test_jsdoc_throws_tag_completion(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 /**
  * @throws {/**/} description
  */
-function fn() {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+function fn() {}", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBAL_TYPES.clone()), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -2356,13 +2206,11 @@ use crate::tests::prelude::*;
 
 // jsdocThrowsTag_findAllReferences_test.go:10
 pub fn test_jsdoc_throws_tag_find_all_references(t: &T) {
-    t.parallel();
-    let content: &str = r"class /**/E extends Error {}
+    fourslash::run_generated_test(t, r"class /**/E extends Error {}
 /**
  * @throws {E}
  */
-function f() {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+function f() {}", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -2374,13 +2222,11 @@ use crate::tests::prelude::*;
 
 // jsdocThrowsTag_rename_test.go:10
 pub fn test_jsdoc_throws_tag_rename(t: &T) {
-    t.parallel();
-    let content: &str = r"class /**/E extends Error {}
+    fourslash::run_generated_test(t, r"class /**/E extends Error {}
 /**
  * @throws {E}
  */
-function f() {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+function f() {}", |f, t| {
         f.verify_baseline_rename(t, None, &[Any::String(String::new())]);
     });
 }
@@ -2392,8 +2238,7 @@ use crate::tests::prelude::*;
 
 // jsdocTypedefTag_test.go:11
 pub fn test_jsdoc_typedef_tag(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsdocCompletion_typedef.js
 /** @typedef {(string | number)} NumberLike */
@@ -2442,8 +2287,7 @@ c.catAge./*catAge*/;
 /** @type {Dog} */
 var d;d./*dog*/;
 d.dogName./*dogName*/;
-d.dogAge./*dogAge*/;";
-    fourslash::run_generated_test(t, content, |f, t| {
+d.dogAge./*dogAge*/;", |f, t| {
         f.mark_test_as_strada_server();
         f.verify_completions(t, Any::String("numberLike".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string()), Any::String("toExponential".to_string())], ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::String("person".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("personName".to_string()), Any::String("personAge".to_string())], ..Default::default() }), ..Default::default() }));
@@ -2472,8 +2316,7 @@ use crate::tests::prelude::*;
 
 // jsdocTypedefTag1_test.go:11
 pub fn test_jsdoc_typedef_tag1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es2015
+    fourslash::run_generated_test(t, r"// @lib: es2015
 // @allowNonTsExtensions: true
 // @Filename: jsdocCompletion_typedef.js
 /**
@@ -2486,8 +2329,7 @@ function foo() { }
  */
 function a(my) {
     my.yes./*1*/
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.mark_test_as_strada_server();
         f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
     });
@@ -2500,8 +2342,7 @@ use crate::tests::prelude::*;
 
 // jsdocTypedefTag2_test.go:11
 pub fn test_jsdoc_typedef_tag2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsdocCompletion_typedef.js
 /**
@@ -2520,8 +2361,7 @@ function a(my2) {
  */
 function b(my2) {
     my2.yes./*2*/
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.mark_test_as_strada_server();
         f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { excludes: vec!["charAt".to_string()], ..Default::default() }), ..Default::default() }));
@@ -2535,8 +2375,7 @@ use crate::tests::prelude::*;
 
 // jsdocTypedefTagGoToDefinition_test.go:10
 pub fn test_jsdoc_typedef_tag_go_to_definition(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsdocCompletion_typedef.js
 /**
@@ -2553,8 +2392,7 @@ pub fn test_jsdoc_typedef_tag_go_to_definition(t: &T) {
 var person; person.[|personName/*3*/|]
 
 /** @type {Animal} */
-var animal; animal.[|animalName/*4*/|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+var animal; animal.[|animalName/*4*/|]", |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_go_to_definition(t, true, &["3", "4"]);
     });
@@ -2567,8 +2405,7 @@ use crate::tests::prelude::*;
 
 // jsdocTypedefTagNamespace_test.go:13
 pub fn test_jsdoc_typedef_tag_namespace(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsdocCompletion_typedef.js
 /**
@@ -2581,8 +2418,7 @@ var x; x./*1*/;
 /** @type {T.O.Q.NumberLike} */
 var x1; x1./*2*/;
 /** @type {T.People} */
-var x1; x1./*3*/;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var x1; x1./*3*/;", |f, t| {
         f.mark_test_as_strada_server();
         f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "3".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string()), Any::String("toExponential".to_string())], ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "age".to_string(), sort_text: Some("18".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
@@ -2596,8 +2432,7 @@ use crate::tests::prelude::*;
 
 // jsdocTypedefTagNavigateTo_test.go:10
 pub fn test_jsdoc_typedef_tag_navigate_to(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsDocTypedef_form2.js
 
@@ -2606,8 +2441,7 @@ pub fn test_jsdoc_typedef_tag_navigate_to(t: &T) {
 var NumberLike2;
 
 /** @type {/*1*/NumberLike} */
-var numberLike;";
-    fourslash::run_generated_test(t, content, |f, t| {
+var numberLike;", |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_document_symbol(t);
     });
@@ -2620,8 +2454,7 @@ use crate::tests::prelude::*;
 
 // jsdocTypedefTagRename01_test.go:11
 pub fn test_jsdoc_typedef_tag_rename01(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsDocTypedef_form1.js
 
@@ -2631,8 +2464,7 @@ pub fn test_jsdoc_typedef_tag_rename01(t: &T) {
 [|NumberLike|] = 10;
 
 /** @type {[|NumberLike|]} */
-var numberLike;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var numberLike;"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_rename(t, None, &util::to_any(&f.ranges()[1..].to_vec()[..]));
     });
@@ -2645,16 +2477,14 @@ use crate::tests::prelude::*;
 
 // jsdocTypedefTagRename02_test.go:11
 pub fn test_jsdoc_typedef_tag_rename02(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsDocTypedef_form2.js
 
 /** [|@typedef {(string | number)} [|{| "contextRangeIndex": 0 |}NumberLike|]|] */
 
 /** @type {[|NumberLike|]} */
-var numberLike;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var numberLike;"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_rename(t, None, &util::to_any(&f.ranges()[1..].to_vec()[..]));
     });
@@ -2667,8 +2497,7 @@ use crate::tests::prelude::*;
 
 // jsdocTypedefTagRename03_test.go:11
 pub fn test_jsdoc_typedef_tag_rename03(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsDocTypedef_form3.js
 
@@ -2680,8 +2509,7 @@ pub fn test_jsdoc_typedef_tag_rename03(t: &T) {
  |]*/
 
 /** @type {/*2*/[|Person|]} */
-var person;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var person;"#, |f, t| {
         f.mark_test_as_strada_server();
         f.go_to_file(t, "jsDocTypedef_form3.js");
         f.verify_baseline_rename(t, None, &util::to_any(f.get_ranges_by_text().get(&"Person".to_string())));
@@ -2695,8 +2523,7 @@ use crate::tests::prelude::*;
 
 // jsdocTypedefTagRename04_test.go:10
 pub fn test_jsdoc_typedef_tag_rename04(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsDocTypedef_form2.js
 
@@ -2711,8 +2538,7 @@ function test2() {
 
    /** @type {NumberLike2} */
    var n/*2*/umberLike2;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.mark_test_as_strada_server();
         f.go_to_marker(t, "2");
         f.verify_quick_info_exists(t);
@@ -2730,14 +2556,12 @@ use crate::tests::prelude::*;
 
 // jsdocTypedefTagSemanticMeaning0_test.go:10
 pub fn test_jsdoc_typedef_tag_semantic_meaning0(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: a.js
 /** /*1*/@typedef {number} /*2*/T */
 /*3*/const /*4*/T = 1;
 /** @type {/*5*/T} */
-const n = /*6*/T;";
-    fourslash::run_generated_test(t, content, |f, t| {
+const n = /*6*/T;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6"]);
     });
 }
@@ -2749,14 +2573,12 @@ use crate::tests::prelude::*;
 
 // jsdocTypedefTagSemanticMeaning1_test.go:10
 pub fn test_jsdoc_typedef_tag_semantic_meaning1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: a.js
 /** @typedef {number} */
 /*1*/const /*2*/T = 1;
 /** @type {/*3*/T} */
-const n = /*4*/T;";
-    fourslash::run_generated_test(t, content, |f, t| {
+const n = /*4*/T;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -2768,8 +2590,7 @@ use crate::tests::prelude::*;
 
 // jsdocTypedefTagServices_test.go:11
 pub fn test_jsdoc_typedef_tag_services(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @allowJs: true
+    fourslash::run_generated_test(t, r#"// @allowJs: true
 // @Filename: a.js
 /**
  * Doc comment
@@ -2779,8 +2600,7 @@ pub fn test_jsdoc_typedef_tag_services(t: &T) {
 /**
  * @type {[|/*use*/Product|]}
  */
-const product = null;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const product = null;"#, |f, t| {
         f.verify_quick_info_at(t, "use", r"type Product = {
     title: string;
 }", "Doc comment");
@@ -2798,8 +2618,7 @@ use crate::tests::prelude::*;
 
 // jsdocTypedefTagTypeExpressionCompletion_test.go:13
 pub fn test_jsdoc_typedef_tag_type_expression_completion(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 interface I {
     age: number;
 }
@@ -2828,8 +2647,7 @@ Foo./*valueMemberOfFoo*/;
  /**
   * @type { {/*propertyName*/ageX: number} }
   */
-var y;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var y;"#, |f, t| {
         f.verify_completions(t, Any::String("type1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "Foo".to_string(), kind: Some(lsproto::CompletionItemKind::Class), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "I".to_string(), kind: Some(lsproto::CompletionItemKind::Interface), ..Default::default() })], excludes: vec!["Namespace".to_string(), "SomeType".to_string(), "x".to_string(), "x1".to_string(), "y".to_string(), "method1".to_string(), "property1".to_string(), "method3".to_string(), "method4".to_string(), "foo".to_string()], ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::String("typeFooMember".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "Namespace".to_string(), kind: Some(lsproto::CompletionItemKind::Module), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::String("NamespaceMember".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "SomeType".to_string(), kind: Some(lsproto::CompletionItemKind::Interface), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -2848,8 +2666,7 @@ use crate::tests::prelude::*;
 
 // jsxAriaLikeCompletions_test.go:13
 pub fn test_jsx_aria_like_completions(t: &T) {
-    t.parallel();
-    let content: &str = r#"//@Filename: file.tsx
+    fourslash::run_generated_test(t, r#"//@Filename: file.tsx
 declare var React: any;
 declare namespace JSX {
     interface Element { }
@@ -2858,8 +2675,7 @@ declare namespace JSX {
     }
     interface ElementAttributesProperty { props: any }
 }
-const a = <div {...{}} /*1*/></div>;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const a = <div {...{}} /*1*/></div>;"#, |f, t| {
         f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "aria-whatever?".to_string(), insert_text: Some("aria-whatever".to_string()), filter_text: Some("aria-whatever".to_string()), sort_text: Some("12".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -2992,8 +2808,7 @@ use crate::tests::prelude::*;
 
 // jsxAttributeCompletionStyleNoSnippet_test.go:14
 pub fn test_jsx_attribute_completion_style_no_snippet(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: foo.tsx
+    fourslash::run_generated_test(t, r"// @Filename: foo.tsx
 declare namespace JSX {
     interface Element { }
     interface IntrinsicElements {
@@ -3012,8 +2827,7 @@ declare namespace JSX {
     }
 }
 
-<foo [|prop_/**/|] />";
-    fourslash::run_generated_test(t, content, |f, t| {
+<foo [|prop_/**/|] />", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "prop_a".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_b".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_c".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_d".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_e".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_f".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_g".to_string(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_h?".to_string(), text_edit: util::insert_replace_text_edit("prop_h", f.ranges()[0].ls_range), filter_text: Some("prop_h".to_string()), sort_text: Some("12".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_i?".to_string(), text_edit: util::insert_replace_text_edit("prop_i", f.ranges()[0].ls_range), filter_text: Some("prop_i".to_string()), sort_text: Some("12".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prop_j?".to_string(), text_edit: util::insert_replace_text_edit("prop_j", f.ranges()[0].ls_range), filter_text: Some("prop_j".to_string()), sort_text: Some("12".to_string()), ..Default::default() })]), ..Default::default() }), user_preferences: Some(lsutil::UserPreferences { jsx_attribute_completion_style: lsutil::JsxAttributeCompletionStyle::Auto, ..Default::default() }) }));
     });
 }
@@ -3309,10 +3123,8 @@ use crate::tests::prelude::*;
 
 // jsxElementExtendsNoCrash1_test.go:10
 pub fn test_jsx_element_extends_no_crash1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @filename: index.tsx
-<const T extends/>";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"// @filename: index.tsx
+<const T extends/>", |f, t| {
         f.verify_suggestion_diagnostics(t, &[]);
     });
 }
@@ -3324,10 +3136,8 @@ use crate::tests::prelude::*;
 
 // jsxElementExtendsNoCrash2_test.go:10
 pub fn test_jsx_element_extends_no_crash2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @filename: index.tsx
-<T extends/>";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"// @filename: index.tsx
+<T extends/>", |f, t| {
         f.verify_suggestion_diagnostics(t, &[]);
     });
 }
@@ -3339,10 +3149,8 @@ use crate::tests::prelude::*;
 
 // jsxElementExtendsNoCrash3_test.go:10
 pub fn test_jsx_element_extends_no_crash3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @filename: index.tsx
-<T extends /=>";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"// @filename: index.tsx
+<T extends /=>", |f, t| {
         f.verify_suggestion_diagnostics(t, &[]);
     });
 }
@@ -3354,11 +3162,9 @@ use crate::tests::prelude::*;
 
 // jsxElementMissingOpeningTagNoCrash_test.go:10
 pub fn test_jsx_element_missing_opening_tag_no_crash(t: &T) {
-    t.parallel();
-    let content: &str = r"//@Filename: file.tsx
+    fourslash::run_generated_test(t, r"//@Filename: file.tsx
 declare function Foo(): any;
-let x = <></Fo/*$*/o>;";
-    fourslash::run_generated_test(t, content, |f, t| {
+let x = <></Fo/*$*/o>;", |f, t| {
         f.verify_quick_info_at(t, "$", "let Foo: any", "");
     });
 }
@@ -3370,8 +3176,7 @@ use crate::tests::prelude::*;
 
 // jsxFindAllReferencesOnRuntimeImportWithPaths1_test.go:10
 pub fn test_jsx_find_all_references_on_runtime_import_with_paths1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: project/src/foo.ts
+    fourslash::run_generated_test(t, r#"// @Filename: project/src/foo.ts
 import * as x from /**/"@foo/dir/jsx-runtime";
 // @Filename: project/src/bar.tsx
 export default <div></div>;
@@ -3397,8 +3202,7 @@ export {}
             "@foo/dir/jsx-runtime": ["./src/dir/jsx-runtime"]
         }
     }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -3410,8 +3214,7 @@ use crate::tests::prelude::*;
 
 // jsxGenericQuickInfo_test.go:10
 pub fn test_jsx_generic_quick_info(t: &T) {
-    t.parallel();
-    let content: &str = r#"//@Filename: file.tsx
+    fourslash::run_generated_test(t, r#"//@Filename: file.tsx
 declare namespace JSX {
     interface Element { }
     interface IntrinsicElements {
@@ -3435,8 +3238,7 @@ class Component<T> {
     props: PropsA<T> | PropsB<T>;
 }   
 var b = new Component({items: [0, 1, 2], render/*0*/Item: it/*1*/em => item.toFixed(), name/*2*/: 'A',});
-var c = <Component items={[0, 1, 2]} render/*3*/Item={it/*4*/em => item.toFixed()} name/*5*/="A" />"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var c = <Component items={[0, 1, 2]} render/*3*/Item={it/*4*/em => item.toFixed()} name/*5*/="A" />"#, |f, t| {
         f.verify_quick_info_at(t, "0", "(property) PropsA<number>.renderItem: (item: number) => string", "");
         f.verify_quick_info_at(t, "1", "(parameter) item: number", "");
         f.verify_quick_info_at(t, "2", r#"(property) PropsA<T>.name: "A""#, "comments for A");
@@ -3453,15 +3255,13 @@ use crate::tests::prelude::*;
 
 // jsxQualifiedTagCompletion_test.go:11
 pub fn test_jsx_qualified_tag_completion(t: &T) {
-    t.parallel();
-    let content: &str = r"//@Filename: file.tsx
+    fourslash::run_generated_test(t, r"//@Filename: file.tsx
 declare var React: any;
 namespace NS {
     export var Foo: any = null;
 }
 const j = <NS.Foo>Hello!/**/
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.go_to_marker(t, "");
         f.insert(t, "</");
         f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("NS.Foo>".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3475,8 +3275,7 @@ use crate::tests::prelude::*;
 
 // jsxSpreadReference_test.go:10
 pub fn test_jsx_spread_reference(t: &T) {
-    t.parallel();
-    let content: &str = r#"//@Filename: file.tsx
+    fourslash::run_generated_test(t, r#"//@Filename: file.tsx
 declare namespace JSX {
     interface Element { }
     interface IntrinsicElements {
@@ -3491,8 +3290,7 @@ class MyClass {
 }
 
 [|var [|/*dst*/{| "contextRangeIndex": 0 |}nn|]: {name?: string; size?: number};|]
-var x = <MyClass {...[|n/*src*/n|]}></MyClass>;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var x = <MyClass {...[|n/*src*/n|]}></MyClass>;"#, |f, t| {
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["nn"]);
         f.verify_baseline_go_to_definition(t, true, &["src"]);
     });
@@ -3749,8 +3547,7 @@ use crate::tests::prelude::*;
 
 // jsxWithTypeParametershasInstantiatedSignatureHelp_test.go:10
 pub fn test_jsx_with_type_parametershas_instantiated_signature_help(t: &T) {
-    t.parallel();
-    let content: &str = r"declare namespace JSX {
+    fourslash::run_generated_test(t, r"declare namespace JSX {
     interface Element {
         render(): Element | string | false;
     }
@@ -3761,8 +3558,7 @@ function SFC<T>(_props: Record<string, T>) {
 }
 
 (</*1*/SFC/>);
-(</*2*/SFC<string>/>);";
-    fourslash::run_generated_test(t, content, |f, t| {
+(</*2*/SFC<string>/>);", |f, t| {
         f.go_to_marker(t, "1");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "SFC(_props: Record<string, unknown>): string".to_string(), ..Default::default() });
         f.go_to_marker(t, "2");
@@ -3777,16 +3573,14 @@ use crate::tests::prelude::*;
 
 // keywordShadowsAutoImport_test.go:18
 pub fn test_keyword_shadows_auto_import(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 // @Filename: /mod.ts
 const value = 1;
 export { value as function }
 
 // @Filename: /index.ts
 function/**/
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { user_preferences: Some(lsutil::UserPreferences { include_completions_for_module_exports: Tristate::True, include_completions_for_import_statements: Tristate::True, ..Default::default() }), is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "function".to_string(), kind: Some(lsproto::CompletionItemKind::Keyword), sort_text: Some("15".to_string()), ..Default::default() })], excludes: vec!["function".to_string()], ..Default::default() }) }));
     });
 }
@@ -3798,16 +3592,14 @@ use crate::tests::prelude::*;
 
 // lambdaThisMembers_test.go:11
 pub fn test_lambda_this_members(t: &T) {
-    t.parallel();
-    let content: &str = r"class Foo {
+    fourslash::run_generated_test(t, r"class Foo {
     a: number;
     b() {
         var x = () => {
             this./**/;
         }
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("a".to_string()), Any::String("b".to_string())]), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -3819,14 +3611,12 @@ use crate::tests::prelude::*;
 
 // letQuickInfoAndCompletionList_test.go:12
 pub fn test_let_quick_info_and_completion_list(t: &T) {
-    t.parallel();
-    let content: &str = r"let /*1*/a = 10;
+    fourslash::run_generated_test(t, r"let /*1*/a = 10;
 /*2*/a = 30;
 function foo() {
     let /*3*/b = 20;
     /*4*/b = /*5*/a;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "a".to_string(), detail: Some("let a: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::String("4".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "a".to_string(), detail: Some("let a: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("let b: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::String("5".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "a".to_string(), detail: Some("let a: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("let b: number".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
@@ -3845,8 +3635,7 @@ use crate::tests::prelude::*;
 
 // linkedEditingJsxTag1_test.go:11
 pub fn test_linked_editing_jsx_tag1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /basic.tsx
+    fourslash::run_generated_test(t, r"// @Filename: /basic.tsx
 /*a*/const j/*b*/sx = (
     /*c*/</*0*/d/*1*/iv/*2*/>/*3*/
     </*4*///*5*/di/*6*/v/*7*/>/*8*/
@@ -3858,8 +3647,7 @@ const jsx2 = (
             <//*12*/p/*12end*/>        
         <//*13start*/d/*13*/iv/*13end*/>
     <//*14start*/d/*14*/iv/*14end*/>
-);/*d*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+);/*d*/", |f, t| {
         let linked_cursors1 = vec![lsproto::Range { start: f.marker_by_name(t, "0").ls_position, end: f.marker_by_name(t, "2").ls_position }, lsproto::Range { start: f.marker_by_name(t, "5").ls_position, end: f.marker_by_name(t, "7").ls_position }];
         let linked_cursors2 = vec![lsproto::Range { start: f.marker_by_name(t, "9start").ls_position, end: f.marker_by_name(t, "9end").ls_position }, lsproto::Range { start: f.marker_by_name(t, "14start").ls_position, end: f.marker_by_name(t, "14end").ls_position }];
         let linked_cursors3 = vec![lsproto::Range { start: f.marker_by_name(t, "10start").ls_position, end: f.marker_by_name(t, "10end").ls_position }, lsproto::Range { start: f.marker_by_name(t, "13start").ls_position, end: f.marker_by_name(t, "13end").ls_position }];
@@ -3875,8 +3663,7 @@ use crate::tests::prelude::*;
 
 // linkedEditingJsxTag10_test.go:10
 pub fn test_linked_editing_jsx_tag10(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /jsx0.tsx
+    fourslash::run_generated_test(t, r"// @Filename: /jsx0.tsx
 const jsx = </*0*/>
 // @Filename: /jsx1.tsx
 const jsx = <//*1*/>
@@ -3907,8 +3694,7 @@ const jsx = </*13*/> //*13a*/>;
 // @Filename: /jsx14.tsx
 const jsx = </*14*/> </*14a*/div> <//*14b*/> <//*14c*/div>;
 // @Filename: /jsx15.tsx
-const jsx = </*15*/div> </*15a*/> <//*15b*/div> <//*15c*/>;";
-    fourslash::run_generated_test(t, content, |f, t| {
+const jsx = </*15*/div> </*15a*/> <//*15b*/div> <//*15c*/>;", |f, t| {
         f.verify_baseline_linked_editing(t);
     });
 }
@@ -3920,8 +3706,7 @@ use crate::tests::prelude::*;
 
 // linkedEditingJsxTag11_test.go:10
 pub fn test_linked_editing_jsx_tag11(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /customElements.tsx
+    fourslash::run_generated_test(t, r#"// @Filename: /customElements.tsx
 const jsx = <fbt:enum knownProp="accepted"
     unknownProp="rejected">
 </fbt:enum>;
@@ -3933,8 +3718,7 @@ const standardElement =
        <Button component="a">
            Next
        </Button>
-   </Link>;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+   </Link>;"#, |f, t| {
         f.verify_baseline_linked_editing(t);
     });
 }
@@ -3946,8 +3730,7 @@ use crate::tests::prelude::*;
 
 // linkedEditingJsxTag12_test.go:11
 pub fn test_linked_editing_jsx_tag12(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /incomplete.tsx
+    fourslash::run_generated_test(t, r"// @Filename: /incomplete.tsx
 function Test() {
     return <div>
         </*0*/
@@ -3994,8 +3777,7 @@ function Test() {
         <div {...{}}>
         </div>
     </div>
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_linked_editing(t, go::map_of([("0".to_string(), Vec::new())]));
         f.verify_baseline_linked_editing(t);
     });
@@ -4008,8 +3790,7 @@ use crate::tests::prelude::*;
 
 // linkedEditingJsxTag2_test.go:11
 pub fn test_linked_editing_jsx_tag2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /attrs.tsx
+    fourslash::run_generated_test(t, r"// @Filename: /attrs.tsx
 const jsx = (
    </*0*/div/*1*/ /*2*/styl/*3*/e={{ color: 'red' }}/*4*/>/*5*/
       <p>
@@ -4022,8 +3803,7 @@ const jsx = (
    </*10*/div/*11*/ /*12*/styl/*13*/e={{ color: 'red' }/*14*/>/*15*/
          </*16*/p />
    <//*17*/div>
-);";
-    fourslash::run_generated_test(t, content, |f, t| {
+);", |f, t| {
         let linked_cursors = vec![lsproto::Range { start: f.marker_by_name(t, "0").ls_position, end: f.marker_by_name(t, "1").ls_position }, lsproto::Range { start: f.marker_by_name(t, "6start").ls_position, end: f.marker_by_name(t, "6end").ls_position }];
         f.verify_linked_editing(t, go::map_of([("0".to_string(), linked_cursors.clone()), ("1".to_string(), linked_cursors.clone()), ("2".to_string(), Vec::new()), ("3".to_string(), Vec::new()), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), linked_cursors), ("10".to_string(), Vec::new()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new()), ("14".to_string(), Vec::new()), ("15".to_string(), Vec::new()), ("16".to_string(), Vec::new())]));
     });
@@ -4036,8 +3816,7 @@ use crate::tests::prelude::*;
 
 // linkedEditingJsxTag3_test.go:11
 pub fn test_linked_editing_jsx_tag3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /selfClosing.tsx
+    fourslash::run_generated_test(t, r"// @Filename: /selfClosing.tsx
 /*0*/const jsx = /*1*/(
    <div> /*2*/
       <p>/*3*/
@@ -4045,8 +3824,7 @@ pub fn test_linked_editing_jsx_tag3(t: &T) {
          /*5*/</*6*/img/*7*/ /*8*///*9*/>
      /*10*/ </p>/*11*/
    /*12*/</div>
-/*13*/)/*14*/;/*15*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*13*/)/*14*/;/*15*/", |f, t| {
         f.verify_linked_editing(t, go::map_of([("0".to_string(), Vec::new()), ("1".to_string(), Vec::new()), ("2".to_string(), Vec::new()), ("3".to_string(), Vec::new()), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), Vec::new()), ("7".to_string(), Vec::new()), ("8".to_string(), Vec::new()), ("9".to_string(), Vec::new()), ("10".to_string(), Vec::new()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new()), ("14".to_string(), Vec::new()), ("15".to_string(), Vec::new())]));
     });
 }
@@ -4058,8 +3836,7 @@ use crate::tests::prelude::*;
 
 // linkedEditingJsxTag4_test.go:11
 pub fn test_linked_editing_jsx_tag4(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /typeTag.tsx
+    fourslash::run_generated_test(t, r"// @Filename: /typeTag.tsx
 const jsx = (
    </*0*/div/*1*/</*2*/T/*3*/>/*4*/>/*5*/
       <p>
@@ -4072,8 +3849,7 @@ const jsx = (
    </*10*/div/*11*/</*12*/T/*13*/>/*14*/
       </*15*/p />
    <//*16*/div>
-);";
-    fourslash::run_generated_test(t, content, |f, t| {
+);", |f, t| {
         let linked_cursors = vec![lsproto::Range { start: f.marker_by_name(t, "0").ls_position, end: f.marker_by_name(t, "1").ls_position }, lsproto::Range { start: f.marker_by_name(t, "6").ls_position, end: f.marker_by_name(t, "7").ls_position }];
         f.verify_linked_editing(t, go::map_of([("0".to_string(), linked_cursors.clone()), ("1".to_string(), linked_cursors.clone()), ("2".to_string(), Vec::new()), ("3".to_string(), Vec::new()), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), linked_cursors), ("10".to_string(), Vec::new()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new()), ("14".to_string(), Vec::new()), ("15".to_string(), Vec::new()), ("16".to_string(), Vec::new())]));
     });
@@ -4086,8 +3862,7 @@ use crate::tests::prelude::*;
 
 // linkedEditingJsxTag5_test.go:11
 pub fn test_linked_editing_jsx_tag5(t: &T) {
-    t.parallel();
-    let content: &str = r"// @FileName: /unclosedElement.tsx
+    fourslash::run_generated_test(t, r"// @FileName: /unclosedElement.tsx
 const jsx = (
     <div/*0*/>
         </*1start*/div/*1*/>
@@ -4103,8 +3878,7 @@ const jsx = (
 const jsx = (
    <di/*11*/v>
    </*12*/ //*13*/div>
-);";
-    fourslash::run_generated_test(t, content, |f, t| {
+);", |f, t| {
         let linked_cursors1 = vec![lsproto::Range { start: f.marker_by_name(t, "1start").ls_position, end: f.marker_by_name(t, "1").ls_position }, lsproto::Range { start: f.marker_by_name(t, "2start").ls_position, end: f.marker_by_name(t, "2").ls_position }];
         let linked_cursors2 = vec![lsproto::Range { start: f.marker_by_name(t, "6start").ls_position, end: f.marker_by_name(t, "6").ls_position }, lsproto::Range { start: f.marker_by_name(t, "7start").ls_position, end: f.marker_by_name(t, "7").ls_position }];
         f.verify_linked_editing(t, go::map_of([("0".to_string(), Vec::new()), ("1".to_string(), linked_cursors1.clone()), ("2".to_string(), linked_cursors1), ("3".to_string(), Vec::new()), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), linked_cursors2.clone()), ("7".to_string(), linked_cursors2), ("8".to_string(), Vec::new()), ("9".to_string(), Vec::new()), ("10".to_string(), Vec::new()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new())]));
@@ -4118,8 +3892,7 @@ use crate::tests::prelude::*;
 
 // linkedEditingJsxTag6_test.go:11
 pub fn test_linked_editing_jsx_tag6(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /namespace.tsx
+    fourslash::run_generated_test(t, r"// @Filename: /namespace.tsx
 const jsx = (
     </*start*/someNamespa/*3*/ce./*2*/Thing/*startend*/>
     <//*end*/someNamespace/*1*/.Thing/*endend*/>
@@ -4133,8 +3906,7 @@ const jsx = (
      </*26*/foo  /*27*/ .// hi/*28*/
      /*29*/bar/*26end*/>
      <//*30*/foo  /*31*/ .// hi/*32*/
-     /*33*/bar/*30end*/>";
-    fourslash::run_generated_test(t, content, |f, t| {
+     /*33*/bar/*30end*/>", |f, t| {
         let linked_cursors1 = vec![lsproto::Range { start: f.marker_by_name(t, "start").ls_position, end: f.marker_by_name(t, "startend").ls_position }, lsproto::Range { start: f.marker_by_name(t, "end").ls_position, end: f.marker_by_name(t, "endend").ls_position }];
         let linked_cursors2 = vec![lsproto::Range { start: f.marker_by_name(t, "26").ls_position, end: f.marker_by_name(t, "26end").ls_position }, lsproto::Range { start: f.marker_by_name(t, "30").ls_position, end: f.marker_by_name(t, "30end").ls_position }];
         f.verify_linked_editing(t, go::map_of([("1".to_string(), linked_cursors1.clone()), ("2".to_string(), linked_cursors1.clone()), ("3".to_string(), linked_cursors1), ("4".to_string(), Vec::new()), ("5".to_string(), Vec::new()), ("6".to_string(), Vec::new()), ("7".to_string(), Vec::new()), ("8".to_string(), Vec::new()), ("9".to_string(), Vec::new()), ("10".to_string(), Vec::new()), ("11".to_string(), Vec::new()), ("12".to_string(), Vec::new()), ("13".to_string(), Vec::new()), ("14".to_string(), Vec::new()), ("15".to_string(), Vec::new()), ("16".to_string(), Vec::new()), ("17".to_string(), Vec::new()), ("18".to_string(), Vec::new()), ("19".to_string(), Vec::new()), ("20".to_string(), Vec::new()), ("21".to_string(), Vec::new()), ("22".to_string(), Vec::new()), ("23".to_string(), Vec::new()), ("24".to_string(), Vec::new()), ("25".to_string(), Vec::new()), ("26".to_string(), linked_cursors2.clone()), ("27".to_string(), linked_cursors2.clone()), ("28".to_string(), linked_cursors2.clone()), ("29".to_string(), linked_cursors2.clone()), ("30".to_string(), linked_cursors2.clone()), ("31".to_string(), linked_cursors2.clone()), ("32".to_string(), linked_cursors2.clone()), ("33".to_string(), linked_cursors2)]));
@@ -4148,8 +3920,7 @@ use crate::tests::prelude::*;
 
 // linkedEditingJsxTag7_test.go:11
 pub fn test_linked_editing_jsx_tag7(t: &T) {
-    t.parallel();
-    let content: &str = r"// @FileName: /fragment.tsx
+    fourslash::run_generated_test(t, r"// @FileName: /fragment.tsx
 /*a*/const j/*b*/sx =/*c*/ (
     /*5*/</*0*/>/*1*/
         <img />
@@ -4162,8 +3933,7 @@ const jsx2 = (
 const jsx3 = (
     <>/*7*/
     </>
-);/*e*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+);/*e*/", |f, t| {
         let start_range = f.marker_by_name(t, "0").ls_position;
         let end_range = f.marker_by_name(t, "3").ls_position;
         let linked_cursors1 = vec![lsproto::Range { start: start_range, end: start_range }, lsproto::Range { start: end_range, end: end_range }];
@@ -4181,15 +3951,13 @@ use crate::tests::prelude::*;
 
 // linkedEditingJsxTag8_test.go:11
 pub fn test_linked_editing_jsx_tag8(t: &T) {
-    t.parallel();
-    let content: &str = r"// @FileName: /mismatchedNames.tsx
+    fourslash::run_generated_test(t, r"// @FileName: /mismatchedNames.tsx
 const A = thing;
 const B = thing;
 const jsx = (
     </*8*/A>
     </B>
-);";
-    fourslash::run_generated_test(t, content, |f, t| {
+);", |f, t| {
         f.verify_linked_editing(t, go::map_of([("8".to_string(), Vec::new())]));
     });
 }
@@ -4201,8 +3969,7 @@ use crate::tests::prelude::*;
 
 // linkedEditingJsxTag9_test.go:11
 pub fn test_linked_editing_jsx_tag9(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /whitespace.tsx
+    fourslash::run_generated_test(t, r"// @Filename: /whitespace.tsx
 const whitespaceOpening = (
    </*0*/ /*1*/div/*2*/ /*3*/> /*4*/
    <//*5*/di/*6*/v/*5end*/>
@@ -4214,8 +3981,7 @@ const whitespaceClosing = (
 const triviaOpening = (
     /* this is/*14*/ comment *//*15*/</*16*//* /*17*/more/*18*/ comment *//*19*/ /*20start*/di/*20*/v/*20end*/ /* comments */>/*21*/Hello/*22*/
     <//*23*/ /*24*///*25*/* even/*26*/ more comment *//*27*/ /*28start*/d/*28*/iv/*28end*/ /* b/*29*/ye */>
-);";
-    fourslash::run_generated_test(t, content, |f, t| {
+);", |f, t| {
         let linked_cursors1 = vec![lsproto::Range { start: f.marker_by_name(t, "1").ls_position, end: f.marker_by_name(t, "2").ls_position }, lsproto::Range { start: f.marker_by_name(t, "5").ls_position, end: f.marker_by_name(t, "5end").ls_position }];
         let linked_cursors2 = vec![lsproto::Range { start: f.marker_by_name(t, "7").ls_position, end: f.marker_by_name(t, "8end").ls_position }, lsproto::Range { start: f.marker_by_name(t, "10").ls_position, end: f.marker_by_name(t, "11").ls_position }];
         let linked_cursors3 = vec![lsproto::Range { start: f.marker_by_name(t, "20start").ls_position, end: f.marker_by_name(t, "20end").ls_position }, lsproto::Range { start: f.marker_by_name(t, "28start").ls_position, end: f.marker_by_name(t, "28end").ls_position }];
@@ -4230,16 +3996,14 @@ use crate::tests::prelude::*;
 
 // localFunction_test.go:10
 pub fn test_local_function(t: &T) {
-    t.parallel();
-    let content: &str = r"function /*1*/foo() {
+    fourslash::run_generated_test(t, r"function /*1*/foo() {
     function /*2*/bar2() {
     }
     var y = function /*3*/bar3() {
     }
 }
 var x = function /*4*/bar4() {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_quick_info_at(t, "1", "function foo(): void", "");
         f.verify_quick_info_at(t, "2", "(local function) bar2(): void", "");
         f.verify_quick_info_at(t, "3", "(local function) bar3(): void", "");
@@ -4254,8 +4018,7 @@ use crate::tests::prelude::*;
 
 // localGetReferences_test.go:10
 pub fn test_local_get_references(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: localGetReferences_1.ts
+    fourslash::run_generated_test(t, r#"// @Filename: localGetReferences_1.ts
 // Comment Refence Test: g/*43*/lobalVar
 // References to a variable declared in global.
 /*1*/var /*2*/globalVar: number = 2;
@@ -4437,8 +4200,7 @@ namespace remotemodTest {
 	namespace remotetestMod {
 		var remoteboo = remotefoo;
 	}
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45"]);
     });
 }
@@ -4450,13 +4212,11 @@ use crate::tests::prelude::*;
 
 // memberCompletionFromFunctionCall_test.go:11
 pub fn test_member_completion_from_function_call(t: &T) {
-    t.parallel();
-    let content: &str = r"declare interface ifoo {
+    fourslash::run_generated_test(t, r"declare interface ifoo {
     text: (value: any) => ifoo;
 }
 declare var foo: ifoo;
-foo.text(function() { })/**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+foo.text(function() { })/**/", |f, t| {
         f.go_to_marker(t, "");
         f.insert(t, ".");
         f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("text".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -4470,9 +4230,7 @@ use crate::tests::prelude::*;
 
 // memberCompletionOnRightSideOfImport_test.go:10
 pub fn test_member_completion_on_right_side_of_import(t: &T) {
-    t.parallel();
-    let content: &str = "import x = M./**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "import x = M./**/", |f, t| {
         f.verify_completions(t, Any::String(String::new()), None);
     });
 }
@@ -4484,8 +4242,7 @@ use crate::tests::prelude::*;
 
 // memberCompletionOnTypeParameters_test.go:12
 pub fn test_member_completion_on_type_parameters(t: &T) {
-    t.parallel();
-    let content: &str = r"interface IFoo {
+    fourslash::run_generated_test(t, r"interface IFoo {
     x: number;
     y: string;
 }
@@ -4496,8 +4253,7 @@ function foo<S, T extends IFoo, U extends Object, V extends IFoo>() {
     t./*T*/;    // IFoo
     u./*U*/;    // IFoo
     v./*V*/;    // IFoo
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_completions(t, Any::String("S".to_string()), None);
         f.verify_completions(t, Any::StringSlice(vec!["T".to_string(), "V".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), detail: Some("(property) IFoo.x: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "y".to_string(), detail: Some("(property) IFoo.y: string".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::String("U".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("constructor".to_string()), Any::String("toString".to_string()), Any::String("toLocaleString".to_string()), Any::String("valueOf".to_string()), Any::String("hasOwnProperty".to_string()), Any::String("isPrototypeOf".to_string()), Any::String("propertyIsEnumerable".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -4511,8 +4267,7 @@ use crate::tests::prelude::*;
 
 // memberCompletionOnTypeParameters2_test.go:11
 pub fn test_member_completion_on_type_parameters2(t: &T) {
-    t.parallel();
-    let content: &str = r"class A {
+    fourslash::run_generated_test(t, r"class A {
     foo(): string { return ''; }
 }
 
@@ -4525,8 +4280,7 @@ class B extends A {
 class C<U extends A, T extends A> {
     x: U;
     y = this.x./**/ // completion list here
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("foo".to_string())]), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -4538,8 +4292,7 @@ use crate::tests::prelude::*;
 
 // memberConstructorEdits_test.go:10
 pub fn test_member_constructor_edits(t: &T) {
-    t.parallel();
-    let content: &str = r#" namespace M {
+    fourslash::run_generated_test(t, r#" namespace M {
      export class A {
 		 constructor(a: string) {}
          public m(n: number) {
@@ -4557,8 +4310,7 @@ pub fn test_member_constructor_edits(t: &T) {
 	 }
 	 var a = new A("s");
 	 var b = new B("s");
- }"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+ }"#, |f, t| {
         f.verify_no_errors(t);
         f.go_to_marker(t, "1");
         f.insert(t, "public m(n: number) { return 0; }");
@@ -4573,9 +4325,7 @@ use crate::tests::prelude::*;
 
 // memberListAfterDoubleDot_test.go:10
 pub fn test_member_list_after_double_dot(t: &T) {
-    t.parallel();
-    let content: &str = "../**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "../**/", |f, t| {
         f.verify_completions(t, Any::String(String::new()), None);
     });
 }
@@ -4587,9 +4337,7 @@ use crate::tests::prelude::*;
 
 // memberListAfterSingleDot_test.go:10
 pub fn test_member_list_after_single_dot(t: &T) {
-    t.parallel();
-    let content: &str = "./**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "./**/", |f, t| {
         f.verify_completions(t, Any::String(String::new()), None);
     });
 }
@@ -4601,12 +4349,10 @@ use crate::tests::prelude::*;
 
 // memberListErrorRecovery_test.go:13
 pub fn test_member_list_error_recovery(t: &T) {
-    t.parallel();
-    let content: &str = r"class Foo { static fun() { }; }
+    fourslash::run_generated_test(t, r"class Foo { static fun() { }; }
 
 Foo./**/;
-/*1*/var bar;";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*1*/var bar;", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "fun".to_string(), sort_text: Some("10".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
 }
@@ -4618,15 +4364,13 @@ use crate::tests::prelude::*;
 
 // memberListInFunctionCall_test.go:11
 pub fn test_member_list_in_function_call(t: &T) {
-    t.parallel();
-    let content: &str = r#"function aa(x: any) {}
+    fourslash::run_generated_test(t, r#"function aa(x: any) {}
 aa({
   "1": function () {
     var b = "";
     b/**/;
   }
-});"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+});"#, |f, t| {
         f.go_to_marker(t, "");
         f.insert(t, ".");
         f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], ..Default::default() }), ..Default::default() }));
@@ -4640,15 +4384,13 @@ use crate::tests::prelude::*;
 
 // memberListInFunctionCall2_test.go:12
 pub fn test_member_list_in_function_call2(t: &T) {
-    t.parallel();
-    let content: &str = r"type T = {
+    fourslash::run_generated_test(t, r"type T = {
     a: 1;
     b: 2;
 }
 function F(x: T) {
 }
-F({/*1*/} as const)";
-    fourslash::run_generated_test(t, content, |f, t| {
+F({/*1*/} as const)", |f, t| {
         f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "a".to_string(), detail: Some("(property) a: 1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("(property) b: 2".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -4660,8 +4402,7 @@ use crate::tests::prelude::*;
 
 // memberListInReopenedEnum_test.go:12
 pub fn test_member_list_in_reopened_enum(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace M {
+    fourslash::run_generated_test(t, r"namespace M {
     enum E {
         A, B
     }
@@ -4669,8 +4410,7 @@ pub fn test_member_list_in_reopened_enum(t: &T) {
         C = 0, D
     }
     var x = E./*1*/
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "A".to_string(), detail: Some("(enum member) E.A = 0".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "B".to_string(), detail: Some("(enum member) E.B = 1".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "C".to_string(), detail: Some("(enum member) E.C = 0".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "D".to_string(), detail: Some("(enum member) E.D = 1".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -4682,8 +4422,7 @@ use crate::tests::prelude::*;
 
 // memberListInWithBlock_test.go:11
 pub fn test_member_list_in_with_block(t: &T) {
-    t.parallel();
-    let content: &str = r"class c {
+    fourslash::run_generated_test(t, r"class c {
     static x: number;
     public foo() {
         with ({}) {
@@ -4692,8 +4431,7 @@ pub fn test_member_list_in_with_block(t: &T) {
             /*2*/
         }
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_completions(t, Any::String("1".to_string()), None);
         f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { excludes: vec!["foo".to_string(), "f".to_string(), "c".to_string(), "d".to_string(), "x".to_string(), "Object".to_string()], ..Default::default() }), ..Default::default() }));
     });
@@ -4706,15 +4444,13 @@ use crate::tests::prelude::*;
 
 // memberListInWithBlock2_test.go:10
 pub fn test_member_list_in_with_block2(t: &T) {
-    t.parallel();
-    let content: &str = r"interface IFoo {
+    fourslash::run_generated_test(t, r"interface IFoo {
     a: number;
 }
 
 with (x) {
     var y: IFoo = { /*1*/ };
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_completions(t, Any::String("1".to_string()), None);
     });
 }

@@ -5,8 +5,7 @@ use crate::tests::prelude::*;
 
 // signatureHelpIncompleteCalls_test.go:10
 pub fn test_signature_help_incomplete_calls(t: &T) {
-    t.parallel();
-    let content: &str = r#"namespace IncompleteCalls {
+    fourslash::run_generated_test(t, r#"namespace IncompleteCalls {
     class Foo {
         public f1() { }
         public f2(n: number): number { return 0; }
@@ -19,8 +18,7 @@ pub fn test_signature_help_incomplete_calls(t: &T) {
     x.f1(/*incompleteCalls1*/
     x.f2(5,/*incompleteCalls2*/
     x.f3(5,/*incompleteCalls3*/
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.go_to_marker(t, "incompleteCalls1");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "f1(): void".to_string(), parameter_count: 0, ..Default::default() });
         f.go_to_marker(t, "incompleteCalls2");
@@ -37,11 +35,9 @@ use crate::tests::prelude::*;
 
 // signatureHelpIncompleteJsxAttribute_test.go:15
 pub fn test_signature_help_incomplete_jsx_attribute(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a.tsx
+    fourslash::run_generated_test(t, r"// @Filename: /a.tsx
 <a><b c=
-/*a*/</a>";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*a*/</a>", |f, t| {
         f.verify_no_signature_help_for_markers(t, &["a"]);
     });
 }
@@ -53,10 +49,8 @@ use crate::tests::prelude::*;
 
 // signatureHelpInference_test.go:10
 pub fn test_signature_help_inference(t: &T) {
-    t.parallel();
-    let content: &str = r#"declare function f<T extends string>(a: T, b: T, c: T): void;
-f("x", /**/);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"declare function f<T extends string>(a: T, b: T, c: T): void;
+f("x", /**/);"#, |f, t| {
         f.go_to_marker(t, "");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: r#"f(a: "x", b: "x", c: "x"): void"#.to_string(), parameter_count: 3, parameter_name: "b".to_string(), parameter_span: r#"b: "x""#.to_string(), ..Default::default() });
     });
@@ -69,8 +63,7 @@ use crate::tests::prelude::*;
 
 // signatureHelpInferenceJsDocImportTag_test.go:10
 pub fn test_signature_help_inference_js_doc_import_tag(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJS: true
+    fourslash::run_generated_test(t, r"// @allowJS: true
 // @checkJs: true
 // @module: esnext
 // @filename: a.ts
@@ -86,8 +79,7 @@ export interface Foo {}
  * @param {Foo} a
  */
 function foo(a) {}
-foo(/**/)";
-    fourslash::run_generated_test(t, content, |f, t| {
+foo(/**/)", |f, t| {
         f.verify_baseline_signature_help(t);
     });
 }
@@ -136,8 +128,7 @@ use crate::tests::prelude::*;
 
 // signatureHelpIteratorNext_test.go:10
 pub fn test_signature_help_iterator_next(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: esnext
+    fourslash::run_generated_test(t, r"// @lib: esnext
 declare const iterator: Iterator<string, void, number>;
 
 iterator.next(/*1*/);
@@ -156,8 +147,7 @@ asyncIterator.next(/*6*/ 0);
 declare const asyncGenerator: AsyncGenerator<string, void, number>;
 
 asyncGenerator.next(/*7*/);
-asyncGenerator.next(/*8*/ 0);";
-    fourslash::run_generated_test(t, content, |f, t| {
+asyncGenerator.next(/*8*/ 0);", |f, t| {
         f.verify_baseline_signature_help(t);
     });
 }
@@ -209,12 +199,10 @@ use crate::tests::prelude::*;
 
 // signatureHelpJSMissingIdentifier_test.go:10
 pub fn test_signature_help_js_missing_identifier(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @Filename: test.js
-log(/**/)";
-    fourslash::run_generated_test(t, content, |f, t| {
+log(/**/)", |f, t| {
         f.verify_no_signature_help_for_markers(t, &[""]);
     });
 }
@@ -226,12 +214,10 @@ use crate::tests::prelude::*;
 
 // signatureHelpJSMissingPropertyAccess_test.go:10
 pub fn test_signature_help_js_missing_property_access(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @Filename: test.js
-foo.filter(/**/)";
-    fourslash::run_generated_test(t, content, |f, t| {
+foo.filter(/**/)", |f, t| {
         f.verify_baseline_signature_help(t);
     });
 }
@@ -267,8 +253,7 @@ use crate::tests::prelude::*;
 
 // signatureHelpJSDocCallbackTag_test.go:10
 pub fn test_signature_help_jsdoc_callback_tag(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @allowNonTsExtensions: true
 // @Filename: jsdocCallbackTag.js
 /**
@@ -292,8 +277,7 @@ var t;
  * @type {FooHandler2} callback
  */
 var t2;
-t(/*4*/"!", /*5*/12, /*6*/false);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+t(/*4*/"!", /*5*/12, /*6*/false);"#, |f, t| {
         f.mark_test_as_strada_server();
         f.verify_baseline_signature_help(t);
     });
@@ -351,8 +335,7 @@ use crate::tests::prelude::*;
 
 // signatureHelpJSDocTags_test.go:10
 pub fn test_signature_help_jsdoc_tags(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * This is class Foo.
  * @mytag comment1 comment2
  */
@@ -409,8 +392,7 @@ foo.method4();
 foo.property1;
 foo.property2;
 foo.method5();
-foo.newMet";
-    fourslash::run_generated_test(t, content, |f, t| {
+foo.newMet", |f, t| {
         f.verify_baseline_signature_help(t);
     });
 }
@@ -500,12 +482,10 @@ use crate::tests::prelude::*;
 
 // signatureHelpJSX_test.go:11
 pub fn test_signature_help_jsx(t: &T) {
-    t.parallel();
-    let content: &str = r"//@Filename: test.tsx
+    fourslash::run_generated_test(t, r"//@Filename: test.tsx
 //@jsx: react
 declare var React: any;
-const z = <div>{[].map(x => </**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+const z = <div>{[].map(x => </**/", |f, t| {
         f.go_to_marker(t, "");
         f.verify_no_signature_help_with_context(t, Some(lsproto::SignatureHelpContext { trigger_kind: lsproto::SignatureHelpTriggerKind::TriggerCharacter, trigger_character: Some("<".to_string()), is_retrigger: false, ..Default::default() }));
     });
@@ -518,16 +498,14 @@ use crate::tests::prelude::*;
 
 // signatureHelpJsxTextLessThanTrigger_test.go:11
 pub fn test_signature_help_jsx_text_less_than_trigger(t: &T) {
-    t.parallel();
-    let content: &str = r"//@Filename: test.tsx
+    fourslash::run_generated_test(t, r"//@Filename: test.tsx
 //@jsx: react
 declare var React: any;
 declare function Text(props: { children?: any }): any;
 
 const text = () => {
 	return <Text>/*m*/</Text>;
-};";
-    fourslash::run_generated_test(t, content, |f, t| {
+};", |f, t| {
         f.go_to_marker(t, "m");
         f.insert(t, "<");
         f.verify_no_signature_help_with_context(t, Some(lsproto::SignatureHelpContext { trigger_kind: lsproto::SignatureHelpTriggerKind::TriggerCharacter, trigger_character: Some("<".to_string()), is_retrigger: false, ..Default::default() }));
@@ -541,14 +519,12 @@ use crate::tests::prelude::*;
 
 // signatureHelpLeadingRestTuple_test.go:10
 pub fn test_signature_help_leading_rest_tuple(t: &T) {
-    t.parallel();
-    let content: &str = r#"export function leading(...args: [...names: string[], allCaps: boolean]): void {
+    fourslash::run_generated_test(t, r#"export function leading(...args: [...names: string[], allCaps: boolean]): void {
 }
 
 leading(/*1*/);
 leading("ok", /*2*/);
-leading("ok", "ok", /*3*/);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+leading("ok", "ok", /*3*/);"#, |f, t| {
         f.go_to_marker(t, "1");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "leading(...names: string[], allCaps: boolean): void".to_string(), parameter_count: 2, overloads_count: 1, is_variadic: true, is_variadic_set: true, ..Default::default() });
         f.go_to_marker(t, "2");
@@ -565,12 +541,10 @@ use crate::tests::prelude::*;
 
 // signatureHelpMalformedTaggedTemplateNoCrash1_test.go:11
 pub fn test_signature_help_malformed_tagged_template_no_crash1(t: &T) {
-    t.parallel();
-    let content: &str = r"`${1}
+    fourslash::run_generated_test(t, r"`${1}
 /*m1*/
 // ``
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.go_to_marker(t, "m1");
         f.verify_no_signature_help_with_context(t, Some(lsproto::SignatureHelpContext { trigger_kind: lsproto::SignatureHelpTriggerKind::Invoked, is_retrigger: false, ..Default::default() }));
     });
@@ -583,11 +557,9 @@ use crate::tests::prelude::*;
 
 // signatureHelpNegativeTests_test.go:10
 pub fn test_signature_help_negative_tests(t: &T) {
-    t.parallel();
-    let content: &str = r"//inside a comment foo(/*insideComment*/
+    fourslash::run_generated_test(t, r"//inside a comment foo(/*insideComment*/
 cl/*invalidContext*/ass InvalidSignatureHelpLocation { }
-InvalidSignatureHelpLocation(/*validContext*/);";
-    fourslash::run_generated_test(t, content, |f, t| {
+InvalidSignatureHelpLocation(/*validContext*/);", |f, t| {
         f.verify_no_signature_help_for_markers(t, &["insideComment", "invalidContext", "validContext"]);
     });
 }
@@ -599,10 +571,8 @@ use crate::tests::prelude::*;
 
 // signatureHelpNegativeTests2_test.go:10
 pub fn test_signature_help_negative_tests2(t: &T) {
-    t.parallel();
-    let content: &str = r"class clsOverload { constructor(); constructor(test: string); constructor(test?: string) { } }
-var x = new clsOverload/*beforeOpenParen*/()/*afterCloseParen*/;";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"class clsOverload { constructor(); constructor(test: string); constructor(test?: string) { } }
+var x = new clsOverload/*beforeOpenParen*/()/*afterCloseParen*/;", |f, t| {
         f.verify_no_signature_help_for_markers(t, &["beforeOpenParen", "afterCloseParen"]);
     });
 }
@@ -614,12 +584,10 @@ use crate::tests::prelude::*;
 
 // signatureHelpNestedCallTrailingComma_test.go:11
 pub fn test_signature_help_nested_call_trailing_comma(t: &T) {
-    t.parallel();
-    let content: &str = r"declare function outer<T>(range: T): T;
+    fourslash::run_generated_test(t, r"declare function outer<T>(range: T): T;
 declare function inner(a: any): any;
 
-outer(inner/*1*/(undefined,),);";
-    fourslash::run_generated_test(t, content, |f, t| {
+outer(inner/*1*/(undefined,),);", |f, t| {
         f.go_to_marker(t, "1");
         f.verify_signature_help_present(t, Some(lsproto::SignatureHelpContext { is_retrigger: false, trigger_kind: lsproto::SignatureHelpTriggerKind::Invoked, ..Default::default() }));
     });
@@ -632,11 +600,9 @@ use crate::tests::prelude::*;
 
 // signatureHelpNestedCalls_test.go:10
 pub fn test_signature_help_nested_calls(t: &T) {
-    t.parallel();
-    let content: &str = r#"function foo(s: string) { return s; }
+    fourslash::run_generated_test(t, r#"function foo(s: string) { return s; }
 function bar(s: string) { return s; }
-let s = foo(/*a*/ /*b*/bar/*c*/(/*d*/"hello"/*e*/)/*f*/);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+let s = foo(/*a*/ /*b*/bar/*c*/(/*d*/"hello"/*e*/)/*f*/);"#, |f, t| {
         f.go_to_marker(t, "a");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo(s: string): string".to_string(), ..Default::default() });
         f.go_to_marker(t, "b");
@@ -654,11 +620,9 @@ let s = foo(/*a*/ /*b*/bar/*c*/(/*d*/"hello"/*e*/)/*f*/);"#;
 
 // signatureHelpNestedCalls_test.go:42
 pub fn test_signature_help_empty_inner_call(t: &T) {
-    t.parallel();
-    let content: &str = r"function foo(s: string) { return s; }
+    fourslash::run_generated_test(t, r"function foo(s: string) { return s; }
 function bar(s: string) { return s; }
-let s = foo(bar(/*a*/));";
-    fourslash::run_generated_test(t, content, |f, t| {
+let s = foo(bar(/*a*/));", |f, t| {
         f.go_to_marker(t, "a");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "bar(s: string): string".to_string(), ..Default::default() });
     });
@@ -671,14 +635,12 @@ use crate::tests::prelude::*;
 
 // signatureHelpNestedTypeArgumentGTBalance_test.go:14
 pub fn test_signature_help_nested_type_argument_gt_balance(t: &T) {
-    t.parallel();
-    let content: &str = r"declare function f<T, U>(): void;
+    fourslash::run_generated_test(t, r"declare function f<T, U>(): void;
 type A<T> = T;
 type B<T> = T;
 type C<T> = T;
 f<A<B<C<number>>>, /*nested*/;
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.go_to_marker(t, "nested");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "f<T, U>(): void".to_string(), parameter_name: "U".to_string(), parameter_span: "U".to_string(), parameter_count: 2, ..Default::default() });
     });
@@ -691,12 +653,10 @@ use crate::tests::prelude::*;
 
 // signatureHelpNoArguments_test.go:10
 pub fn test_signature_help_no_arguments(t: &T) {
-    t.parallel();
-    let content: &str = r"function foo(n: number): string {
+    fourslash::run_generated_test(t, r"function foo(n: number): string {
 }
 
-foo(/**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+foo(/**/", |f, t| {
         f.go_to_marker(t, "");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo(n: number): string".to_string(), parameter_name: "n".to_string(), parameter_span: "n: number".to_string(), ..Default::default() });
     });
@@ -709,10 +669,8 @@ use crate::tests::prelude::*;
 
 // signatureHelpObjectCreationExpressionNoArgs_NotAvailable_test.go:10
 pub fn test_signature_help_object_creation_expression_no_args_not_available(t: &T) {
-    t.parallel();
-    let content: &str = r"class sampleCls { constructor(str: string, num: number) { } }
-var x = new sampleCls/**/;";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"class sampleCls { constructor(str: string, num: number) { } }
+var x = new sampleCls/**/;", |f, t| {
         f.verify_no_signature_help_for_markers(t, &[""]);
     });
 }
@@ -724,10 +682,8 @@ use crate::tests::prelude::*;
 
 // signatureHelpObjectLiteral_test.go:10
 pub fn test_signature_help_object_literal(t: &T) {
-    t.parallel();
-    let content: &str = r#"var objectLiteral = { n: 5, s: "", f: (a: number, b: string) => "" };
-objectLiteral.f(/*objectLiteral1*/4, /*objectLiteral2*/"");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"var objectLiteral = { n: 5, s: "", f: (a: number, b: string) => "" };
+objectLiteral.f(/*objectLiteral1*/4, /*objectLiteral2*/"");"#, |f, t| {
         f.go_to_marker(t, "objectLiteral1");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "f(a: number, b: string): string".to_string(), parameter_count: 2, parameter_name: "a".to_string(), parameter_span: "a: number".to_string(), ..Default::default() });
         f.go_to_marker(t, "objectLiteral2");
@@ -742,10 +698,8 @@ use crate::tests::prelude::*;
 
 // signatureHelpOnDeclaration_test.go:10
 pub fn test_signature_help_on_declaration(t: &T) {
-    t.parallel();
-    let content: &str = r"function f</**/
-x";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"function f</**/
+x", |f, t| {
         f.verify_no_signature_help_for_markers(t, &[""]);
     });
 }
@@ -757,9 +711,7 @@ use crate::tests::prelude::*;
 
 // signatureHelpOnImportDefer_test.go:10
 pub fn test_signature_help_on_import_defer(t: &T) {
-    t.parallel();
-    let content: &str = "let m = import.defer(/**/)";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "let m = import.defer(/**/)", |f, t| {
         f.go_to_marker(t, "");
         f.verify_baseline_signature_help(t);
     });
@@ -772,13 +724,11 @@ use crate::tests::prelude::*;
 
 // signatureHelpOnNestedOverloads_test.go:10
 pub fn test_signature_help_on_nested_overloads(t: &T) {
-    t.parallel();
-    let content: &str = r"declare function fn(x: string);
+    fourslash::run_generated_test(t, r"declare function fn(x: string);
 declare function fn(x: string, y: number);
 declare function fn2(x: string);
 declare function fn2(x: string, y: number);
-fn('', fn2(/*1*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+fn('', fn2(/*1*/", |f, t| {
         f.go_to_marker(t, "1");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "fn2(x: string): any".to_string(), parameter_name: "x".to_string(), parameter_span: "x: string".to_string(), overloads_count: 2, ..Default::default() });
         f.insert(t, "'',");
@@ -793,8 +743,7 @@ use crate::tests::prelude::*;
 
 // signatureHelpOnOverloadOnConst_test.go:10
 pub fn test_signature_help_on_overload_on_const(t: &T) {
-    t.parallel();
-    let content: &str = r"function x1(x: 'hi');
+    fourslash::run_generated_test(t, r"function x1(x: 'hi');
 function x1(y: 'bye');
 function x1(z: string);
 function x1(a: any) {
@@ -802,8 +751,7 @@ function x1(a: any) {
 
 x1(''/*1*/);
 x1('hi'/*2*/);
-x1('bye'/*3*/);";
-    fourslash::run_generated_test(t, content, |f, t| {
+x1('bye'/*3*/);", |f, t| {
         f.go_to_marker(t, "1");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "z".to_string(), parameter_span: "z: string".to_string(), overloads_count: 3, ..Default::default() });
         f.go_to_marker(t, "2");
@@ -820,11 +768,9 @@ use crate::tests::prelude::*;
 
 // signatureHelpOnOverloads_test.go:10
 pub fn test_signature_help_on_overloads(t: &T) {
-    t.parallel();
-    let content: &str = r"declare function fn(x: string);
+    fourslash::run_generated_test(t, r"declare function fn(x: string);
 declare function fn(x: string, y: number);
-fn(/*1*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+fn(/*1*/", |f, t| {
         f.go_to_marker(t, "1");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "fn(x: string): any".to_string(), parameter_name: "x".to_string(), parameter_span: "x: string".to_string(), overloads_count: 2, ..Default::default() });
         f.insert(t, "'',");
@@ -839,14 +785,12 @@ use crate::tests::prelude::*;
 
 // signatureHelpOnOverloadsDifferentArity_test.go:10
 pub fn test_signature_help_on_overloads_different_arity(t: &T) {
-    t.parallel();
-    let content: &str = r"declare function f(s: string);
+    fourslash::run_generated_test(t, r"declare function f(s: string);
 declare function f(n: number);
 declare function f(s: string, b: boolean);
 declare function f(n: number, b: boolean);
 
-f(1/**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+f(1/**/", |f, t| {
         f.go_to_marker(t, "");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "f(n: number): any".to_string(), parameter_name: "n".to_string(), parameter_span: "n: number".to_string(), overloads_count: 4, ..Default::default() });
         f.insert(t, ", ");
@@ -861,14 +805,12 @@ use crate::tests::prelude::*;
 
 // signatureHelpOnOverloadsDifferentArity2_test.go:10
 pub fn test_signature_help_on_overloads_different_arity2(t: &T) {
-    t.parallel();
-    let content: &str = r"declare function f(s: string);
+    fourslash::run_generated_test(t, r"declare function f(s: string);
 declare function f(n: number);
 declare function f(s: string, b: boolean);
 declare function f(n: number, b: boolean);
 
-f(1/**/ var";
-    fourslash::run_generated_test(t, content, |f, t| {
+f(1/**/ var", |f, t| {
         f.go_to_marker(t, "");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "f(n: number): any".to_string(), parameter_name: "n".to_string(), parameter_span: "n: number".to_string(), overloads_count: 4, ..Default::default() });
         f.insert(t, ", ");
@@ -883,14 +825,12 @@ use crate::tests::prelude::*;
 
 // signatureHelpOnOverloadsDifferentArity3_test.go:10
 pub fn test_signature_help_on_overloads_different_arity3(t: &T) {
-    t.parallel();
-    let content: &str = r"declare function f();
+    fourslash::run_generated_test(t, r"declare function f();
 declare function f(s: string);
 declare function f(s: string, b: boolean);
 declare function f(n: number, b: boolean);
 
-f(/**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+f(/**/", |f, t| {
         f.go_to_marker(t, "");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "f(): any".to_string(), parameter_count: 0, overloads_count: 4, ..Default::default() });
         f.insert(t, "x, ");
@@ -907,15 +847,13 @@ use crate::tests::prelude::*;
 
 // signatureHelpOnSuperWhenMembersAreNotResolved_test.go:10
 pub fn test_signature_help_on_super_when_members_are_not_resolved(t: &T) {
-    t.parallel();
-    let content: &str = r"class A { }
+    fourslash::run_generated_test(t, r"class A { }
 class B extends A { constructor(public x: string) { } }
 class C extends B {
     constructor() {
         /*1*/
      }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_marker(t, "1");
         f.insert(t, "super(");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "B(x: string): B".to_string(), ..Default::default() });
@@ -929,14 +867,12 @@ use crate::tests::prelude::*;
 
 // signatureHelpOnTypePredicates_test.go:10
 pub fn test_signature_help_on_type_predicates(t: &T) {
-    t.parallel();
-    let content: &str = r"function f1(a: any): a is number {}
+    fourslash::run_generated_test(t, r"function f1(a: any): a is number {}
 function f2<T>(a: any): a is T {}
 function f3(a: any, ...b): a is number {}
 f1(/*1*/)
 f2(/*2*/)
-f3(/*3*/)";
-    fourslash::run_generated_test(t, content, |f, t| {
+f3(/*3*/)", |f, t| {
         f.go_to_marker(t, "1");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "f1(a: any): a is number".to_string(), ..Default::default() });
         f.go_to_marker(t, "2");
@@ -953,10 +889,8 @@ use crate::tests::prelude::*;
 
 // signatureHelpOptionalCall_test.go:10
 pub fn test_signature_help_optional_call(t: &T) {
-    t.parallel();
-    let content: &str = r"function fnTest(str: string, num: number) { }
-fnTest?.(/*1*/);";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"function fnTest(str: string, num: number) { }
+fnTest?.(/*1*/);", |f, t| {
         f.go_to_marker(t, "1");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "fnTest(str: string, num: number): void".to_string(), parameter_count: 2, parameter_name: "str".to_string(), parameter_span: "str: string".to_string(), ..Default::default() });
     });
@@ -969,11 +903,9 @@ use crate::tests::prelude::*;
 
 // signatureHelpOptionalCall2_test.go:10
 pub fn test_signature_help_optional_call2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @strict: false
+    fourslash::run_generated_test(t, r"// @strict: false
 declare const fnTest: undefined | ((str: string, num: number) => void);
-fnTest?.(/*1*/);";
-    fourslash::run_generated_test(t, content, |f, t| {
+fnTest?.(/*1*/);", |f, t| {
         f.go_to_marker(t, "1");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "fnTest(str: string, num: number): void".to_string(), parameter_count: 2, parameter_name: "str".to_string(), parameter_span: "str: string".to_string(), ..Default::default() });
     });
@@ -986,8 +918,7 @@ use crate::tests::prelude::*;
 
 // signatureHelpRestArgs1_test.go:10
 pub fn test_signature_help_rest_args1(t: &T) {
-    t.parallel();
-    let content: &str = r"function fn(a: number, b: number, c: number) {}
+    fourslash::run_generated_test(t, r"function fn(a: number, b: number, c: number) {}
 const a = [1, 2] as const;
 const b = [1] as const;
 
@@ -995,8 +926,7 @@ fn(...a, /*1*/);
 fn(/*2*/, ...a);
 
 fn(...b, /*3*/);
-fn(/*4*/, ...b, /*5*/);";
-    fourslash::run_generated_test(t, content, |f, t| {
+fn(/*4*/, ...b, /*5*/);", |f, t| {
         f.verify_baseline_signature_help(t);
     });
 }
@@ -1037,8 +967,7 @@ use crate::tests::prelude::*;
 
 // signatureHelpRestArgs2_test.go:10
 pub fn test_signature_help_rest_args2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @strict: true
+    fourslash::run_generated_test(t, r"// @strict: true
 // @allowJs: true
 // @checkJs: true
 // @filename: index.js
@@ -1049,8 +978,7 @@ const promisify = function (thisArg, fnName) {
             fn.call(thisArg, ...arguments, /*1*/);
         });
     };
-};";
-    fourslash::run_generated_test(t, content, |f, t| {
+};", |f, t| {
         f.verify_baseline_signature_help(t);
     });
 }
@@ -1094,11 +1022,9 @@ use crate::tests::prelude::*;
 
 // signatureHelpRestArgs3_test.go:10
 pub fn test_signature_help_rest_args3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @target: esnext
+    fourslash::run_generated_test(t, r"// @target: esnext
 // @lib: esnext
-const layers = Object.assign({}, /*1*/...[]);";
-    fourslash::run_generated_test(t, content, |f, t| {
+const layers = Object.assign({}, /*1*/...[]);", |f, t| {
         f.verify_baseline_signature_help(t);
     });
 }
@@ -1133,13 +1059,11 @@ use crate::tests::prelude::*;
 
 // signatureHelpSimpleConstructorCall_test.go:10
 pub fn test_signature_help_simple_constructor_call(t: &T) {
-    t.parallel();
-    let content: &str = r"class ConstructorCall {
+    fourslash::run_generated_test(t, r"class ConstructorCall {
     constructor(str: string, num: number) {
     }
 }
-var x = new ConstructorCall(/*constructorCall1*/1,/*constructorCall2*/2);";
-    fourslash::run_generated_test(t, content, |f, t| {
+var x = new ConstructorCall(/*constructorCall1*/1,/*constructorCall2*/2);", |f, t| {
         f.go_to_marker(t, "constructorCall1");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "ConstructorCall(str: string, num: number): ConstructorCall".to_string(), parameter_name: "str".to_string(), parameter_span: "str: string".to_string(), ..Default::default() });
         f.go_to_marker(t, "constructorCall2");
@@ -1154,13 +1078,11 @@ use crate::tests::prelude::*;
 
 // signatureHelpSimpleFunctionCall_test.go:10
 pub fn test_signature_help_simple_function_call(t: &T) {
-    t.parallel();
-    let content: &str = r#"// Simple function test
+    fourslash::run_generated_test(t, r#"// Simple function test
 function functionCall(str: string, num: number) {
 }
 functionCall(/*functionCall1*/);
-functionCall("", /*functionCall2*/1);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+functionCall("", /*functionCall2*/1);"#, |f, t| {
         f.go_to_marker(t, "functionCall1");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "functionCall(str: string, num: number): void".to_string(), parameter_name: "str".to_string(), parameter_span: "str: string".to_string(), ..Default::default() });
         f.go_to_marker(t, "functionCall2");
@@ -1175,8 +1097,7 @@ use crate::tests::prelude::*;
 
 // signatureHelpSimpleSuperCall_test.go:10
 pub fn test_signature_help_simple_super_call(t: &T) {
-    t.parallel();
-    let content: &str = r"class SuperCallBase {
+    fourslash::run_generated_test(t, r"class SuperCallBase {
     constructor(b: boolean) {
     }
 }
@@ -1184,8 +1105,7 @@ class SuperCall extends SuperCallBase {
     constructor() {
         super(/*superCall*/);
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_marker(t, "superCall");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "SuperCallBase(b: boolean): SuperCallBase".to_string(), parameter_name: "b".to_string(), parameter_span: "b: boolean".to_string(), ..Default::default() });
     });
@@ -1198,10 +1118,8 @@ use crate::tests::prelude::*;
 
 // signatureHelpSkippedArgs1_test.go:10
 pub fn test_signature_help_skipped_args1(t: &T) {
-    t.parallel();
-    let content: &str = r"function fn(a: number, b: number, c: number) {}
-fn(/*1*/, /*2*/, /*3*/, /*4*/, /*5*/);";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"function fn(a: number, b: number, c: number) {}
+fn(/*1*/, /*2*/, /*3*/, /*4*/, /*5*/);", |f, t| {
         f.verify_baseline_signature_help(t);
     });
 }
@@ -1235,8 +1153,7 @@ use crate::tests::prelude::*;
 
 // signatureHelpSuperConstructorOverload_test.go:10
 pub fn test_signature_help_super_constructor_overload(t: &T) {
-    t.parallel();
-    let content: &str = r#"class SuperOverloadBase {
+    fourslash::run_generated_test(t, r#"class SuperOverloadBase {
     constructor();
     constructor(test: string);
     constructor(test?: string) {
@@ -1251,8 +1168,7 @@ class SuperOverLoad2 extends SuperOverloadBase {
     constructor() {
         super(""/*superOverload2*/);
     }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.go_to_marker(t, "superOverload1");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "SuperOverloadBase(): SuperOverloadBase".to_string(), parameter_count: 0, overloads_count: 2, ..Default::default() });
         f.go_to_marker(t, "superOverload2");
@@ -1267,12 +1183,10 @@ use crate::tests::prelude::*;
 
 // signatureHelpTaggedTemplatesNegatives1_test.go:10
 pub fn test_signature_help_tagged_templates_negatives1(t: &T) {
-    t.parallel();
-    let content: &str = r#"function f(templateStrings, x, y, z) { return 10; }
+    fourslash::run_generated_test(t, r#"function f(templateStrings, x, y, z) { return 10; }
 function g(templateStrings, x, y, z) { return ""; }
 
-/*1*/f/*2*/ /*3*/` qwerty ${ 123 } asdf ${   41234   }  zxcvb ${ g `    ` }     `/*4*/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*1*/f/*2*/ /*3*/` qwerty ${ 123 } asdf ${   41234   }  zxcvb ${ g `    ` }     `/*4*/"#, |f, t| {
         f.verify_no_signature_help_for_markers(t, &go::strs(&f.marker_names()));
     });
 }
@@ -1284,12 +1198,10 @@ use crate::tests::prelude::*;
 
 // signatureHelpTaggedTemplatesNegatives2_test.go:10
 pub fn test_signature_help_tagged_templates_negatives2(t: &T) {
-    t.parallel();
-    let content: &str = r"function foo(strs, ...rest) {
+    fourslash::run_generated_test(t, r"function foo(strs, ...rest) {
 }
 
-/*1*/fo/*2*/o /*3*/`abcd${0 + 1}abcd{1 + 1}`/*4*/  /*5*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*1*/fo/*2*/o /*3*/`abcd${0 + 1}abcd{1 + 1}`/*4*/  /*5*/", |f, t| {
         f.verify_no_signature_help_for_markers(t, &go::strs(&f.marker_names()));
     });
 }
@@ -1301,12 +1213,10 @@ use crate::tests::prelude::*;
 
 // signatureHelpTaggedTemplatesNegatives3_test.go:10
 pub fn test_signature_help_tagged_templates_negatives3(t: &T) {
-    t.parallel();
-    let content: &str = r"function foo(strs, ...rest) {
+    fourslash::run_generated_test(t, r"function foo(strs, ...rest) {
 }
 
-/*1*/fo/*2*/o /*3*/`abcd${0 + 1}abcd{1 + 1}abcd`/*4*/  /*5*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*1*/fo/*2*/o /*3*/`abcd${0 + 1}abcd{1 + 1}abcd`/*4*/  /*5*/", |f, t| {
         f.verify_no_signature_help_for_markers(t, &go::strs(&f.marker_names()));
     });
 }
@@ -1318,12 +1228,10 @@ use crate::tests::prelude::*;
 
 // signatureHelpTaggedTemplatesNegatives4_test.go:10
 pub fn test_signature_help_tagged_templates_negatives4(t: &T) {
-    t.parallel();
-    let content: &str = r"function foo(strs, ...rest) {
+    fourslash::run_generated_test(t, r"function foo(strs, ...rest) {
 }
 
-/*1*/fo/*2*/o /*3*/``/*4*/  /*5*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*1*/fo/*2*/o /*3*/``/*4*/  /*5*/", |f, t| {
         f.verify_no_signature_help_for_markers(t, &go::strs(&f.marker_names()));
     });
 }
@@ -1335,12 +1243,10 @@ use crate::tests::prelude::*;
 
 // signatureHelpTaggedTemplatesNegatives5_test.go:10
 pub fn test_signature_help_tagged_templates_negatives5(t: &T) {
-    t.parallel();
-    let content: &str = r"function foo(strs, ...rest) {
+    fourslash::run_generated_test(t, r"function foo(strs, ...rest) {
 }
 
-/*1*/fo/*2*/o /*3*/`abcd`/*4*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*1*/fo/*2*/o /*3*/`abcd`/*4*/", |f, t| {
         f.verify_no_signature_help_for_markers(t, &go::strs(&f.marker_names()));
     });
 }
@@ -1352,8 +1258,7 @@ use crate::tests::prelude::*;
 
 // signatureHelpThis_test.go:10
 pub fn test_signature_help_this(t: &T) {
-    t.parallel();
-    let content: &str = r"class Foo<T> {
+    fourslash::run_generated_test(t, r"class Foo<T> {
     public implicitAny(n: number) {
     }
     public explicitThis(this: this, n: number) {
@@ -1380,8 +1285,7 @@ foo.explicitClass(/*3*/);
 implicitAny(/*4*/12);
 explicitVoid(/*5*/13);
 let o = { n: 14, m: explicitLiteral };
-o.m(/*6*/);";
-    fourslash::run_generated_test(t, content, |f, t| {
+o.m(/*6*/);", |f, t| {
         f.go_to_marker(t, "1");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { parameter_name: "n".to_string(), ..Default::default() });
         f.go_to_marker(t, "2");
@@ -1404,8 +1308,7 @@ use crate::tests::prelude::*;
 
 // signatureHelpTokenCrash_test.go:11
 pub fn test_signature_help_token_crash(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 function foo(a: any, b: any) {
 
 }
@@ -1414,8 +1317,7 @@ foo((/*1*/
 
 /** This is a JSDoc comment */
 foo/** More comments*/((/*2*/
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_signature_help_with_cases(t, &[fourslash::SignatureHelpCase { marker_input: Any::String("1".to_string()), expected: None, context: Some(lsproto::SignatureHelpContext { is_retrigger: false, trigger_character: Some("(".to_string()), trigger_kind: lsproto::SignatureHelpTriggerKind::TriggerCharacter, ..Default::default() }) }]);
         f.verify_signature_help_with_cases(t, &[fourslash::SignatureHelpCase { marker_input: Any::String("2".to_string()), expected: None, context: Some(lsproto::SignatureHelpContext { is_retrigger: false, trigger_character: Some("(".to_string()), trigger_kind: lsproto::SignatureHelpTriggerKind::TriggerCharacter, ..Default::default() }) }]);
     });
@@ -1428,14 +1330,12 @@ use crate::tests::prelude::*;
 
 // signatureHelpTrailingRestTuple_test.go:10
 pub fn test_signature_help_trailing_rest_tuple(t: &T) {
-    t.parallel();
-    let content: &str = r#"export function leading(allCaps: boolean, ...names: string[]): void {
+    fourslash::run_generated_test(t, r#"export function leading(allCaps: boolean, ...names: string[]): void {
 }
 
 leading(/*1*/);
 leading(false, /*2*/);
-leading(false, "ok", /*3*/);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+leading(false, "ok", /*3*/);"#, |f, t| {
         f.go_to_marker(t, "1");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "leading(allCaps: boolean, ...names: string[]): void".to_string(), parameter_count: 2, parameter_name: "allCaps".to_string(), parameter_span: "allCaps: boolean".to_string(), overloads_count: 1, is_variadic: true, is_variadic_set: true, ..Default::default() });
         f.go_to_marker(t, "2");
@@ -1452,8 +1352,7 @@ use crate::tests::prelude::*;
 
 // signatureHelpTypeArguments_test.go:10
 pub fn test_signature_help_type_arguments(t: &T) {
-    t.parallel();
-    let content: &str = r"declare function f(a: number, b: string, c: boolean): void; // ignored, not generic
+    fourslash::run_generated_test(t, r"declare function f(a: number, b: string, c: boolean): void; // ignored, not generic
 declare function f<T extends number>(): void;
 declare function f<T, U>(): void;
 declare function f<T, U, V extends string>(): void;
@@ -1468,8 +1367,7 @@ declare const C: {
 };
 new C</*C0*/;
 new C<number, /*C1*/;
-new C<number, string, /*C2*/;";
-    fourslash::run_generated_test(t, content, |f, t| {
+new C<number, string, /*C2*/;", |f, t| {
         f.go_to_marker(t, "f0");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "f<T extends number>(): void".to_string(), parameter_name: "T".to_string(), parameter_span: "T extends number".to_string(), overloads_count: 3, ..Default::default() });
         f.go_to_marker(t, "f1");
@@ -1492,8 +1390,7 @@ use crate::tests::prelude::*;
 
 // signatureHelpTypeArguments2_test.go:10
 pub fn test_signature_help_type_arguments2(t: &T) {
-    t.parallel();
-    let content: &str = r"/** some documentation
+    fourslash::run_generated_test(t, r"/** some documentation
  * @template T some documentation 2
  * @template W
  * @template U,V others
@@ -1504,8 +1401,7 @@ function f<T, U, V, W>(a: number, b: string, c: boolean): void { }
 f</*f0*/;
 f<number, /*f1*/;
 f<number, string, /*f2*/;
-f<number, string, boolean, /*f3*/;";
-    fourslash::run_generated_test(t, content, |f, t| {
+f<number, string, boolean, /*f3*/;", |f, t| {
         f.verify_baseline_signature_help(t);
     });
 }
@@ -1549,11 +1445,9 @@ use crate::tests::prelude::*;
 
 // signatureHelpTypeArgumentsWithUntypedTarget_test.go:10
 pub fn test_signature_help_on_type_arguments_with_unresolved_target(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 /*1*/un/*2*/resolvedVal/*3*/</*4*/Un/*5*/resolvedType/*6*/>/*7*/(/*8*/un/*9*/resolvedVal/*10*/);
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.go_to_each_marker(t, &[], |f: &mut fourslash::FourslashTest, _marker: Arc<fourslash::Marker>, _index: usize| {
             f.verify_no_signature_help(t);
         });
@@ -1567,10 +1461,8 @@ use crate::tests::prelude::*;
 
 // signatureHelpTypeParametersNotVariadic_test.go:10
 pub fn test_signature_help_type_parameters_not_variadic(t: &T) {
-    t.parallel();
-    let content: &str = r"declare function f(a: any, ...b: any[]): any;
-f</*1*/>(1, 2);";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"declare function f(a: any, ...b: any[]): any;
+f</*1*/>(1, 2);", |f, t| {
         f.go_to_marker(t, "1");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { is_variadic: false, is_variadic_set: true, ..Default::default() });
     });
@@ -1583,8 +1475,7 @@ use crate::tests::prelude::*;
 
 // signatureHelp_unionType_test.go:10
 pub fn test_signature_help_union_type(t: &T) {
-    t.parallel();
-    let content: &str = r"declare const a: (fn?: ((x: string) => string) | ((y: number) => number)) => void;
+    fourslash::run_generated_test(t, r"declare const a: (fn?: ((x: string) => string) | ((y: number) => number)) => void;
 declare const b: (x: string | number) => void;
 
 interface Callback {
@@ -1599,8 +1490,7 @@ a((/*1*/) => {
 
 b(/*2*/);
 
-c((/*3*/) => {});";
-    fourslash::run_generated_test(t, content, |f, t| {
+c((/*3*/) => {});", |f, t| {
         f.verify_baseline_signature_help(t);
     });
 }
@@ -1648,13 +1538,11 @@ use crate::tests::prelude::*;
 
 // signatureHelpUnresolvedTypeErrorRecovery_test.go:15
 pub fn test_signature_help_unresolved_type_in_error_recovered_signature(t: &T) {
-    t.parallel();
-    let content: &str = r"function f(x: {
+    fourslash::run_generated_test(t, r"function f(x: {
     a?: U =
     b?: (p: U) => void
 }) {}
-f(/*a*/);";
-    fourslash::run_generated_test(t, content, |f, t| {
+f(/*a*/);", |f, t| {
         f.verify_baseline_signature_help(t);
     });
 }
@@ -1666,12 +1554,10 @@ use crate::tests::prelude::*;
 
 // signatureHelpWithInterfaceAsIdentifier_test.go:10
 pub fn test_signature_help_with_interface_as_identifier(t: &T) {
-    t.parallel();
-    let content: &str = r"interface C {
+    fourslash::run_generated_test(t, r"interface C {
     (): void;
 }
-C(/*1*/);";
-    fourslash::run_generated_test(t, content, |f, t| {
+C(/*1*/);", |f, t| {
         f.verify_no_signature_help_for_markers(t, &["1"]);
     });
 }
@@ -1683,10 +1569,8 @@ use crate::tests::prelude::*;
 
 // signatureHelpWithInvalidArgumentList1_test.go:10
 pub fn test_signature_help_with_invalid_argument_list1(t: &T) {
-    t.parallel();
-    let content: &str = r"function foo(a) { }
-foo(hello my name /**/is";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"function foo(a) { }
+foo(hello my name /**/is", |f, t| {
         f.go_to_marker(t, "");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "foo(a: any): void".to_string(), ..Default::default() });
     });
@@ -1699,12 +1583,10 @@ use crate::tests::prelude::*;
 
 // signatureHelpWithTriggers02_test.go:10
 pub fn test_signature_help_with_triggers02(t: &T) {
-    t.parallel();
-    let content: &str = r"declare function foo<T>(x: T, y: T): T;
+    fourslash::run_generated_test(t, r"declare function foo<T>(x: T, y: T): T;
 declare function bar<U>(x: U, y: U): U;
 
-foo(bar/*1*/)";
-    fourslash::run_generated_test(t, content, |f, t| {
+foo(bar/*1*/)", |f, t| {
         f.go_to_marker(t, "1");
         f.insert(t, "(");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "bar(x: unknown, y: unknown): unknown".to_string(), ..Default::default() });
@@ -1725,9 +1607,7 @@ use crate::tests::prelude::*;
 
 // signatureHelpWithUnknown_test.go:10
 pub fn test_signature_help_with_unknown(t: &T) {
-    t.parallel();
-    let content: &str = r"eval(\/*1*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"eval(\/*1*/", |f, t| {
         f.verify_baseline_signature_help(t);
     });
 }
@@ -1760,9 +1640,7 @@ use crate::tests::prelude::*;
 
 // singleLineTypeLiteralFormatting_test.go:10
 pub fn test_single_line_type_literal_formatting(t: &T) {
-    t.parallel();
-    let content: &str = "function of1(b: { r: { c: number/**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "function of1(b: { r: { c: number/**/", |f, t| {
         f.go_to_marker(t, "");
         f.insert(t, ";");
         f.verify_current_line_content(t, "function of1(b: { r: { c: number;");
@@ -1776,12 +1654,10 @@ use crate::tests::prelude::*;
 
 // smartIndentNamedImport_test.go:10
 pub fn test_smart_indent_named_import(t: &T) {
-    t.parallel();
-    let content: &str = r"import {/*0*/
+    fourslash::run_generated_test(t, r"import {/*0*/
     numbers as bn,/*1*/
     list/*2*/
-} from '@bykov/basics';/*3*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+} from '@bykov/basics';/*3*/", |f, t| {
         f.format_document(t, "");
         f.go_to_marker(t, "0");
         f.verify_current_line_content(t, "import {");
@@ -1801,9 +1677,7 @@ use crate::tests::prelude::*;
 
 // smartSelection_behindCaret_test.go:10
 pub fn test_smart_selection_behind_caret(t: &T) {
-    t.parallel();
-    let content: &str = "let/**/ x: string";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "let/**/ x: string", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -1815,9 +1689,7 @@ use crate::tests::prelude::*;
 
 // smartSelection_bindingPatterns_test.go:10
 pub fn test_smart_selection_binding_patterns(t: &T) {
-    t.parallel();
-    let content: &str = "const { /*1*/x, y: /*2*/a, .../*3*/zs = {} } = {};";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "const { /*1*/x, y: /*2*/a, .../*3*/zs = {} } = {};", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -1829,9 +1701,7 @@ use crate::tests::prelude::*;
 
 // smartSelection_comment1_test.go:10
 pub fn test_smart_selection_comment1(t: &T) {
-    t.parallel();
-    let content: &str = "const a = 1; ///**/comment content";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "const a = 1; ///**/comment content", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -1843,9 +1713,7 @@ use crate::tests::prelude::*;
 
 // smartSelection_comment2_test.go:10
 pub fn test_smart_selection_comment2(t: &T) {
-    t.parallel();
-    let content: &str = "const a = 1; //a b/**/c d";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "const a = 1; //a b/**/c d", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -1857,9 +1725,7 @@ use crate::tests::prelude::*;
 
 // smartSelection_complex_test.go:10
 pub fn test_smart_selection_complex(t: &T) {
-    t.parallel();
-    let content: &str = "type X<T, P> = IsExactlyAny<P> extends true ? T : ({ [K in keyof P]: IsExactlyAny<P[K]> extends true ? K extends keyof T ? T[K] : P[/**/K] : P[K]; } & Pick<T, Exclude<keyof T, keyof P>>)";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "type X<T, P> = IsExactlyAny<P> extends true ? T : ({ [K in keyof P]: IsExactlyAny<P[K]> extends true ? K extends keyof T ? T[K] : P[/**/K] : P[K]; } & Pick<T, Exclude<keyof T, keyof P>>)", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -1871,15 +1737,13 @@ use crate::tests::prelude::*;
 
 // smartSelection_emptyRanges_test.go:10
 pub fn test_smart_selection_empty_ranges(t: &T) {
-    t.parallel();
-    let content: &str = r"class HomePage {
+    fourslash::run_generated_test(t, r"class HomePage {
   componentDidMount(/*1*/) {
     if (this.props.username/*2*/) {
       return '/*3*/';
     }
   }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -1891,11 +1755,9 @@ use crate::tests::prelude::*;
 
 // smartSelection_function1_test.go:10
 pub fn test_smart_selection_function1(t: &T) {
-    t.parallel();
-    let content: &str = r"const f1 = () => {
+    fourslash::run_generated_test(t, r"const f1 = () => {
    /**/
-};";
-    fourslash::run_generated_test(t, content, |f, t| {
+};", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -1907,11 +1769,9 @@ use crate::tests::prelude::*;
 
 // smartSelection_function2_test.go:10
 pub fn test_smart_selection_function2(t: &T) {
-    t.parallel();
-    let content: &str = r"function f2() {
+    fourslash::run_generated_test(t, r"function f2() {
     /**/
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -1923,11 +1783,9 @@ use crate::tests::prelude::*;
 
 // smartSelection_function3_test.go:10
 pub fn test_smart_selection_function3(t: &T) {
-    t.parallel();
-    let content: &str = r"const f3 = function () {
+    fourslash::run_generated_test(t, r"const f3 = function () {
     /**/
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -1939,9 +1797,7 @@ use crate::tests::prelude::*;
 
 // smartSelection_functionParams1_test.go:10
 pub fn test_smart_selection_function_params1(t: &T) {
-    t.parallel();
-    let content: &str = "function f(/*1*/p, /*2*/q?, /*3*/...r: any[] = []) {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "function f(/*1*/p, /*2*/q?, /*3*/...r: any[] = []) {}", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -1953,12 +1809,10 @@ use crate::tests::prelude::*;
 
 // smartSelection_functionParams2_test.go:10
 pub fn test_smart_selection_function_params2(t: &T) {
-    t.parallel();
-    let content: &str = r"function f(
+    fourslash::run_generated_test(t, r"function f(
   a,
   /**/b
-) {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+) {}", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -1970,12 +1824,10 @@ use crate::tests::prelude::*;
 
 // smartSelection_imports_test.go:10
 pub fn test_smart_selection_imports(t: &T) {
-    t.parallel();
-    let content: &str = r"import { /**/x as y, z } from './z';
+    fourslash::run_generated_test(t, r"import { /**/x as y, z } from './z';
 import { b } from './';
 
-console.log(1);";
-    fourslash::run_generated_test(t, content, |f, t| {
+console.log(1);", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -1987,15 +1839,13 @@ use crate::tests::prelude::*;
 
 // smartSelection_JSDoc_test.go:10
 pub fn test_smart_selection_jsdoc(t: &T) {
-    t.parallel();
-    let content: &str = r"// Not a JSDoc comment
+    fourslash::run_generated_test(t, r"// Not a JSDoc comment
 /**
  * @param {number} x The number to square
  */
 function /**/square(x) {
   return x * x;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2007,12 +1857,10 @@ use crate::tests::prelude::*;
 
 // smartSelection_JSDocTags1_test.go:10
 pub fn test_smart_selection_jsdoc_tags1(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * @returns {Array<{ value: /**/string }>}
  */
-function foo() { return [] }";
-    fourslash::run_generated_test(t, content, |f, t| {
+function foo() { return [] }", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2024,14 +1872,12 @@ use crate::tests::prelude::*;
 
 // smartSelection_JSDocTags10_test.go:10
 pub fn test_smart_selection_jsdoc_tags10(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * @template T
  * @extends {/**/Set<T>}
  */
 class A extends B {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2043,13 +1889,11 @@ use crate::tests::prelude::*;
 
 // smartSelection_JSDocTags11_test.go:10
 pub fn test_smart_selection_jsdoc_tags11(t: &T) {
-    t.parallel();
-    let content: &str = r"const x = 1;
+    fourslash::run_generated_test(t, r"const x = 1;
 type Foo = {
   /** comment */
   /*2*/readonly /*1*/status: number;
-};";
-    fourslash::run_generated_test(t, content, |f, t| {
+};", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2061,12 +1905,10 @@ use crate::tests::prelude::*;
 
 // smartSelection_JSDocTags12_test.go:10
 pub fn test_smart_selection_jsdoc_tags12(t: &T) {
-    t.parallel();
-    let content: &str = r"type B = {};
+    fourslash::run_generated_test(t, r"type B = {};
 type A = {
     a(/** Comment */ /*1*/p0: number, /** Comment */ /*2*/p1: number, /** Comment */ /*3*/p2: number): string;
-};";
-    fourslash::run_generated_test(t, content, |f, t| {
+};", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2078,15 +1920,13 @@ use crate::tests::prelude::*;
 
 // smartSelection_JSDocTags13_test.go:10
 pub fn test_smart_selection_jsdoc_tags13(t: &T) {
-    t.parallel();
-    let content: &str = r"let a;
+    fourslash::run_generated_test(t, r"let a;
 let b: {
     /** Comment */ /*1*/p0: number
     /** Comment */ /*2*/p1: number
     /** Comment */ /*3*/p2: number
 };
-let c;";
-    fourslash::run_generated_test(t, content, |f, t| {
+let c;", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2098,12 +1938,10 @@ use crate::tests::prelude::*;
 
 // smartSelection_JSDocTags2_test.go:10
 pub fn test_smart_selection_jsdoc_tags2(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * @type {/**/string}
  */
-const foo;";
-    fourslash::run_generated_test(t, content, |f, t| {
+const foo;", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2115,12 +1953,10 @@ use crate::tests::prelude::*;
 
 // smartSelection_JSDocTags3_test.go:10
 pub fn test_smart_selection_jsdoc_tags3(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * @param {/**/string} x
  */
-function foo(x) {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+function foo(x) {}", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2132,8 +1968,7 @@ use crate::tests::prelude::*;
 
 // smartSelection_JSDocTags4_test.go:10
 pub fn test_smart_selection_jsdoc_tags4(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * @typedef {object} Foo
  * @property {string} a
  * @property {number} b
@@ -2141,8 +1976,7 @@ pub fn test_smart_selection_jsdoc_tags4(t: &T) {
  */
 
 /** @type {Foo} */
-const foo;";
-    fourslash::run_generated_test(t, content, |f, t| {
+const foo;", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2154,8 +1988,7 @@ use crate::tests::prelude::*;
 
 // smartSelection_JSDocTags5_test.go:10
 pub fn test_smart_selection_jsdoc_tags5(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * @callback Foo
  * @param {string} data
  * @param {/**/number} [index] - comment
@@ -2163,8 +1996,7 @@ pub fn test_smart_selection_jsdoc_tags5(t: &T) {
  */
 
 /** @type {Foo} */
-const foo = s => !(s.length % 2);";
-    fourslash::run_generated_test(t, content, |f, t| {
+const foo = s => !(s.length % 2);", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2176,16 +2008,14 @@ use crate::tests::prelude::*;
 
 // smartSelection_JSDocTags6_test.go:10
 pub fn test_smart_selection_jsdoc_tags6(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * @template T
  * @param {/**/T} x
  * @return {T}
  */
 function foo(x) {
     return x;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2197,14 +2027,12 @@ use crate::tests::prelude::*;
 
 // smartSelection_JSDocTags7_test.go:10
 pub fn test_smart_selection_jsdoc_tags7(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * @constructor
  * @param {/**/number} data
  */
 function Foo(data) {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2216,14 +2044,12 @@ use crate::tests::prelude::*;
 
 // smartSelection_JSDocTags8_test.go:10
 pub fn test_smart_selection_jsdoc_tags8(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * @this {/*1*/Foo}
  * @param {/*2*/*} e
  */
 function callback(e) {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2235,13 +2061,11 @@ use crate::tests::prelude::*;
 
 // smartSelection_JSDocTags9_test.go:10
 pub fn test_smart_selection_jsdoc_tags9(t: &T) {
-    t.parallel();
-    let content: &str = r"/** @enum {/**/number} */
+    fourslash::run_generated_test(t, r"/** @enum {/**/number} */
 const Foo = {
     x: 0,
     y: 1,
-};";
-    fourslash::run_generated_test(t, content, |f, t| {
+};", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2253,10 +2077,8 @@ use crate::tests::prelude::*;
 
 // smartSelection_lastBlankLine_test.go:10
 pub fn test_smart_selection_last_blank_line(t: &T) {
-    t.parallel();
-    let content: &str = r"class C {}
-/**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"class C {}
+/**/", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2268,9 +2090,7 @@ use crate::tests::prelude::*;
 
 // smartSelection_loneVariableDeclaration_test.go:10
 pub fn test_smart_selection_lone_variable_declaration(t: &T) {
-    t.parallel();
-    let content: &str = "const /**/x = 3;";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "const /**/x = 3;", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2282,9 +2102,7 @@ use crate::tests::prelude::*;
 
 // smartSelection_mappedTypes_test.go:10
 pub fn test_smart_selection_mapped_types(t: &T) {
-    t.parallel();
-    let content: &str = "type M = { /*1*/-re/*2*/adonly /*3*/[K in ke/*4*/yof any]/*5*/-/*6*/?: any };";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "type M = { /*1*/-re/*2*/adonly /*3*/[K in ke/*4*/yof any]/*5*/-/*6*/?: any };", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2296,13 +2114,11 @@ use crate::tests::prelude::*;
 
 // smartSelection_objectTypes_test.go:10
 pub fn test_smart_selection_object_types(t: &T) {
-    t.parallel();
-    let content: &str = r"type X = {
+    fourslash::run_generated_test(t, r"type X = {
   /*1*/foo?: string;
   /*2*/readonly /*3*/bar: { x: num/*4*/ber };
   /*5*/meh
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2314,9 +2130,7 @@ use crate::tests::prelude::*;
 
 // smartSelection_punctuationPriority_test.go:10
 pub fn test_smart_selection_punctuation_priority(t: &T) {
-    t.parallel();
-    let content: &str = "console/**/.log();";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "console/**/.log();", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2328,16 +2142,14 @@ use crate::tests::prelude::*;
 
 // smartSelection_simple1_test.go:10
 pub fn test_smart_selection_simple1(t: &T) {
-    t.parallel();
-    let content: &str = r"class Foo {
+    fourslash::run_generated_test(t, r"class Foo {
   bar(a, b) {
       if (/*1*/a === b) {
           return tr/*2*/ue;
       }
       return false;
   }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2349,14 +2161,12 @@ use crate::tests::prelude::*;
 
 // smartSelection_simple2_test.go:10
 pub fn test_smart_selection_simple2(t: &T) {
-    t.parallel();
-    let content: &str = r"export interface IService {
+    fourslash::run_generated_test(t, r"export interface IService {
   _serviceBrand: any;
 
   open(ho/*1*/st: number, data: any): Promise<any>;
   bar(): void/*2*/
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2368,10 +2178,8 @@ use crate::tests::prelude::*;
 
 // smartSelection_stringLiteral_test.go:10
 pub fn test_smart_selection_string_literal(t: &T) {
-    t.parallel();
-    let content: &str = r"const a = 'a';
-const b = /**/'b';";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"const a = 'a';
+const b = /**/'b';", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2383,11 +2191,9 @@ use crate::tests::prelude::*;
 
 // smartSelection_templateStrings_test.go:10
 pub fn test_smart_selection_template_strings(t: &T) {
-    t.parallel();
-    let content: &str = r"`a /*1*/b ${
+    fourslash::run_generated_test(t, r"`a /*1*/b ${
   '/*2*/c'
-} d`";
-    fourslash::run_generated_test(t, content, |f, t| {
+} d`", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2399,9 +2205,7 @@ use crate::tests::prelude::*;
 
 // smartSelection_templateStrings2_test.go:10
 pub fn test_smart_selection_template_strings2(t: &T) {
-    t.parallel();
-    let content: &str = "`a ${b} /**/c`";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "`a ${b} /**/c`", |f, t| {
         f.verify_baseline_selection_ranges(t);
     });
 }
@@ -2413,15 +2217,13 @@ use crate::tests::prelude::*;
 
 // sourceFixAllImports_test.go:10
 pub fn test_source_fix_all_imports(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r"// @Filename: /a.ts
 export const a: number = 1;
 // @Filename: /b.ts
 export const b: number = 2;
 // @Filename: /main.ts
 a;
-b;";
-    fourslash::run_generated_test(t, content, |f, t| {
+b;", |f, t| {
         f.go_to_file(t, "/main.ts");
         f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixMissingImport".to_string(), new_file_content: r#"import { a } from "./a";
 import { b } from "./b";
@@ -2433,15 +2235,13 @@ b;"#.to_string() });
 
 // sourceFixAllImports_test.go:35
 pub fn test_source_fix_all_code_action(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r"// @Filename: /a.ts
 export const a: number = 1;
 // @Filename: /b.ts
 export const b: number = 2;
 // @Filename: /main.ts
 a;
-b;";
-    fourslash::run_generated_test(t, content, |f, t| {
+b;", |f, t| {
         f.go_to_file(t, "/main.ts");
         f.verify_source_fix_all(t, r#"import { a } from "./a";
 import { b } from "./b";
@@ -2458,13 +2258,11 @@ use crate::tests::prelude::*;
 
 // spaceAfterConstructor_test.go:10
 pub fn test_space_after_constructor(t: &T) {
-    t.parallel();
-    let content: &str = r"export class myController {
+    fourslash::run_generated_test(t, r"export class myController {
     private _processId;
     constructor (processId: number) {/*1*/
         this._processId = processId;
-    }/*2*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+    }/*2*/", |f, t| {
         f.go_to_marker(t, "2");
         f.insert(t, "}");
         f.go_to_marker(t, "1");
@@ -2479,13 +2277,11 @@ use crate::tests::prelude::*;
 
 // spaceAfterReturn_test.go:10
 pub fn test_space_after_return(t: &T) {
-    t.parallel();
-    let content: &str = r"function f( ) {
+    fourslash::run_generated_test(t, r"function f( ) {
 return       1;/*1*/
 return[1];/*2*/
 return    ;/*3*/
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.format_document(t, "");
         f.go_to_marker(t, "1");
         f.verify_current_line_content(t, "    return 1;");
@@ -2503,8 +2299,7 @@ use crate::tests::prelude::*;
 
 // spaceAfterStatementConditions_test.go:10
 pub fn test_space_after_statement_conditions(t: &T) {
-    t.parallel();
-    let content: &str = r"let i = 0;
+    fourslash::run_generated_test(t, r"let i = 0;
 
 if(i<0) ++i;
 if(i<0) --i;
@@ -2525,8 +2320,7 @@ for(let foo of [1, 2]) --i;
 
 for(let j = 0; j < 10; j++) ++i;
 for(let j = 0; j < 10; j++) --i;
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"let i = 0;
 
@@ -2560,8 +2354,7 @@ use crate::tests::prelude::*;
 
 // spaceBeforeAndAfterBinaryOperators_test.go:10
 pub fn test_space_before_and_after_binary_operators(t: &T) {
-    t.parallel();
-    let content: &str = r"let i = 0;
+    fourslash::run_generated_test(t, r"let i = 0;
 /*1*/(i++,i++);
 /*2*/(i++,++i);
 /*3*/(1,2);
@@ -2569,8 +2362,7 @@ pub fn test_space_before_and_after_binary_operators(t: &T) {
 /*5*/(i++,i++,++i,i--,2);
 let s = 'foo';
 /*6*/for (var i = 0,ii = 2; i < s.length; ii++,i++) {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.format_document(t, "");
         f.go_to_marker(t, "1");
         f.verify_current_line_content(t, "(i++, i++);");
@@ -2594,12 +2386,10 @@ use crate::tests::prelude::*;
 
 // specialIntersectionsOrderIndependent_test.go:11
 pub fn test_special_intersections_order_independent(t: &T) {
-    t.parallel();
-    let content: &str = r"declare function a(arg: 'test' | (string & {})): void
+    fourslash::run_generated_test(t, r"declare function a(arg: 'test' | (string & {})): void
 a('/*1*/')
 declare function b(arg: 'test' | ({} & string)): void
-b('/*2*/')";
-    fourslash::run_generated_test(t, content, |f, t| {
+b('/*2*/')", |f, t| {
         f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("test".to_string())]), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -2611,9 +2401,7 @@ use crate::tests::prelude::*;
 
 // squiggleIllegalClassExtension_test.go:10
 pub fn test_squiggle_illegal_class_extension(t: &T) {
-    t.parallel();
-    let content: &str = "class Foo extends /*1*/Bar/*2*/ { }";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "class Foo extends /*1*/Bar/*2*/ { }", |f, t| {
         f.verify_error_exists_between_markers(t, "1", "2");
         f.verify_number_of_errors_in_current_file(t, 1);
     });
@@ -2626,16 +2414,14 @@ use crate::tests::prelude::*;
 
 // squiggleIllegalSubclassOverride_test.go:10
 pub fn test_squiggle_illegal_subclass_override(t: &T) {
-    t.parallel();
-    let content: &str = r"// @strict: false
+    fourslash::run_generated_test(t, r"// @strict: false
 class Foo {
     public x: number;
 }
 
 class Bar extends Foo {
     public /*1*/x/*2*/: string = 'hi';
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_error_exists_between_markers(t, "1", "2");
         f.verify_number_of_errors_in_current_file(t, 1);
     });
@@ -2648,8 +2434,7 @@ use crate::tests::prelude::*;
 
 // statecallhierarchy_test.go:10
 pub fn test_call_hierarchy_across_project(t: &T) {
-    t.parallel();
-    let content: &str = r#"
+    fourslash::run_generated_test(t, r#"
 // @stateBaseline: true
 // @Filename: /projects/temp/temp.ts
 /*temp*/let x = 10
@@ -2732,8 +2517,7 @@ function openElementsAtEditor2() {
 		{ "path": "./exec" },
 		{ "path": "./compositeExec" },
 	],
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.go_to_marker(t, "call");
         f.go_to_marker(t, "temp");
         f.go_to_marker(t, "call");
@@ -2874,8 +2658,7 @@ class Point2 implements Pointable {
 
 // statecodelens_test.go:142
 pub fn test_code_lens_on_function_across_projects1(t: &T) {
-    t.parallel();
-    let content: &str = r#"
+    fourslash::run_generated_test(t, r#"
 // @filename: ./a/tsconfig.json
 {
   "compilerOptions": {
@@ -2908,8 +2691,7 @@ aaa();
 // @filename: ./b/src/bar.ts
 import * as foo from '../../a/dist/foo.js';
 foo.aaa();
-"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+"#, |f, t| {
         f.verify_baseline_code_lens(t, Some(lsutil::UserPreferences { code_lens: lsutil::CodeLensUserPreferences { references_code_lens_enabled: Tristate::True, ..Default::default() }, ..Default::default() }));
     });
 }
@@ -3326,8 +3108,7 @@ fn5();
 
 // statedeclarationmaps_test.go:395
 pub fn test_declaration_maps_non_monotonic_mappings(t: &T) {
-    t.parallel();
-    let content: &str = r#"
+    fourslash::run_generated_test(t, r#"
 // @Filename: /src/index.ts
 export function a() {}
 export function b() {}
@@ -3349,8 +3130,7 @@ import { a, b } from "./indexdef";
 /*1*/a();
 /*2*/b();
 // @Filename: /src/tsconfig.json
-{}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+{}"#, |f, t| {
         f.verify_baseline_go_to_definition(t, true, &["1", "2"]);
     });
 }
@@ -4780,8 +4560,7 @@ use crate::tests::prelude::*;
 
 // staticGenericOverloads1_test.go:10
 pub fn test_static_generic_overloads1(t: &T) {
-    t.parallel();
-    let content: &str = r"class A<T> {
+    fourslash::run_generated_test(t, r"class A<T> {
     static B<S>(v: A<S>): A<S>;
     static B<S>(v: S): A<S>;
     static B<S>(v: any): A<S> {
@@ -4789,8 +4568,7 @@ pub fn test_static_generic_overloads1(t: &T) {
     }
 }
 var a = new A<number>();
-A.B(/**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+A.B(/**/", |f, t| {
         f.go_to_marker(t, "");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { overloads_count: 2, ..Default::default() });
         f.insert(t, "a");
@@ -4809,9 +4587,7 @@ use crate::tests::prelude::*;
 
 // stringCompletionDetails_test.go:12
 pub fn test_string_completion_details(t: &T) {
-    t.parallel();
-    let content: &str = r#"const a: "aa" | "bb" = "/**/";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"const a: "aa" | "bb" = "/**/";"#, |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "aa".to_string(), kind: Some(lsproto::CompletionItemKind::Constant), detail: Some("aa".to_string()), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { range: lsproto::Range { start: lsproto::Position { line: 0, character: 24 }, end: lsproto::Position { line: 0, character: 24 } }, new_text: "aa".to_string() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
     });
 }
@@ -4823,8 +4599,7 @@ use crate::tests::prelude::*;
 
 // stringCompletionsFromGenericConditionalTypesUsingTemplateLiteralTypes_test.go:11
 pub fn test_string_completions_from_generic_conditional_types_using_template_literal_types(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @stableTypeOrdering: true
+    fourslash::run_generated_test(t, r#"// @stableTypeOrdering: true
 // @strict: true
 type keyword = "foo" | "bar" | "baz"
 
@@ -4851,8 +4626,7 @@ type validate<def> = def extends string
       }
 const parse = <def>(def: validate<def>) => def
 const shallowExpression = parse("foo|/*ts*/")
-const nestedExpression = parse({ prop: "foo|/*ts2*/" })"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const nestedExpression = parse({ prop: "foo|/*ts2*/" })"#, |f, t| {
         f.verify_completions(t, Any::StringSlice(vec!["ts".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("bar".to_string()), Any::String("baz".to_string()), Any::String("foo".to_string()), Any::String("foo|bar".to_string()), Any::String("foo|baz".to_string()), Any::String("foo|foo".to_string())]), ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::StringSlice(vec!["ts2".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("foo|bar".to_string()), Any::String("foo|baz".to_string()), Any::String("foo|foo".to_string())]), ..Default::default() }), ..Default::default() }));
     });
@@ -4865,8 +4639,7 @@ use crate::tests::prelude::*;
 
 // stringCompletionsImportOrExportSpecifier_test.go:11
 pub fn test_string_completions_import_or_export_specifier(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: exports.ts
+    fourslash::run_generated_test(t, r#"// @Filename: exports.ts
 export let foo = 1;
 let someValue = 2;
 let someType = 3;
@@ -4893,8 +4666,7 @@ import { type foo, type "/*typeImport3*/" as typeImport3 } from "./exports";
 export { type "/*typeExport0*/" } from "./exports";
 export { type "/*typeExport1*/" as typeExport1 } from "./exports";
 export { type foo as "/*typeExport2*/" } from "./exports";
-export { type foo, type "/*typeExport3*/" } from "./exports";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export { type foo, type "/*typeExport3*/" } from "./exports";"#, |f, t| {
         f.verify_completions(t, Any::String("valueImport0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("__some type".to_string()), Any::String("__some value".to_string()), Any::String("foo".to_string())]), ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::String("valueImport1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("__some type".to_string()), Any::String("__some value".to_string()), Any::String("foo".to_string())]), ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::String("valueImport2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![]), ..Default::default() }), ..Default::default() }));

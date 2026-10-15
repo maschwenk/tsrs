@@ -5,8 +5,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_jsCJSvsESM2_test.go:10
 pub fn test_import_name_code_fix_js_cj_svs_esm2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @Filename: types/dep.d.ts
 export declare class Dep {}
@@ -15,8 +14,7 @@ Dep/**/
 // @Filename: util1.ts
 import fs from 'fs';
 // @Filename: util2.js
-const fs = require('fs');";
-    fourslash::run_generated_test(t, content, |f, t| {
+const fs = require('fs');", |f, t| {
         f.go_to_marker(t, "");
         f.verify_import_fix_at_position(t, &[r#"const { Dep } = require("./types/dep");
 
@@ -31,8 +29,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_jsCJSvsESM3_test.go:10
 pub fn test_import_name_code_fix_js_cj_svs_esm3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @Filename: types/dep.d.ts
 export declare class Dep {}
@@ -42,8 +39,7 @@ const path = require('path');
 
 Dep/**/
 // @Filename: util2.js
-export {};";
-    fourslash::run_generated_test(t, content, |f, t| {
+export {};", |f, t| {
         f.go_to_marker(t, "");
         f.verify_import_fix_at_position(t, &[r"import fs from 'fs';
 import { Dep } from './types/dep';
@@ -60,8 +56,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixJsEnding_test.go:12
 pub fn test_import_name_code_fix_js_ending(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @module: commonjs
 // @Filename: /node_modules/lit/package.json
 { "name": "lit", "version": "1.0.0" }
@@ -70,8 +65,7 @@ import "./decorators";
 // @Filename: /node_modules/lit/decorators.d.ts
 export declare function customElement(name: string): any;
 // @Filename: /a.ts
-customElement/**/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+customElement/**/"#, |f, t| {
         f.verify_import_fix_module_specifiers(t, "", &["lit/decorators.js"], Some(lsutil::UserPreferences { import_module_specifier_ending: modulespecifiers::ImportModuleSpecifierEndingPreference::Js, auto_import_entrypoint_directory_search: Tristate::True, ..Default::default() }));
     });
 }
@@ -83,8 +77,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_jsExtension_test.go:10
 pub fn test_import_name_code_fix_js_extension(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @noLib: true
 // @jsx: preserve
 // @Filename: /a.ts
@@ -97,8 +90,7 @@ export function c() {}
 import * as g from "global"; // Global imports skipped
 import { a } from "./a.js";
 import { a as a2 } from "./a"; // Ignored, only the first relative import is considered
-b; c;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+b; c;"#, |f, t| {
         f.go_to_file(t, "/c.ts");
         f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixMissingImport".to_string(), new_file_content: r#"import * as g from "global"; // Global imports skipped
 import { a } from "./a.js";
@@ -116,8 +108,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_jsx1_test.go:10
 pub fn test_import_name_code_fix_jsx1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @jsx: react
+    fourslash::run_generated_test(t, r#"// @jsx: react
 // @Filename: /node_modules/react/index.d.ts
 export const React: any;
 // @Filename: /a.tsx
@@ -129,8 +120,7 @@ import { React } from "react";
 <Foo />;
 // @Filename: /d.tsx
 import { Foo } from "./Foo";
-<Foo />;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+<Foo />;"#, |f, t| {
         f.go_to_file(t, "/a.tsx");
         f.verify_import_fix_at_position(t, &[], None);
         f.go_to_file(t, "/c.tsx");
@@ -151,8 +141,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_jsx2_test.go:10
 pub fn test_import_name_code_fix_jsx2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @jsx: react
 // @module: esnext
 // @esModuleInterop: true
@@ -168,8 +157,7 @@ import * as React from "react";
 export class Text extends React.Component {};
 // @Filename: /a.tsx
 import React from "react";
-<[|Text|]></Text>;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+<[|Text|]></Text>;"#, |f, t| {
         f.go_to_file(t, "/a.tsx");
         f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: r#"Add import from "react-native""#.to_string(), new_file_content: r#"import React from "react";
 import { Text } from "react-native";
@@ -184,8 +172,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_jsx3_test.go:10
 pub fn test_import_name_code_fix_jsx3(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @jsx: react
 // @module: esnext
 // @esModuleInterop: true
@@ -201,8 +188,7 @@ import * as React from "react";
 export class Text extends React.Component {};
 // @Filename: /a.tsx
 import React from "react";
-<Text></[|Text|]>;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+<Text></[|Text|]>;"#, |f, t| {
         f.go_to_file(t, "/a.tsx");
         f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: r#"Add import from "react-native""#.to_string(), new_file_content: r#"import React from "react";
 import { Text } from "react-native";
@@ -217,8 +203,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_jsx4_test.go:10
 pub fn test_import_name_code_fix_jsx4(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @jsx: react
+    fourslash::run_generated_test(t, r#"// @jsx: react
 // @module: esnext
 // @esModuleInterop: true
 // @moduleResolution: bundler
@@ -233,8 +218,7 @@ import * as React from "react";
 export class Text extends React.Component {};
 // @Filename: /a.tsx
 import { Text } from "react-native";
-<Text></Text>;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+<Text></Text>;"#, |f, t| {
         f.go_to_file(t, "/a.tsx");
         f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: r#"Import 'React' from "react""#.to_string(), new_file_content: r#"import React from "react";
 import { Text } from "react-native";
@@ -249,8 +233,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_jsx5_test.go:10
 pub fn test_import_name_code_fix_jsx5(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @jsx: react
 // @module: esnext
 // @esModuleInterop: true
@@ -266,8 +249,7 @@ import * as React from "react";
 export class Text extends React.Component {};
 // @Filename: /a.tsx
 import React from "react";
-<[|Text|] />;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+<[|Text|] />;"#, |f, t| {
         f.go_to_file(t, "/a.tsx");
         f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: r#"Add import from "react-native""#.to_string(), new_file_content: r#"import React from "react";
 import { Text } from "react-native";
@@ -282,8 +264,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_jsx6_test.go:10
 pub fn test_import_name_code_fix_jsx6(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @jsx: react
 // @module: esnext
 // @esModuleInterop: true
@@ -298,8 +279,7 @@ declare namespace React {
 import * as React from "react";
 export class Text extends React.Component {};
 // @Filename: /a.tsx
-<[|Text|]></Text>;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+<[|Text|]></Text>;"#, |f, t| {
         f.go_to_file(t, "/a.tsx");
         f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: r#"Add import from "react-native""#.to_string(), new_file_content: r#"import { Text } from "react-native";
 
@@ -317,16 +297,14 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_jsx7_test.go:10
 pub fn test_import_name_code_fix_jsx7(t: &T) {
-    t.parallel();
-    let content: &str = r"// @jsx: react
+    fourslash::run_generated_test(t, r"// @jsx: react
 // @module: esnext
 // @esModuleInterop: true
 // @moduleResolution: bundler
 // @Filename: /node_modules/react/index.d.ts
 // React was not defined
 // @Filename: /a.tsx
-<[|Text|]></Text>;";
-    fourslash::run_generated_test(t, content, |f, t| {
+<[|Text|]></Text>;", |f, t| {
         f.go_to_file(t, "/a.tsx");
         f.verify_code_fix_not_available(t, &[]);
     });
@@ -339,16 +317,14 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_jsxOpeningTagImportDefault_test.go:10
 pub fn test_import_name_code_fix_jsx_opening_tag_import_default(t: &T) {
-    t.parallel();
-    let content: &str = r"// @module: commonjs
+    fourslash::run_generated_test(t, r"// @module: commonjs
 // @jsx: react-jsx
 // @Filename: /component.tsx
 export default function (props: any) {}
 // @Filename: /index.tsx
 export function Index() {
     return <Component/**/ />;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_marker(t, "");
         f.verify_import_fix_at_position(t, &[r#"import Component from "./component";
 
@@ -365,8 +341,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_jsxReact17_test.go:10
 pub fn test_import_name_code_fix_jsx_react17(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @jsx: preserve
+    fourslash::run_generated_test(t, r#"// @jsx: preserve
 // @module: commonjs
 // @Filename: /node_modules/@types/react/index.d.ts
 declare namespace React {
@@ -385,8 +360,7 @@ declare global {
 import "react";
 export declare function Component(): any;
 // @Filename: /index.tsx
-(<Component/**/ />);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+(<Component/**/ />);"#, |f, t| {
         f.go_to_marker(t, "");
         f.verify_import_fix_at_position(t, &[r#"import { Component } from "./component";
 
@@ -401,16 +375,14 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportAllowSyntheticDefaultImports0_test.go:10
 pub fn test_import_name_code_fix_new_import_allow_synthetic_default_imports0(t: &T) {
-    t.parallel();
-    let content: &str = r"// @AllowSyntheticDefaultImports: true
+    fourslash::run_generated_test(t, r"// @AllowSyntheticDefaultImports: true
 // @Filename: a/f1.ts
 [|export var x = 0;
 bar/*0*/();|]
 // @Filename: a/foo.d.ts
 declare function bar(): number;
 export = bar;
-export as namespace bar;";
-    fourslash::run_generated_test(t, content, |f, t| {
+export as namespace bar;", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import bar from "./foo";
 
 export var x = 0;
@@ -425,16 +397,14 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportAllowSyntheticDefaultImports1_test.go:10
 pub fn test_import_name_code_fix_new_import_allow_synthetic_default_imports1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Module: system
+    fourslash::run_generated_test(t, r"// @Module: system
 // @Filename: a/f1.ts
 [|export var x = 0;
 bar/*0*/();|]
 // @Filename: a/foo.d.ts
 declare function bar(): number;
 export = bar;
-export as namespace bar;";
-    fourslash::run_generated_test(t, content, |f, t| {
+export as namespace bar;", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import bar from "./foo";
 
 export var x = 0;
@@ -449,8 +419,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportAllowSyntheticDefaultImports2_test.go:10
 pub fn test_import_name_code_fix_new_import_allow_synthetic_default_imports2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @AllowSyntheticDefaultImports: false
+    fourslash::run_generated_test(t, r"// @AllowSyntheticDefaultImports: false
 // @Module: system
 // @Filename: a/f1.ts
 [|export var x = 0;
@@ -458,8 +427,7 @@ bar/*0*/();|]
 // @Filename: a/foo.d.ts
 declare function bar(): number;
 export = bar;
-export as namespace bar;";
-    fourslash::run_generated_test(t, content, |f, t| {
+export as namespace bar;", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import * as bar from "./foo";
 
 export var x = 0;
@@ -474,8 +442,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportAllowSyntheticDefaultImports3_test.go:10
 pub fn test_import_name_code_fix_new_import_allow_synthetic_default_imports3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @AllowSyntheticDefaultImports: false
+    fourslash::run_generated_test(t, r"// @AllowSyntheticDefaultImports: false
 // @Module: commonjs
 // @Filename: a/f1.ts
 [|export var x = 0;
@@ -483,8 +450,7 @@ bar/*0*/();|]
 // @Filename: a/foo.d.ts
 declare function bar(): number;
 export = bar;
-export as namespace bar;";
-    fourslash::run_generated_test(t, content, |f, t| {
+export as namespace bar;", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import bar = require("./foo");
 
 export var x = 0;
@@ -499,8 +465,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportAllowSyntheticDefaultImports5_test.go:10
 pub fn test_import_name_code_fix_new_import_allow_synthetic_default_imports5(t: &T) {
-    t.parallel();
-    let content: &str = r"// @AllowSyntheticDefaultImports: false
+    fourslash::run_generated_test(t, r"// @AllowSyntheticDefaultImports: false
 // @Module: umd
 // @Filename: a/f1.ts
 [|export var x = 0;
@@ -508,8 +473,7 @@ bar/*0*/();|]
 // @Filename: a/foo.d.ts
 declare function bar(): number;
 export = bar;
-export as namespace bar;";
-    fourslash::run_generated_test(t, content, |f, t| {
+export as namespace bar;", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import bar = require("./foo");
 
 export var x = 0;
@@ -524,14 +488,12 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportAmbient0_test.go:10
 pub fn test_import_name_code_fix_new_import_ambient0(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|f1/*0*/();|]
+    fourslash::run_generated_test(t, r#"[|f1/*0*/();|]
 // @Filename: ambientModule.ts
 declare module "ambient-module" {
    export function f1();
    export var v1;
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "ambient-module";
 
 f1();"#], None);
@@ -545,8 +507,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportAmbient1_test.go:10
 pub fn test_import_name_code_fix_new_import_ambient1(t: &T) {
-    t.parallel();
-    let content: &str = r#"import d from "other-ambient-module";
+    fourslash::run_generated_test(t, r#"import d from "other-ambient-module";
 import * as ns from "yet-another-ambient-module";
 var x = v1/*0*/ + 5;
 // @Filename: ambientModule.ts
@@ -562,8 +523,7 @@ declare module "other-ambient-module" {
 declare module "yet-another-ambient-module" {
    export function f3();
    export var v3;
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { v1 } from "ambient-module";
 import d from "other-ambient-module";
 import * as ns from "yet-another-ambient-module";
@@ -578,8 +538,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportAmbient2_test.go:10
 pub fn test_import_name_code_fix_new_import_ambient2(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|/*!
+    fourslash::run_generated_test(t, r#"[|/*!
  * I'm a license or something
  */
 f1/*0*/();|]
@@ -587,8 +546,7 @@ f1/*0*/();|]
  declare module "ambient-module" {
     export function f1();
     export var v1;
- }"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+ }"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"/*!
  * I'm a license or something
  */
@@ -606,8 +564,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportAmbient3_test.go:10
 pub fn test_import_name_code_fix_new_import_ambient3(t: &T) {
-    t.parallel();
-    let content: &str = r#"let a = "I am a non-trivial statement that appears before imports";
+    fourslash::run_generated_test(t, r#"let a = "I am a non-trivial statement that appears before imports";
 import d from "other-ambient-module"
 import * as ns from "yet-another-ambient-module"
 var x = v1/*0*/ + 5;
@@ -624,8 +581,7 @@ declare module "other-ambient-module" {
 declare module "yet-another-ambient-module" {
    export function f3();
    export var v3;
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"let a = "I am a non-trivial statement that appears before imports";
 import { v1 } from "ambient-module";
 import d from "other-ambient-module"
@@ -641,8 +597,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportBaseUrl0_test.go:10
 pub fn test_import_name_code_fix_new_import_base_url0(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|f1/*0*/();|]
+    fourslash::run_generated_test(t, r#"[|f1/*0*/();|]
 // @Filename: tsconfig.json
 {
     "compilerOptions": {
@@ -650,8 +605,7 @@ pub fn test_import_name_code_fix_new_import_base_url0(t: &T) {
     }
 }
 // @Filename: a/b.ts
-export function f1() { };"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export function f1() { };"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "b";
 
 f1();"#], None);
@@ -665,8 +619,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportBaseUrl1_test.go:11
 pub fn test_import_name_code_fix_new_import_base_url1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /tsconfig.json
+    fourslash::run_generated_test(t, r#"// @Filename: /tsconfig.json
 {
     "compilerOptions": {
         "baseUrl": "./a"
@@ -675,8 +628,7 @@ pub fn test_import_name_code_fix_new_import_base_url1(t: &T) {
 // @Filename: /a/b/x.ts
 export function f1() { };
 // @Filename: /a/b/y.ts
-[|f1/*0*/();|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|f1/*0*/();|]"#, |f, t| {
         f.go_to_file(t, "/a/b/y.ts");
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "./x";
 
@@ -694,8 +646,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportBaseUrl2_test.go:11
 pub fn test_import_name_code_fix_new_import_base_url2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /tsconfig.json
+    fourslash::run_generated_test(t, r#"// @Filename: /tsconfig.json
 {
     "compilerOptions": {
         "baseUrl": "./a"
@@ -704,8 +655,7 @@ pub fn test_import_name_code_fix_new_import_base_url2(t: &T) {
 // @Filename: /a/b/x.ts
 export function f1() { };
 // @Filename: /a/c/y.ts
-[|f1/*0*/();|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|f1/*0*/();|]"#, |f, t| {
         f.go_to_file(t, "/a/c/y.ts");
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "b/x";
 
@@ -723,11 +673,9 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportDefault0_test.go:10
 pub fn test_import_name_code_fix_new_import_default0(t: &T) {
-    t.parallel();
-    let content: &str = r"[|f1/*0*/();|]
+    fourslash::run_generated_test(t, r"[|f1/*0*/();|]
 // @Filename: module.ts
-export default function f1() { };";
-    fourslash::run_generated_test(t, content, |f, t| {
+export default function f1() { };", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import f1 from "./module";
 
 f1();"#], None);
@@ -741,8 +689,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportExportEqualsCommonJSInteropOn_test.go:10
 pub fn test_import_name_code_fix_new_import_export_equals_common_js_interop_on(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Module: commonjs
+    fourslash::run_generated_test(t, r#"// @Module: commonjs
 // @EsModuleInterop: true
 // @Filename: /foo.d.ts
 declare module "bar" {
@@ -767,8 +714,7 @@ foo
 import es from "es";
 import bar = require("bar");
 
-foo"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+foo"#, |f, t| {
         f.go_to_file(t, "/a.ts");
         f.verify_import_fix_at_position(t, &[r#"import bar = require("bar");
 import foo = require("foo");
@@ -794,16 +740,14 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportExportEqualsESNextInteropOff_test.go:10
 pub fn test_import_name_code_fix_new_import_export_equals_es_next_interop_off(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Module: esnext
+    fourslash::run_generated_test(t, r#"// @Module: esnext
 // @Filename: /foo.d.ts
 declare module "foo" {
   const foo: number;
   export = foo;
 }
 // @Filename: /index.ts
-foo"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+foo"#, |f, t| {
         f.go_to_file(t, "/index.ts");
         f.verify_import_fix_at_position(t, &[r#"import foo from "foo";
 
@@ -818,8 +762,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportExportEqualsESNextInteropOn_test.go:10
 pub fn test_import_name_code_fix_new_import_export_equals_es_next_interop_on(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @EsModuleInterop: true
+    fourslash::run_generated_test(t, r#"// @EsModuleInterop: true
 // @Module: es2015
 // @Filename: /foo.d.ts
 declare module "foo" {
@@ -827,8 +770,7 @@ declare module "foo" {
   export = foo;
 }
 // @Filename: /index.ts
-[|foo|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|foo|]"#, |f, t| {
         f.go_to_file(t, "/index.ts");
         f.verify_import_fix_at_position(t, &[r#"import foo from "foo";
 
@@ -843,12 +785,10 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportFile0_test.go:10
 pub fn test_import_name_code_fix_new_import_file0(t: &T) {
-    t.parallel();
-    let content: &str = r"[|f1/*0*/();|]
+    fourslash::run_generated_test(t, r"[|f1/*0*/();|]
 // @Filename: jalapeño.ts
 export function f1() {}
-export var v1 = 5;";
-    fourslash::run_generated_test(t, content, |f, t| {
+export var v1 = 5;", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "./jalapeño";
 
 f1();"#], None);
@@ -862,15 +802,13 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportFile1_test.go:10
 pub fn test_import_name_code_fix_new_import_file1(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|/// <reference path="./tripleSlashReference.ts" />
+    fourslash::run_generated_test(t, r#"[|/// <reference path="./tripleSlashReference.ts" />
 f1/*0*/();|]
 // @Filename: Module.ts
 export function f1() {}
 export var v1 = 5;
 // @Filename: tripleSlashReference.ts
-var x = 5;/*dummy*/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var x = 5;/*dummy*/"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"/// <reference path="./tripleSlashReference.ts" />
 
 import { f1 } from "./Module";
@@ -886,12 +824,10 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportFile2_test.go:10
 pub fn test_import_name_code_fix_new_import_file2(t: &T) {
-    t.parallel();
-    let content: &str = r"[|f1/*0*/();|]
+    fourslash::run_generated_test(t, r"[|f1/*0*/();|]
 // @Filename: ../../other_dir/module.ts
 export var v1 = 5;
-export function f1();";
-    fourslash::run_generated_test(t, content, |f, t| {
+export function f1();", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "../../other_dir/module";
 
 f1();"#], None);
@@ -905,14 +841,12 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportFile3_test.go:10
 pub fn test_import_name_code_fix_new_import_file3(t: &T) {
-    t.parallel();
-    let content: &str = r"[|let t: XXX/*0*/.I;|]
+    fourslash::run_generated_test(t, r"[|let t: XXX/*0*/.I;|]
 // @Filename: ./module.ts
 export namespace XXX {
    export interface I {
    }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { XXX } from "./module";
 
 let t: XXX.I;"#], None);
@@ -926,15 +860,13 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportFile4_test.go:10
 pub fn test_import_name_code_fix_new_import_file4(t: &T) {
-    t.parallel();
-    let content: &str = r"[|let t: A/*0*/.B.I;|]
+    fourslash::run_generated_test(t, r"[|let t: A/*0*/.B.I;|]
 // @Filename: ./module.ts
 export namespace A {
    export namespace B {
        export interface I { }
    }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { A } from "./module";
 
 let t: A.B.I;"#], None);
@@ -948,8 +880,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportFileAllComments_test.go:10
 pub fn test_import_name_code_fix_new_import_file_all_comments(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|/*!
+    fourslash::run_generated_test(t, r#"[|/*!
  * This is a license or something
  */
 /// <reference types="node" />
@@ -963,8 +894,7 @@ export interface SomeInterface {
 f1/*0*/();|]
 // @Filename: module.ts
 export function f1() {}
-export var v1 = 5;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export var v1 = 5;"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"/*!
  * This is a license or something
  */
@@ -990,8 +920,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportFileDetachedComments_test.go:10
 pub fn test_import_name_code_fix_new_import_file_detached_comments(t: &T) {
-    t.parallel();
-    let content: &str = r"[|/**
+    fourslash::run_generated_test(t, r"[|/**
  * This is a comment intended to be attached to this interface
  */
 export interface SomeInterface {
@@ -999,8 +928,7 @@ export interface SomeInterface {
 f1/*0*/();|]
 // @Filename: module.ts
 export function f1() {}
-export var v1 = 5;";
-    fourslash::run_generated_test(t, content, |f, t| {
+export var v1 = 5;", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "./module";
 
 /**
@@ -1019,15 +947,13 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportFileQuoteStyle0_test.go:10
 pub fn test_import_name_code_fix_new_import_file_quote_style0(t: &T) {
-    t.parallel();
-    let content: &str = r"[|import { v2 } from './module2';
+    fourslash::run_generated_test(t, r"[|import { v2 } from './module2';
 
 f1/*0*/();|]
 // @Filename: module1.ts
 export function f1() {}
 // @Filename: module2.ts
-export var v2 = 6;";
-    fourslash::run_generated_test(t, content, |f, t| {
+export var v2 = 6;", |f, t| {
         f.verify_import_fix_at_position(t, &[r"import { f1 } from './module1';
 import { v2 } from './module2';
 
@@ -1042,15 +968,13 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportFileQuoteStyle1_test.go:10
 pub fn test_import_name_code_fix_new_import_file_quote_style1(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|import { v2 } from "./module2";
+    fourslash::run_generated_test(t, r#"[|import { v2 } from "./module2";
 
 f1/*0*/();|]
 // @Filename: module1.ts
 export function f1() {}
 // @Filename: module2.ts
-export var v2 = 6;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export var v2 = 6;"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "./module1";
 import { v2 } from "./module2";
 
@@ -1065,15 +989,13 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportFileQuoteStyle2_test.go:10
 pub fn test_import_name_code_fix_new_import_file_quote_style2(t: &T) {
-    t.parallel();
-    let content: &str = r"[|import m2 = require('./module2');
+    fourslash::run_generated_test(t, r"[|import m2 = require('./module2');
 
 f1/*0*/();|]
 // @Filename: module1.ts
 export function f1() {}
 // @Filename: module2.ts
-export var v2 = 6;";
-    fourslash::run_generated_test(t, content, |f, t| {
+export var v2 = 6;", |f, t| {
         f.verify_import_fix_at_position(t, &[r"import { f1 } from './module1';
 import m2 = require('./module2');
 
@@ -1088,15 +1010,13 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportFileQuoteStyle3_test.go:10
 pub fn test_import_name_code_fix_new_import_file_quote_style3(t: &T) {
-    t.parallel();
-    let content: &str = r"[|export { v2 } from './module2';
+    fourslash::run_generated_test(t, r"[|export { v2 } from './module2';
 
 f1/*0*/();|]
 // @Filename: module1.ts
 export function f1() {}
 // @Filename: module2.ts
-export var v2 = 6;";
-    fourslash::run_generated_test(t, content, |f, t| {
+export var v2 = 6;", |f, t| {
         f.verify_import_fix_at_position(t, &[r"import { f1 } from './module1';
 
 export { v2 } from './module2';
@@ -1112,8 +1032,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportFileQuoteStyleMixed0_test.go:10
 pub fn test_import_name_code_fix_new_import_file_quote_style_mixed0(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|import { v2 } from "./module2";
+    fourslash::run_generated_test(t, r#"[|import { v2 } from "./module2";
 import { v3 } from './module3';
 
 f1/*0*/();|]
@@ -1122,8 +1041,7 @@ export function f1() {}
 // @Filename: module2.ts
 export var v2 = 6;
 // @Filename: module3.ts
-export var v3 = 6;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export var v3 = 6;"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "./module1";
 import { v2 } from "./module2";
 import { v3 } from './module3';
@@ -1139,8 +1057,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportFileQuoteStyleMixed1_test.go:10
 pub fn test_import_name_code_fix_new_import_file_quote_style_mixed1(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|import { v2 } from './module2';
+    fourslash::run_generated_test(t, r#"[|import { v2 } from './module2';
 import { v3 } from "./module3";
 
 f1/*0*/();|]
@@ -1149,8 +1066,7 @@ export function f1() {}
 // @Filename: module2.ts
 export var v2 = 6;
 // @Filename: module3.ts
-export var v3 = 6;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export var v3 = 6;"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from './module1';
 import { v2 } from './module2';
 import { v3 } from "./module3";
@@ -1166,12 +1082,10 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportFromAtTypes_test.go:10
 pub fn test_import_name_code_fix_new_import_from_at_types(t: &T) {
-    t.parallel();
-    let content: &str = r"[|f1/*0*/();|]
+    fourslash::run_generated_test(t, r"[|f1/*0*/();|]
 // @Filename: node_modules/@types/myLib/index.d.ts
 export function f1() {}
-export var v1 = 5;";
-    fourslash::run_generated_test(t, content, |f, t| {
+export var v1 = 5;", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "myLib";
 
 f1();"#], None);
@@ -1185,12 +1099,10 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportFromAtTypesScopedPackage_test.go:10
 pub fn test_import_name_code_fix_new_import_from_at_types_scoped_package(t: &T) {
-    t.parallel();
-    let content: &str = r"[|f1/*0*/();|]
+    fourslash::run_generated_test(t, r"[|f1/*0*/();|]
 // @Filename: node_modules/@types/myLib__scoped/index.d.ts
 export function f1() {}
-export var v1 = 5;";
-    fourslash::run_generated_test(t, content, |f, t| {
+export var v1 = 5;", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "@myLib/scoped";
 
 f1();"#], None);
@@ -1204,12 +1116,10 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportIndex_test.go:10
 pub fn test_import_name_code_fix_new_import_index(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a/index.ts
+    fourslash::run_generated_test(t, r"// @Filename: /a/index.ts
 export const foo = 0;
 // @Filename: /b.ts
-[|/**/foo;|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+[|/**/foo;|]", |f, t| {
         f.go_to_file(t, "/a/index.ts");
         f.go_to_file(t, "/b.ts");
         f.verify_import_fix_at_position(t, &[r#"import { foo } from "./a";
@@ -1225,8 +1135,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportIndex_notForClassicResolution_test.go:10
 pub fn test_import_name_code_fix_new_import_index_not_for_classic_resolution(t: &T) {
-    t.parallel();
-    let content: &str = r"// @moduleResolution: classic
+    fourslash::run_generated_test(t, r"// @moduleResolution: classic
 // @Filename: /a/index.ts
 export const foo = 0;
 // @Filename: /node_modules/x/index.d.ts
@@ -1234,8 +1143,7 @@ export const bar = 0;
 // @Filename: /b.ts
 [|foo;|]
 // @Filename: /c.ts
-[|bar;|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+[|bar;|]", |f, t| {
         f.go_to_file(t, "/a/index.ts");
         f.go_to_file(t, "/b.ts");
         f.verify_import_fix_at_position(t, &[r#"import { foo } from "./a/index";
@@ -1255,16 +1163,14 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportNodeModules0_test.go:10
 pub fn test_import_name_code_fix_new_import_node_modules0(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|f1/*0*/();|]
+    fourslash::run_generated_test(t, r#"[|f1/*0*/();|]
 // @Filename: ../package.json
 { "dependencies": { "fake-module": "latest" } }
 // @Filename: ../node_modules/fake-module/index.ts
 export var v1 = 5;
 export function f1();
 // @Filename: ../node_modules/fake-module/package.json
-{}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+{}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "fake-module";
 
 f1();"#], None);
@@ -1278,14 +1184,12 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportNodeModules1_test.go:12
 pub fn test_import_name_code_fix_new_import_node_modules1(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|f1/*0*/();|]
+    fourslash::run_generated_test(t, r#"[|f1/*0*/();|]
 // @Filename: ../package.json
 { "dependencies": { "fake-module": "latest" } }
 // @Filename: ../node_modules/fake-module/nested.ts
 export var v1 = 5;
-export function f1();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export function f1();"#, |f, t| {
         f.configure(t, lsutil::UserPreferences { auto_import_entrypoint_directory_search: Tristate::True, ..Default::default() });
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "fake-module/nested";
 
@@ -1300,8 +1204,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportNodeModules2_test.go:10
 pub fn test_import_name_code_fix_new_import_node_modules2(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|f1/*0*/();|]
+    fourslash::run_generated_test(t, r#"[|f1/*0*/();|]
 // @Filename: ../package.json
 { "dependencies": { "fake-module": "latest" } }
 // @Filename: ../node_modules/fake-module/notindex.d.ts
@@ -1313,8 +1216,7 @@ module.exports = {
    f1: function () {}
 };
 // @Filename: ../node_modules/fake-module/package.json
-{ "main":"./notindex.js", "typings":"./notindex.d.ts" }"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+{ "main":"./notindex.js", "typings":"./notindex.d.ts" }"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "fake-module";
 
 f1();"#], None);
@@ -1328,13 +1230,11 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportNodeModules3_test.go:10
 pub fn test_import_name_code_fix_new_import_node_modules3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r"// @Filename: /a.ts
 [|f1/*0*/();|]
 // @Filename: /node_modules/@types/random/index.d.ts
 export var v1 = 5;
-export function f1();";
-    fourslash::run_generated_test(t, content, |f, t| {
+export function f1();", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "random";
 
 f1();"#], None);
@@ -1348,8 +1248,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportNodeModules4_test.go:10
 pub fn test_import_name_code_fix_new_import_node_modules4(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|f1/*0*/('');|]
+    fourslash::run_generated_test(t, r#"[|f1/*0*/('');|]
 // @Filename: package.json
 { "dependencies": { "package-name": "latest" } }
 // @Filename: node_modules/package-name/bin/lib/libfile.d.ts
@@ -1361,8 +1260,7 @@ exports.f1 = f1;
 {
   "main": "bin/lib/libfile.js",
   "types": "bin/lib/libfile.d.ts"
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "package-name";
 
 f1('');"#], None);
@@ -1376,8 +1274,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportNodeModules6_test.go:10
 pub fn test_import_name_code_fix_new_import_node_modules6(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|f1/*0*/('');|]
+    fourslash::run_generated_test(t, r#"[|f1/*0*/('');|]
 // @Filename: package.json
 { "dependencies": { "package-name": "latest" } }
 // @Filename: node_modules/package-name/bin/lib/index.d.ts
@@ -1389,8 +1286,7 @@ exports.f1 = f1;
 {
   "main": "bin/lib/index.js",
   "types": "bin/lib/index.d.ts"
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "package-name";
 
 f1('');"#], None);
@@ -1404,8 +1300,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportNodeModules7_test.go:10
 pub fn test_import_name_code_fix_new_import_node_modules7(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|f1/*0*/('');|]
+    fourslash::run_generated_test(t, r#"[|f1/*0*/('');|]
 // @Filename: package.json
 { "dependencies": { "package-name": "0.0.1" } }
 // @Filename: node_modules/package-name/bin/lib/libfile.d.ts
@@ -1414,8 +1309,7 @@ export declare function f1(text: string): string;
 function f1(text) {}
 exports.f1 = f1;
 // @Filename: node_modules/package-name/package.json
-{ "main": "bin/lib/libfile.js" }"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+{ "main": "bin/lib/libfile.js" }"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "package-name";
 
 f1('');"#], None);
@@ -1429,8 +1323,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportNodeModules8_test.go:10
 pub fn test_import_name_code_fix_new_import_node_modules8(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|f1/*0*/('');|]
+    fourslash::run_generated_test(t, r#"[|f1/*0*/('');|]
 // @Filename: package.json
 { "dependencies": { "@scope/package-name": "latest" } }
 // @Filename: node_modules/@scope/package-name/bin/lib/index.d.ts
@@ -1442,8 +1335,7 @@ exports.f1 = f1;
 {
   "main": "bin/lib/index.js",
   "types": "bin/lib/index.d.ts"
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { f1 } from "@scope/package-name";
 
 f1('');"#], None);
@@ -1457,8 +1349,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportPaths0_test.go:10
 pub fn test_import_name_code_fix_new_import_paths0(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|foo/*0*/();|]
+    fourslash::run_generated_test(t, r#"[|foo/*0*/();|]
 // @Filename: folder_a/f2.ts
 export function foo() {};
 // @Filename: tsconfig.json
@@ -1469,8 +1360,7 @@ export function foo() {};
             "a": [ "folder_a/f2" ]
         }
     }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { foo } from "a";
 
 foo();"#], None);
@@ -1484,8 +1374,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportPaths1_test.go:10
 pub fn test_import_name_code_fix_new_import_paths1(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|foo/*0*/();|]
+    fourslash::run_generated_test(t, r#"[|foo/*0*/();|]
 // @Filename: folder_b/f2.ts
 export function foo() {};
 // @Filename: tsconfig.json
@@ -1496,8 +1385,7 @@ export function foo() {};
             "b/*": [ "folder_b/*" ]
         }
     }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { foo } from "b/f2";
 
 foo();"#], None);
@@ -1511,8 +1399,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportPaths2_test.go:10
 pub fn test_import_name_code_fix_new_import_paths2(t: &T) {
-    t.parallel();
-    let content: &str = r#"[|foo/*0*/();|]
+    fourslash::run_generated_test(t, r#"[|foo/*0*/();|]
 // @Filename: folder_b/index.ts
 export function foo() {};
 // @Filename: tsconfig.path.json
@@ -1528,8 +1415,7 @@ export function foo() {};
 {
     "extends": "./tsconfig.path",
     "compilerOptions": { }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { foo } from "b";
 
 foo();"#], None);
@@ -1543,8 +1429,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportPaths_withExtension_test.go:10
 pub fn test_import_name_code_fix_new_import_paths_with_extension(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /src/a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /src/a.ts
 [|foo|]
 // @Filename: /src/thisHasPathMapping.ts
 export function foo() {};
@@ -1556,8 +1441,7 @@ export function foo() {};
             "foo": ["src/thisHasPathMapping.ts"]
         }
     }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { foo } from "foo";
 
 foo"#], None);
@@ -1571,8 +1455,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportPaths_withLeadingDotSlash_test.go:10
 pub fn test_import_name_code_fix_new_import_paths_with_leading_dot_slash(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 [|foo|]
 // @Filename: /thisHasPathMapping.ts
 export function foo() {};
@@ -1584,8 +1467,7 @@ export function foo() {};
             "foo": ["././thisHasPathMapping"]
         }
     }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { foo } from "foo";
 
 foo"#], None);
@@ -1599,8 +1481,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportPaths_withParentRelativePath_test.go:10
 pub fn test_import_name_code_fix_new_import_paths_with_parent_relative_path(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /src/a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /src/a.ts
 [|foo|]
 // @Filename: /thisHasPathMapping.ts
 export function foo() {};
@@ -1612,8 +1493,7 @@ export function foo() {};
             "foo": ["..\\thisHasPathMapping"]
         }
     }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { foo } from "foo";
 
 foo"#], None);
@@ -1627,8 +1507,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportRootDirs0_test.go:10
 pub fn test_import_name_code_fix_new_import_root_dirs0(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: a/f1.ts
+    fourslash::run_generated_test(t, r#"// @Filename: a/f1.ts
 [|foo/*0*/();|]
 // @Filename: b/c/f2.ts
 export function foo() {};
@@ -1640,8 +1519,7 @@ export function foo() {};
             "b/c"
         ]
     }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { foo } from "./f2";
 
 foo();"#], None);
@@ -1655,8 +1533,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportRootDirs1_test.go:10
 pub fn test_import_name_code_fix_new_import_root_dirs1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: a/f1.ts
+    fourslash::run_generated_test(t, r#"// @Filename: a/f1.ts
 [|foo/*0*/();|]
 // @Filename: a/b/index.ts
 export function foo() {};
@@ -1667,8 +1544,7 @@ export function foo() {};
             "a"
         ]
     }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { foo } from "./b";
 
 foo();"#], None);
@@ -1682,8 +1558,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportTypeRoots0_test.go:10
 pub fn test_import_name_code_fix_new_import_type_roots0(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: a/f1.ts
+    fourslash::run_generated_test(t, r#"// @Filename: a/f1.ts
 [|foo/*0*/();|]
 // @Filename: types/random/index.ts
 export function foo() {};
@@ -1694,8 +1569,7 @@ export function foo() {};
             "./types"
         ]
     }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { foo } from "../types/random";
 
 foo();"#], None);
@@ -1709,8 +1583,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixNewImportTypeRoots1_test.go:10
 pub fn test_import_name_code_fix_new_import_type_roots1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: a/f1.ts
+    fourslash::run_generated_test(t, r#"// @Filename: a/f1.ts
 [|foo/*0*/();|]
 // @Filename: types/random/index.ts
 export function foo() {};
@@ -1722,8 +1595,7 @@ export function foo() {};
             "./types"
         ]
     }
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { foo } from "types/random";
 
 foo();"#], None);
@@ -1737,8 +1609,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_noDestructureNonObjectLiteral_test.go:10
 pub fn test_import_name_code_fix_no_destructure_non_object_literal(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 // @target: es2015
 // @strict: true
 // @esModuleInterop: true
@@ -1760,8 +1631,7 @@ export = $;
 // @Filename: /jquery.js
 module.exports = {};
 // @Filename: /index.ts
-filter/**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+filter/**/", |f, t| {
         f.verify_import_fix_module_specifiers(t, "", &["./object-literal", "./jquery"], None);
     });
 }
@@ -1773,15 +1643,13 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixOptionalImport0_test.go:10
 pub fn test_import_name_code_fix_optional_import0(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: a/f1.ts
+    fourslash::run_generated_test(t, r#"// @Filename: a/f1.ts
 [|import * as ns from "./foo";
 foo/*0*/();|]
 // @Filename: a/foo/bar.ts
 export function foo() {};
 // @Filename: a/foo.ts
-export { foo } from "./foo/bar";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export { foo } from "./foo/bar";"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import * as ns from "./foo";
 ns.foo();"#, r#"import * as ns from "./foo";
 import { foo } from "./foo";
@@ -1798,14 +1666,12 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixOptionalImport1_test.go:10
 pub fn test_import_name_code_fix_optional_import1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: a/f1.ts
+    fourslash::run_generated_test(t, r#"// @Filename: a/f1.ts
 [|foo/*0*/();|]
 // @Filename: a/node_modules/bar/index.ts
 export function foo() {};
 // @Filename: a/foo.ts
-export { foo } from "bar";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export { foo } from "bar";"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import { foo } from "bar";
 
 foo();"#, r#"import { foo } from "./foo";
@@ -1821,16 +1687,14 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_order_test.go:10
 pub fn test_import_name_code_fix_order(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 export const foo: number;
 // @Filename: /b.ts
 export const foo: number;
 export const bar: number;
 // @Filename: /c.ts
 [|import { bar } from "./b";
-foo;|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+foo;|]"#, |f, t| {
         f.go_to_file(t, "/c.ts");
         f.verify_import_fix_at_position(t, &[r#"import { bar, foo } from "./b";
 foo;"#, r#"import { foo } from "./a";
@@ -1846,8 +1710,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_order2_test.go:10
 pub fn test_import_name_code_fix_order2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 export const _aB: number;
 export const _Ab: number;
 export const aB: number;
@@ -1865,8 +1728,7 @@ aB;|]
     _Ab,
     Ab,
 } from "./a";
-aB;|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+aB;|]"#, |f, t| {
         f.go_to_file(t, "/b.ts");
         f.verify_import_fix_at_position(t, &[r#"import {
     _aB,
@@ -1893,8 +1755,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_pathsWithExtension_test.go:11
 pub fn test_import_name_code_fix_paths_with_extension(t: &T) {
-    t.parallel();
-    let content: &str = r##"// @Filename: /tsconfig.json
+    fourslash::run_generated_test(t, r##"// @Filename: /tsconfig.json
 {
   "compilerOptions": {
     "target": "ESNext",
@@ -1911,8 +1772,7 @@ pub fn test_import_name_code_fix_paths_with_extension(t: &T) {
 // @Filename: /src/internals/example.ts
 export function helloWorld() {}
 // @Filename: /src/index.ts
-helloWorld/**/"##;
-    fourslash::run_generated_test(t, content, |f, t| {
+helloWorld/**/"##, |f, t| {
         f.verify_import_fix_module_specifiers(t, "", &["#internals/example"], Some(lsutil::UserPreferences { import_module_specifier_ending: modulespecifiers::ImportModuleSpecifierEndingPreference::Js, ..Default::default() }));
     });
 }
@@ -1924,8 +1784,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_pathsWithoutBaseUrl1_test.go:10
 pub fn test_import_name_code_fix_paths_without_base_url1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: tsconfig.json
+    fourslash::run_generated_test(t, r#"// @Filename: tsconfig.json
 {
   "compilerOptions": {
     "module": "commonjs",
@@ -1937,8 +1796,7 @@ pub fn test_import_name_code_fix_paths_without_base_url1(t: &T) {
 // @Filename: index.ts
 utils/**/
 // @Filename: lib/utils.ts
-export const utils = {};"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export const utils = {};"#, |f, t| {
         f.go_to_marker(t, "");
         f.verify_import_fix_at_position(t, &[r#"import { utils } from "@app/utils";
 
@@ -1953,8 +1811,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_pathsWithoutBaseUrl2_test.go:10
 pub fn test_import_name_code_fix_paths_without_base_url2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /packages/test-package-1/tsconfig.json
+    fourslash::run_generated_test(t, r#"// @Filename: /packages/test-package-1/tsconfig.json
 {
   "compilerOptions": {
     "module": "commonjs",
@@ -1966,8 +1823,7 @@ pub fn test_import_name_code_fix_paths_without_base_url2(t: &T) {
 // @Filename: /packages/test-package-1/src/common/logging.ts
 export class Logger {};
 // @Filename: /packages/test-package-1/src/something/index.ts
-Logger/**/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+Logger/**/"#, |f, t| {
         f.go_to_marker(t, "");
         f.verify_import_fix_at_position(t, &[r#"import { Logger } from "../common/logging";
 
@@ -1982,15 +1838,13 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_pnpm1_test.go:10
 pub fn test_import_name_code_fix_pnpm1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /home/src/workspaces/project/tsconfig.json
+    fourslash::run_generated_test(t, r#"// @Filename: /home/src/workspaces/project/tsconfig.json
 { "compilerOptions": { "module": "commonjs", "types": ["*"], "lib": ["es5"] } }
 // @Filename: /home/src/workspaces/project/node_modules/.pnpm/@types+react@17.0.7/node_modules/@types/react/index.d.ts
 export declare function Component(): void;
 // @Filename: /home/src/workspaces/project/index.ts
 Component/**/
-// @link: /home/src/workspaces/project/node_modules/.pnpm/@types+react@17.0.7/node_modules/@types/react -> /home/src/workspaces/project/node_modules/@types/react"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+// @link: /home/src/workspaces/project/node_modules/.pnpm/@types+react@17.0.7/node_modules/@types/react -> /home/src/workspaces/project/node_modules/@types/react"#, |f, t| {
         f.mark_test_as_strada_server();
         f.go_to_marker(t, "");
         f.verify_import_fix_at_position(t, &[r#"import { Component } from "react";
@@ -2006,14 +1860,12 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_preferBaseUrl_test.go:10
 pub fn test_import_name_code_fix_prefer_base_url(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /tsconfig.json
+    fourslash::run_generated_test(t, r#"// @Filename: /tsconfig.json
 { "compilerOptions": { "baseUrl": "./src" } }
 // @Filename: /src/d0/d1/d2/file.ts
 foo/**/;
 // @Filename: /src/d0/a.ts
-export const foo = 0;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export const foo = 0;"#, |f, t| {
         f.go_to_file(t, "/src/d0/d1/d2/file.ts");
         f.verify_import_fix_at_position(t, &[r#"import { foo } from "d0/a";
 
@@ -2028,12 +1880,10 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_quoteStyle_test.go:11
 pub fn test_import_name_code_fix_quote_style(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r"// @Filename: /a.ts
 export const foo: number;
 // @Filename: /b.ts
-[|foo;|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+[|foo;|]", |f, t| {
         f.go_to_file(t, "/b.ts");
         f.verify_import_fix_at_position(t, &[r"import { foo } from './a';
 
@@ -2048,13 +1898,11 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixReExport_test.go:10
 pub fn test_import_name_code_fix_re_export(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 export const x = 0";
 // @Filename: /b.ts
 [|export { x } from "./a";
-x;|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+x;|]"#, |f, t| {
         f.go_to_file(t, "/b.ts");
         f.verify_range_after_code_fix(t, r#"import { x } from "./a";
 
@@ -2070,14 +1918,12 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_reExport_test.go:10
 pub fn test_import_name_code_fix_re_export(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 export default function foo(): void {}
 // @Filename: /b.ts
 export { default } from "./a";
 // @Filename: /user.ts
-[|foo;|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|foo;|]"#, |f, t| {
         f.go_to_file(t, "/user.ts");
         f.verify_import_fix_at_position(t, &[r#"import foo from "./a";
 
@@ -2094,8 +1940,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_reExportDefault_test.go:10
 pub fn test_import_name_code_fix_re_export_default(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /user.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /user.ts
 foo;
 // @Filename: /user2.ts
 unnamed;
@@ -2109,8 +1954,7 @@ export { default } from "./unnamed";
 function foo() {}
 export default foo;
 // @Filename: /unnamed.ts
-export default 0;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export default 0;"#, |f, t| {
         f.go_to_file(t, "/user.ts");
         f.verify_import_fix_at_position(t, &[r#"import foo from "./named";
 
@@ -2137,8 +1981,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_require_test.go:10
 pub fn test_import_name_code_fix_require(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @Filename: foo.js
 module.exports = function foo() {}
@@ -2152,8 +1995,7 @@ export default class Blah {}
 foo();
 util1();
 util2();
-new Blah;";
-    fourslash::run_generated_test(t, content, |f, t| {
+new Blah;", |f, t| {
         f.go_to_file(t, "index.js");
         f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixMissingImport".to_string(), new_file_content: r#"const { default: Blah } = require("./blah");
 const foo = require("./foo");
@@ -2173,8 +2015,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_require_addToExisting_test.go:10
 pub fn test_import_name_code_fix_require_add_to_existing(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @Filename: blah.js
 export default class Blah {}
@@ -2185,8 +2026,7 @@ var path = require('path')
   , { promisify } = require('util')
   , { Named1 } = require('./blah')
 
-new Blah";
-    fourslash::run_generated_test(t, content, |f, t| {
+new Blah", |f, t| {
         f.go_to_file(t, "index.js");
         f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: r#"Update import from "./blah""#.to_string(), new_file_content: r"var path = require('path')
   , { promisify } = require('util')
@@ -2203,8 +2043,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_require_importVsRequire_addToExistingWins_test.go:10
 pub fn test_import_name_code_fix_require_import_vs_require_add_to_existing_wins(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @Filename: blah.js
 export default class Blah {}
@@ -2217,8 +2056,7 @@ var path = require('path')
 
 import fs from 'fs'
 
-new Blah";
-    fourslash::run_generated_test(t, content, |f, t| {
+new Blah", |f, t| {
         f.go_to_file(t, "index.js");
         f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: r#"Update import from "./blah""#.to_string(), new_file_content: r"var path = require('path')
   , { promisify } = require('util')
@@ -2237,8 +2075,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_require_importVsRequire_importWins_test.go:10
 pub fn test_import_name_code_fix_require_import_vs_require_import_wins(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @Filename: blah.js
 export default class Blah {}
@@ -2253,8 +2090,7 @@ new Blah
 import fs from 'fs';
 const path = require('path');
 
-new Blah";
-    fourslash::run_generated_test(t, content, |f, t| {
+new Blah", |f, t| {
         f.go_to_file(t, "addToExisting.js");
         f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: r#"Update import from "./blah""#.to_string(), new_file_content: r"const { Named2 } = require('./blah')
 import Blah, { Named1 } from './blah'
@@ -2276,15 +2112,13 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_require_importVsRequire_moduleTarget_test.go:10
 pub fn test_import_name_code_fix_require_import_vs_require_module_target(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @module: es2015
 // @Filename: a.js
 export const x = 0;
 // @Filename: index.js
-x";
-    fourslash::run_generated_test(t, content, |f, t| {
+x", |f, t| {
         f.go_to_file(t, "index.js");
         f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: r#"Add import from "./a""#.to_string(), new_file_content: r#"import { x } from "./a";
 
@@ -2306,8 +2140,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_require_namedAndDefault_test.go:10
 pub fn test_import_name_code_fix_require_named_and_default(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @Filename: blah.ts
 export default class Blah {}
@@ -2315,8 +2148,7 @@ export const Named1 = 0;
 export const Named2 = 1;
 // @Filename: index.js
 Named1 + Named2;
-new Blah;";
-    fourslash::run_generated_test(t, content, |f, t| {
+new Blah;", |f, t| {
         f.go_to_file(t, "index.js");
         f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixMissingImport".to_string(), new_file_content: r#"const { default: Blah, Named1, Named2 } = require("./blah");
 
@@ -2332,8 +2164,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_require_UMD_test.go:10
 pub fn test_import_name_code_fix_require_umd(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @checkJs: true
 // @module: commonjs
 // @esModuleInterop: false
@@ -2344,8 +2175,7 @@ export = Foo;
 export as namespace Foo;
 // @Filename: index.js
 Foo;
-module.exports = {};";
-    fourslash::run_generated_test(t, content, |f, t| {
+module.exports = {};", |f, t| {
         f.go_to_file(t, "index.js");
         f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: r#"Add import from "./umd""#.to_string(), new_file_content: r#"const Foo = require("./umd");
 
@@ -2361,13 +2191,11 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixShebang_test.go:10
 pub fn test_import_name_code_fix_shebang(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r"// @Filename: /a.ts
 export const foo = 0;
 // @Filename: /b.ts
 [|#!/usr/bin/env node
-foo/**/|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+foo/**/|]", |f, t| {
         f.go_to_file(t, "/a.ts");
         f.go_to_file(t, "/b.ts");
         f.verify_import_fix_at_position(t, &[r#"#!/usr/bin/env node
@@ -2385,12 +2213,10 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_shorthandPropertyAssignment1_test.go:10
 pub fn test_import_name_code_fix_shorthand_property_assignment1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r"// @Filename: /a.ts
 export const a = 1;
 // @Filename: /b.ts
-const b = { /**/a };";
-    fourslash::run_generated_test(t, content, |f, t| {
+const b = { /**/a };", |f, t| {
         f.go_to_file(t, "/b.ts");
         f.verify_import_fix_at_position(t, &[r#"import { a } from "./a";
 
@@ -2405,13 +2231,11 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_shorthandPropertyAssignment2_test.go:10
 pub fn test_import_name_code_fix_shorthand_property_assignment2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r"// @Filename: /a.ts
 const a = 1;
 export default a;
 // @Filename: /b.ts
-const b = { /**/a };";
-    fourslash::run_generated_test(t, content, |f, t| {
+const b = { /**/a };", |f, t| {
         f.go_to_file(t, "/b.ts");
         f.verify_import_fix_at_position(t, &[r#"import a from "./a";
 
@@ -2426,8 +2250,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_sortByDistance_test.go:10
 pub fn test_import_name_code_fix_sort_by_distance(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: commonjs
+    fourslash::run_generated_test(t, r#"// @module: commonjs
 // @Filename: /src/admin/utils/db/db.ts
 export const db = {};
 // @Filename: /src/admin/utils/db/index.ts
@@ -2437,8 +2260,7 @@ export const db = {};
 // @Filename: /src/client/db.ts
 export const db = {};
 // @Filename: /src/client/foo.ts
-db/**/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+db/**/"#, |f, t| {
         f.go_to_marker(t, "");
         f.verify_import_fix_at_position(t, &[r#"import { db } from "./db";
 
@@ -2459,8 +2281,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_symlink_test.go:10
 pub fn test_import_name_code_fix_symlink(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @noLib: true
 // @Filename: /node_modules/real/index.d.ts
 // @Symlink: /node_modules/link/index.d.ts
@@ -2468,8 +2289,7 @@ export const foo: number;
 // @Filename: /a.ts
 import { foo } from "link";
 // @Filename: /b.ts
-[|foo;|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|foo;|]"#, |f, t| {
         f.go_to_file(t, "/b.ts");
         f.verify_import_fix_at_position(t, &[r#"import { foo } from "link";
 
@@ -2486,8 +2306,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_symlink_own_package_test.go:10
 pub fn test_import_name_code_fix_symlink_own_package(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /packages/b/b0.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /packages/b/b0.ts
 // @Symlink: /node_modules/b/b0.ts
 x;
 // @Filename: /packages/b/b1.ts
@@ -2496,8 +2315,7 @@ import { a } from "a";
 export const x = 0;
 // @Filename: /packages/a/index.d.ts
 // @Symlink: /node_modules/a/index.d.ts
-export const a: number;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export const a: number;"#, |f, t| {
         f.go_to_file(t, "/packages/b/b0.ts");
         f.verify_import_fix_at_position(t, &[r#"import { x } from "./b1";
 
@@ -2512,15 +2330,13 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_symlink_own_package_2_test.go:10
 pub fn test_import_name_code_fix_symlink_own_package_2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /packages/a/test.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /packages/a/test.ts
 // @Symlink: /node_modules/a/test.ts
 x;
 // @Filename: /packages/a/utils.ts
 // @Symlink: /node_modules/a/utils.ts
 import {} from "a/utils";
-export const x = 0;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export const x = 0;"#, |f, t| {
         f.go_to_file(t, "/packages/a/test.ts");
         f.verify_import_fix_at_position(t, &[r#"import { x } from "./utils";
 
@@ -2535,8 +2351,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_trailingComma_test.go:10
 pub fn test_import_name_code_fix_trailing_comma(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: index.ts
+    fourslash::run_generated_test(t, r#"// @Filename: index.ts
 import {
   T2,
   T1,
@@ -2546,8 +2361,7 @@ const x: T3/**/
 // @Filename: types.ts
 export type T1 = 0;
 export type T2 = 0;
-export type T3 = 0;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export type T3 = 0;"#, |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import {
   T2,
   T1,
@@ -2565,8 +2379,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_tripleSlashOrdering_test.go:10
 pub fn test_import_name_code_fix_triple_slash_ordering(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /tsconfig.json
+    fourslash::run_generated_test(t, r#"// @Filename: /tsconfig.json
 {
     "compilerOptions": {
         "skipDefaultLibCheck": false
@@ -2603,8 +2416,7 @@ const y = x + 1;
 
 /// <amd-dependency path="legacy/moduleA" name="moduleA" />
 
-const y = x + 1;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const y = x + 1;"#, |f, t| {
         f.go_to_file(t, "/b.ts");
         f.verify_import_fix_at_position(t, &[r#"// some comment
 
@@ -2655,14 +2467,12 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_typeOnly_test.go:10
 pub fn test_import_name_code_fix_type_only(t: &T) {
-    t.parallel();
-    let content: &str = r"// @module: esnext
+    fourslash::run_generated_test(t, r"// @module: esnext
 // @verbatimModuleSyntax: true
 // @Filename: types.ts
 export class A {}
 // @Filename: index.ts
-const a: /**/A";
-    fourslash::run_generated_test(t, content, |f, t| {
+const a: /**/A", |f, t| {
         f.go_to_marker(t, "");
         f.verify_import_fix_at_position(t, &[r#"import type { A } from "./types";
 
@@ -2677,13 +2487,11 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_typeOnly2_test.go:10
 pub fn test_import_name_code_fix_type_only2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @importsNotUsedAsValues: error
+    fourslash::run_generated_test(t, r"// @importsNotUsedAsValues: error
 // @Filename: types.ts
 export class A {}
 // @Filename: index.ts
-const a: A = new A();";
-    fourslash::run_generated_test(t, content, |f, t| {
+const a: A = new A();", |f, t| {
         f.go_to_file(t, "index.ts");
         f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixMissingImport".to_string(), new_file_content: r#"import { A } from "./types";
 
@@ -2698,12 +2506,10 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_typeUsedAsValue_test.go:10
 pub fn test_import_name_code_fix_type_used_as_value(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r"// @Filename: /a.ts
 export class ReadonlyArray<T> {}
 // @Filename: /b.ts
-[|new ReadonlyArray<string>();|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+[|new ReadonlyArray<string>();|]", |f, t| {
         f.go_to_file(t, "/b.ts");
         f.verify_import_fix_at_position(t, &[r#"import { ReadonlyArray } from "./a";
 
@@ -2718,16 +2524,14 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_types_classic_test.go:10
 pub fn test_import_name_code_fix_types_classic(t: &T) {
-    t.parallel();
-    let content: &str = r"// @moduleResolution: classic
+    fourslash::run_generated_test(t, r"// @moduleResolution: classic
 // @Filename: /node_modules/@types/foo/index.d.ts
 export const xyz: number;
 // @Filename: /node_modules/bar/index.d.ts
 export const qrs: number;
 // @Filename: /a.ts
 xyz;
-qrs;";
-    fourslash::run_generated_test(t, content, |f, t| {
+qrs;", |f, t| {
         f.go_to_file(t, "/a.ts");
         f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixMissingImport".to_string(), new_file_content: r#"import { xyz } from "foo";
 import { qrs } from "./node_modules/bar/index";
@@ -2744,8 +2548,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_typesVersions_test.go:12
 pub fn test_import_name_code_fix_types_versions(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: commonjs
+    fourslash::run_generated_test(t, r#"// @module: commonjs
 // @checkJs: true
 // @Filename: /node_modules/unified/package.json
 {
@@ -2766,8 +2569,7 @@ export declare const x: number;
 // @Filename: /foo.js
 import {} from "unified";
 // @Filename: /index.js
-x/**/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+x/**/"#, |f, t| {
         f.verify_import_fix_module_specifiers(t, "", &["unified", "unified/types/ts3.444/index.js"], Some(lsutil::UserPreferences { import_module_specifier_ending: modulespecifiers::ImportModuleSpecifierEndingPreference::Js, auto_import_entrypoint_directory_search: Tristate::True, ..Default::default() }));
     });
 }
@@ -2779,9 +2581,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixUMDGlobal0_test.go:10
 pub fn test_import_name_code_fix_umd_global0(t: &T) {
-    t.parallel();
-    let content: &str = "// @AllowSyntheticDefaultImports: false\n// @Module: es2015\n// @Filename: a/f1.ts\n[|export function test() { };\nbar1/*0*/.bar;|]\n// @Filename: a/foo.d.ts\nexport declare function bar(): number;\nexport as namespace bar1; ";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "// @AllowSyntheticDefaultImports: false\n// @Module: es2015\n// @Filename: a/f1.ts\n[|export function test() { };\nbar1/*0*/.bar;|]\n// @Filename: a/foo.d.ts\nexport declare function bar(): number;\nexport as namespace bar1; ", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import * as bar1 from "./foo";
 
 export function test() { };
@@ -2796,9 +2596,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixUMDGlobal1_test.go:10
 pub fn test_import_name_code_fix_umd_global1(t: &T) {
-    t.parallel();
-    let content: &str = "// @AllowSyntheticDefaultImports: false\n// @Module: esnext\n// @Filename: a/f1.ts\n[|import { bar } from \"./foo\";\n\nexport function test() { };\nbar1/*0*/.bar();|]\n// @Filename: a/foo.d.ts\nexport declare function bar(): number;\nexport as namespace bar1; ";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "// @AllowSyntheticDefaultImports: false\n// @Module: esnext\n// @Filename: a/f1.ts\n[|import { bar } from \"./foo\";\n\nexport function test() { };\nbar1/*0*/.bar();|]\n// @Filename: a/foo.d.ts\nexport declare function bar(): number;\nexport as namespace bar1; ", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import * as bar1 from "./foo";
 import { bar } from "./foo";
 
@@ -2814,9 +2612,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixUMDGlobalJavaScript_test.go:10
 pub fn test_import_name_code_fix_umd_global_java_script(t: &T) {
-    t.parallel();
-    let content: &str = "// @AllowSyntheticDefaultImports: false\n// @Module: commonjs\n// @CheckJs: true\n// @AllowJs: true\n// @Filename: a/f1.js\n[|export function test() { };\nbar1/*0*/.bar;|]\n// @Filename: a/foo.d.ts\nexport declare function bar(): number;\nexport as namespace bar1; ";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "// @AllowSyntheticDefaultImports: false\n// @Module: commonjs\n// @CheckJs: true\n// @AllowJs: true\n// @Filename: a/f1.js\n[|export function test() { };\nbar1/*0*/.bar;|]\n// @Filename: a/foo.d.ts\nexport declare function bar(): number;\nexport as namespace bar1; ", |f, t| {
         f.verify_import_fix_at_position(t, &[r#"import * as bar1 from "./foo";
 
 export function test() { };
@@ -2831,8 +2627,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixUMDGlobalReact0_test.go:10
 pub fn test_import_name_code_fix_umd_global_react0(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @jsx: react
+    fourslash::run_generated_test(t, r#"// @jsx: react
 // @allowSyntheticDefaultImports: false
 // @module: es2015
 // @moduleResolution: bundler
@@ -2853,8 +2648,7 @@ export class MyMap extends Component { }
 <MyMap/>;|]
 // @Filename: /b.tsx
 [|import { Component } from "react";
-<></>;|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+<></>;|]"#, |f, t| {
         f.go_to_file(t, "/a.tsx");
         f.verify_import_fix_at_position(t, &[r#"import * as React from "react";
 import { Component } from "react";
@@ -2874,8 +2668,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixUMDGlobalReact1_test.go:10
 pub fn test_import_name_code_fix_umd_global_react1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @jsx: react
+    fourslash::run_generated_test(t, r#"// @jsx: react
 // @allowSyntheticDefaultImports: false
 // @module: es2015
 // @moduleResolution: bundler
@@ -2893,8 +2686,7 @@ declare global {
 // @Filename: /a.tsx
 [|import { Component } from "react";
 export class MyMap extends Component { }
-<MyMap></MyMap>;|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+<MyMap></MyMap>;|]"#, |f, t| {
         f.go_to_file(t, "/a.tsx");
         f.verify_import_fix_at_position(t, &[r#"import * as React from "react";
 import { Component } from "react";
@@ -2910,8 +2702,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFixUMDGlobalReact2_test.go:10
 pub fn test_import_name_code_fix_umd_global_react2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @jsx: react
+    fourslash::run_generated_test(t, r"// @jsx: react
 // @jsxFactory: factory
 // @Filename: /factory.ts
 export function factory() { return {}; }
@@ -2921,8 +2712,7 @@ declare global {
     }
 }
 // @Filename: /a.tsx
-[|<div/>|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+[|<div/>|]", |f, t| {
         f.go_to_file(t, "/a.tsx");
         f.verify_import_fix_at_position(t, &[r#"import { factory } from "./factory";
 
@@ -2937,16 +2727,14 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_uriStyleNodeCoreModules1_test.go:10
 pub fn test_import_name_code_fix_uri_style_node_core_modules1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: commonjs
+    fourslash::run_generated_test(t, r#"// @module: commonjs
 // @Filename: /node_modules/@types/node/index.d.ts
 declare module "fs" { function writeFile(): void }
 declare module "fs/promises" { function writeFile(): Promise<void> }
 declare module "node:fs" { export * from "fs"; }
 declare module "node:fs/promises" { export * from "fs/promises"; }
 // @Filename: /index.ts
-writeFile/**/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+writeFile/**/"#, |f, t| {
         f.verify_import_fix_module_specifiers(t, "", &["fs", "node:fs", "fs/promises", "node:fs/promises"], None);
     });
 }
@@ -2958,8 +2746,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_uriStyleNodeCoreModules2_test.go:10
 pub fn test_import_name_code_fix_uri_style_node_core_modules2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: commonjs
+    fourslash::run_generated_test(t, r#"// @module: commonjs
 // @Filename: /node_modules/@types/node/index.d.ts
 declare module "fs" { function writeFile(): void }
 declare module "fs/promises" { function writeFile(): Promise<void> }
@@ -2968,8 +2755,7 @@ declare module "node:fs/promises" { export * from "fs/promises"; }
 // @Filename: /other.ts
 import "node:fs/promises";
 // @Filename: /index.ts
-writeFile/**/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+writeFile/**/"#, |f, t| {
         f.verify_import_fix_module_specifiers(t, "", &["node:fs", "node:fs/promises"], None);
         f.go_to_file(t, "/other.ts");
         f.replace_line(t, 0, r"
@@ -2991,8 +2777,7 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_uriStyleNodeCoreModules3_test.go:10
 pub fn test_import_name_code_fix_uri_style_node_core_modules3(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @module: commonjs
+    fourslash::run_generated_test(t, r#"// @module: commonjs
 // @Filename: /node_modules/@types/node/index.d.ts
 declare module "path" { function join(...segments: readonly string[]): string; }
 declare module "node:path" { export * from "path"; }
@@ -3022,8 +2807,7 @@ import "path";
 writeFile/*test1*/
 // @Filename: /test2.ts
 import "node:test";
-writeFile/*test2*/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+writeFile/*test2*/"#, |f, t| {
         f.verify_import_fix_module_specifiers(t, "noPrefix", &["fs", "fs/promises"], None);
         f.verify_import_fix_module_specifiers(t, "prefix", &["node:fs", "node:fs/promises"], None);
         f.verify_import_fix_module_specifiers(t, "mixed1", &["node:fs", "node:fs/promises"], None);
@@ -3040,14 +2824,12 @@ use crate::tests::prelude::*;
 
 // importNameCodeFix_withJson_test.go:10
 pub fn test_import_name_code_fix_with_json(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 export const a = 'a';
 // @Filename: /b.ts
 import "./anything.json";
 
-a/**/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+a/**/"#, |f, t| {
         f.go_to_file(t, "/b.ts");
         f.verify_import_fix_at_position(t, &[r#"import { a } from "./a";
 import "./anything.json";
@@ -3063,15 +2845,13 @@ use crate::tests::prelude::*;
 
 // importPreferTypeOnlyAutoImports_test.go:12
 pub fn test_prefer_type_only_auto_imports(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: types.ts
+    fourslash::run_generated_test(t, r"// @Filename: types.ts
 export type MyType = { x: number };
 export const MyValue = 123;
 // @Filename: main.ts
 let x: MyT/*type*/;
 let y = MyV/*value*/;
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.configure(t, lsutil::UserPreferences { include_completions_for_module_exports: Tristate::True, include_completions_for_import_statements: Tristate::True, prefer_type_only_auto_imports: Tristate::True, ..Default::default() });
         f.baseline_auto_imports_completions(t, &["type", "value"]);
     });
@@ -3084,13 +2864,11 @@ use crate::tests::prelude::*;
 
 // importStatementCompletion_test.go:14
 pub fn test_import_statement_completion_uses_named_import(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: a.ts
 export interface I {}
 // @Filename: 1.ts
 import * as u from "./a";
-[|import I/*a*/|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|import I/*a*/|]"#, |f, t| {
         let mut preferences = lsutil::new_default_user_preferences();
         preferences.include_completions_for_module_exports = Tristate::False;
         preferences.include_completions_for_import_statements = Tristate::True;
@@ -3105,8 +2883,7 @@ use crate::tests::prelude::*;
 
 // importStatementCompletions4_test.go:13
 pub fn test_import_statement_completions4(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: /a.js
 import Foo /*a*/
 
@@ -3114,8 +2891,7 @@ function fromBar() {}
 // @Filename: /b.jsx
 import Foo /*b*/
 
-function fromBar() {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+function fromBar() {}", |f, t| {
         f.verify_completions(t, Any::StringSlice(vec!["a".to_string(), "b".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "from".to_string(), sort_text: Some("15".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -3282,12 +3058,10 @@ use crate::tests::prelude::*;
 
 // importStatementCompletions_noSnippet_test.go:13
 pub fn test_import_statement_completions_no_snippet(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /mod.ts
+    fourslash::run_generated_test(t, r"// @Filename: /mod.ts
 export const foo = 0;
 // @Filename: /index0.ts
-[|import f/**/|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+[|import f/**/|]", |f, t| {
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), insert_text: Some(r#"import { foo } from "./mod";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./mod".to_string(), ..Default::default() }), ..Default::default() }), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: r#"import { foo } from "./mod";"#.to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "type".to_string(), sort_text: Some("15".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
 }
@@ -3411,8 +3185,7 @@ use crate::tests::prelude::*;
 
 // importSuggestionsCache_exportUndefined_test.go:13
 pub fn test_import_suggestions_cache_export_undefined(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /home/src/workspaces/project/tsconfig.json
+    fourslash::run_generated_test(t, r#"// @Filename: /home/src/workspaces/project/tsconfig.json
 { "compilerOptions": { "module": "esnext", "lib": ["es5"] } }
 // @Filename: /home/src/workspaces/project/undefined.ts
 export = undefined;
@@ -3420,8 +3193,7 @@ export = undefined;
 const x = undefined;
 export = x;
 // @Filename: /home/src/workspaces/project/index.ts
- /**/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+ /**/"#, |f, t| {
         f.mark_test_as_strada_server();
         f.go_to_marker(t, "");
         f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), additional_text_edits: fourslash::ANY_TEXT_EDITS.clone(), sort_text: Some("16".to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./undefinedAlias".to_string(), ..Default::default() }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() }));
@@ -3436,8 +3208,7 @@ use crate::tests::prelude::*;
 
 // importSuggestionsCache_invalidPackageJson_test.go:13
 pub fn test_import_suggestions_cache_invalid_package_json(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 // @Filename: /home/src/workspaces/project/jsconfig.json
 {
   "compilerOptions": {
@@ -3457,8 +3228,7 @@ declare module 'util' {
 { "mod" }
 // @Filename: /home/src/workspaces/project/a.js
 
-readF/**/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+readF/**/"#, |f, t| {
         f.mark_test_as_strada_server();
         f.go_to_marker(t, "");
         f.verify_completions(t, Any::Nil, Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "readFile".to_string(), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "fs".to_string(), ..Default::default() }), ..Default::default() }), additional_text_edits: fourslash::ANY_TEXT_EDITS.clone(), sort_text: Some("16".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
@@ -3472,13 +3242,11 @@ use crate::tests::prelude::*;
 
 // importTypeCompletions1_test.go:12
 pub fn test_import_type_completions1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @target: esnext
+    fourslash::run_generated_test(t, r"// @target: esnext
 // @filename: /foo.ts
 export interface Foo {}
 // @filename: /bar.ts
-[|import type F/**/|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+[|import type F/**/|]", |f, t| {
         f.go_to_file(t, "/bar.ts");
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "Foo".to_string(), insert_text: Some(r#"import type { Foo } from "./foo";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./foo".to_string(), ..Default::default() }), ..Default::default() }), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: r#"import type { Foo } from "./foo";"#.to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
@@ -3491,13 +3259,11 @@ use crate::tests::prelude::*;
 
 // importTypeCompletions2_test.go:11
 pub fn test_import_type_completions2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @target: esnext
+    fourslash::run_generated_test(t, r"// @target: esnext
 // @filename: /foo.ts
 export const Foo = {};
 // @filename: /bar.ts
-[|import type F/**/|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+[|import type F/**/|]", |f, t| {
         f.go_to_file(t, "/bar.ts");
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![]), ..Default::default() }), ..Default::default() }));
     });
@@ -3510,13 +3276,11 @@ use crate::tests::prelude::*;
 
 // importTypeCompletions3_test.go:12
 pub fn test_import_type_completions3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @target: esnext
+    fourslash::run_generated_test(t, r"// @target: esnext
 // @filename: /foo.ts
 export interface Foo {}
 // @filename: /bar.ts
-[|import type { F/**/ }|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+[|import type { F/**/ }|]", |f, t| {
         f.go_to_file(t, "/bar.ts");
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "Foo".to_string(), insert_text: Some(r#"import type { Foo } from "./foo";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./foo".to_string(), ..Default::default() }), ..Default::default() }), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: r#"import type { Foo } from "./foo";"#.to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
@@ -3529,14 +3293,12 @@ use crate::tests::prelude::*;
 
 // importTypeCompletions4_test.go:12
 pub fn test_import_type_completions4(t: &T) {
-    t.parallel();
-    let content: &str = r"// @esModuleInterop: true
+    fourslash::run_generated_test(t, r"// @esModuleInterop: true
 // @Filename: /foo.ts
 interface Foo { };
 export = Foo;
 // @Filename: /bar.ts
- [|import type f/**/|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+ [|import type f/**/|]", |f, t| {
         f.go_to_file(t, "/bar.ts");
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "Foo".to_string(), insert_text: Some(r#"import type Foo from "./foo";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./foo".to_string(), ..Default::default() }), ..Default::default() }), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: r#"import type Foo from "./foo";"#.to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
@@ -3549,16 +3311,14 @@ use crate::tests::prelude::*;
 
 // importTypeCompletions5_test.go:12
 pub fn test_import_type_completions5(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowSyntheticDefaultImports: false
+    fourslash::run_generated_test(t, r"// @allowSyntheticDefaultImports: false
 // @esModuleInterop: false
 // @module: commonjs
 // @Filename: /foo.ts
 interface Foo { };
 export = Foo;
 // @Filename: /bar.ts
- [|import type f/**/|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+ [|import type f/**/|]", |f, t| {
         f.go_to_file(t, "/bar.ts");
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "Foo".to_string(), insert_text: Some(r#"import type Foo = require("./foo");"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./foo".to_string(), ..Default::default() }), ..Default::default() }), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: r#"import type Foo = require("./foo");"#.to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
@@ -3571,14 +3331,12 @@ use crate::tests::prelude::*;
 
 // importTypeCompletions6_test.go:12
 pub fn test_import_type_completions6(t: &T) {
-    t.parallel();
-    let content: &str = r"// @module: esnext
+    fourslash::run_generated_test(t, r"// @module: esnext
 // @Filename: /foo.ts
 export const foo = { };
 export interface Foo { };
 // @Filename: /bar.ts
- [|import type * as f/**/|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+ [|import type * as f/**/|]", |f, t| {
         f.go_to_file(t, "/bar.ts");
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "Foo".to_string(), insert_text: Some(r#"import type { Foo } from "./foo";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./foo".to_string(), ..Default::default() }), ..Default::default() }), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: r#"import type { Foo } from "./foo";"#.to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
@@ -3591,15 +3349,13 @@ use crate::tests::prelude::*;
 
 // importTypeCompletions7_test.go:13
 pub fn test_import_type_completions7(t: &T) {
-    t.parallel();
-    let content: &str = r"// @target: es2020
+    fourslash::run_generated_test(t, r"// @target: es2020
 // @module: esnext
 // @Filename: /foo.d.ts
 declare namespace Foo {}
 export = Foo;
 // @Filename: /test.ts
-[|import F/**/|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+[|import F/**/|]", |f, t| {
         f.go_to_file(t, "/test.ts");
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "Foo".to_string(), insert_text: Some(r#"import Foo from "./foo";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./foo".to_string(), ..Default::default() }), ..Default::default() }), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: r#"import Foo from "./foo";"#.to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "type".to_string(), sort_text: Some("15".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
@@ -3612,13 +3368,11 @@ use crate::tests::prelude::*;
 
 // importTypeCompletions8_test.go:12
 pub fn test_import_type_completions8(t: &T) {
-    t.parallel();
-    let content: &str = r"// @target: esnext
+    fourslash::run_generated_test(t, r"// @target: esnext
 // @filename: /foo.ts
 export interface Foo {}
 // @filename: /bar.ts
-[|import { type F/**/ }|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+[|import { type F/**/ }|]", |f, t| {
         f.go_to_file(t, "/bar.ts");
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "Foo".to_string(), insert_text: Some(r#"import { type Foo } from "./foo";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./foo".to_string(), ..Default::default() }), ..Default::default() }), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: r#"import { type Foo } from "./foo";"#.to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
@@ -3631,13 +3385,11 @@ use crate::tests::prelude::*;
 
 // importTypeCompletions9_test.go:12
 pub fn test_import_type_completions9(t: &T) {
-    t.parallel();
-    let content: &str = r"// @target: esnext
+    fourslash::run_generated_test(t, r"// @target: esnext
 // @filename: /foo.ts
 export interface Foo {}
 // @filename: /bar.ts
-[|import { type /**/ }|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+[|import { type /**/ }|]", |f, t| {
         f.go_to_file(t, "/bar.ts");
         f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "Foo".to_string(), insert_text: Some(r#"import { type Foo } from "./foo";"#.to_string()), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./foo".to_string(), ..Default::default() }), ..Default::default() }), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: r#"import { type Foo } from "./foo";"#.to_string(), range: f.ranges()[0].ls_range }), ..Default::default() }), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
     });
@@ -3650,10 +3402,8 @@ use crate::tests::prelude::*;
 
 // importTypeFormatting_test.go:10
 pub fn test_import_type_formatting(t: &T) {
-    t.parallel();
-    let content: &str = r#"var y: import("./c2").mytype;
-var z: import ("./c2").mytype;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"var y: import("./c2").mytype;
+var z: import ("./c2").mytype;"#, |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r#"var y: import("./c2").mytype;
 var z: import("./c2").mytype;"#);
@@ -3667,8 +3417,7 @@ use crate::tests::prelude::*;
 
 // importTypeMemberCompletions_test.go:11
 pub fn test_import_type_member_completions(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /ns.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /ns.ts
 export namespace Foo {
     export namespace Bar {
         export class Baz {}
@@ -3703,8 +3452,7 @@ type G = typeof import("./top")./*7*/
 // @Filename: /usage8.ts
 type H = import("./top")./*8*/
 // @Filename: /usage9.ts
-type H = typeof import("./equals")./*9*/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+type H = typeof import("./equals")./*9*/"#, |f, t| {
         f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("Foo".to_string())]), ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("Bar".to_string())]), ..Default::default() }), ..Default::default() }));
         f.verify_completions(t, Any::String("3".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("a".to_string()), Any::String("Baz".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3724,8 +3472,7 @@ use crate::tests::prelude::*;
 
 // importTypeNodeGoToDefinition_test.go:10
 pub fn test_import_type_node_go_to_definition(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /ns.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /ns.ts
 /*refFile*/export namespace /*refFoo*/Foo {
     export namespace /*refBar*/Bar {
         export class /*refBaz*/Baz {}
@@ -3733,8 +3480,7 @@ pub fn test_import_type_node_go_to_definition(t: &T) {
 }
 // @Filename: /usage.ts
 type A = typeof import([|/*1*/"./ns"|]).[|/*2*/Foo|].[|/*3*/Bar|];
-type B = import([|/*4*/"./ns"|]).[|/*5*/Foo|].[|/*6*/Bar|].[|/*7*/Baz|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+type B = import([|/*4*/"./ns"|]).[|/*5*/Foo|].[|/*6*/Bar|].[|/*7*/Baz|];"#, |f, t| {
         f.verify_baseline_go_to_definition(t, true, &["1", "2", "3", "4", "5", "6", "7"]);
     });
 }
@@ -3746,8 +3492,7 @@ use crate::tests::prelude::*;
 
 // importTypesDeclarationDiagnosticsNoServerError_test.go:10
 pub fn test_import_types_declaration_diagnostics_no_server_error(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @declaration: true
+    fourslash::run_generated_test(t, r#"// @declaration: true
 // @Filename: node_modules/foo/index.d.ts
 export function f(): I;
 export interface I {
@@ -3755,8 +3500,7 @@ export interface I {
 }
 // @Filename: a.ts
 import { f } from "foo";
-export const x = f();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export const x = f();"#, |f, t| {
         f.go_to_file_number(t, 1);
         f.verify_non_suggestion_diagnostics(t, &[]);
     });
@@ -3769,14 +3513,12 @@ use crate::tests::prelude::*;
 
 // importValueUsedAsType_test.go:10
 pub fn test_import_value_used_as_type(t: &T) {
-    t.parallel();
-    let content: &str = r"/**/
+    fourslash::run_generated_test(t, r"/**/
 namespace A {
     export var X;
     import Z = A.X;
     var v: Z;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_marker(t, "");
         f.insert(t, " ");
     });
@@ -3789,8 +3531,7 @@ use crate::tests::prelude::*;
 
 // incompatibleOverride_test.go:10
 pub fn test_incompatible_override(t: &T) {
-    t.parallel();
-    let content: &str = r"// @strict: false
+    fourslash::run_generated_test(t, r"// @strict: false
 class Foo { xyz: string; }
 class Bar extends Foo { /*1*/xyz/*2*/: number = 1; }
 class Baz extends Foo { public /*3*/xyz/*4*/: number = 2; }
@@ -3798,8 +3539,7 @@ class /*5*/Baf/*6*/ extends Foo {
    constructor(public xyz: number) {
       super();
    }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_error_exists_between_markers(t, "1", "2");
         f.verify_error_exists_between_markers(t, "3", "4");
         f.verify_error_exists_between_markers(t, "5", "6");
@@ -3814,14 +3554,12 @@ use crate::tests::prelude::*;
 
 // incrementalEditInvocationExpressionAboveInterfaceDeclaration_test.go:10
 pub fn test_incremental_edit_invocation_expression_above_interface_declaration(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 declare function alert(message?: any): void;
 /*1*/
 interface Foo {
     setISO8601(dString): Date;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_marker(t, "1");
         f.insert(t, "alert(");
         f.verify_signature_help(t, fourslash::VerifySignatureHelpOptions { text: "alert(message?: any): void".to_string(), ..Default::default() });
@@ -3836,15 +3574,13 @@ use crate::tests::prelude::*;
 
 // incrementalJsDocAdjustsLengthsRight_test.go:10
 pub fn test_incremental_js_doc_adjusts_lengths_right(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noLib: true
+    fourslash::run_generated_test(t, r"// @noLib: true
 
 /**
  * Pad `str` to `width`.
  *
  * @param {String} str
- * @param {Number} wid/*1*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+ * @param {Number} wid/*1*/", |f, t| {
         f.go_to_marker(t, "1");
         f.insert(t, r"th
 @");
@@ -3858,8 +3594,7 @@ use crate::tests::prelude::*;
 
 // incrementalParsingDynamicImport1_test.go:10
 pub fn test_incremental_parsing_dynamic_import1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es6
+    fourslash::run_generated_test(t, r#"// @lib: es6
 // @module: commonjs
 // @Filename: ./foo.ts
 export function bar() { return 1; }
@@ -3867,8 +3602,7 @@ var x1 = import("./foo");
 x1.then(foo => {
    var s: string = foo.bar();
 })
-/*1*/"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*1*/"#, |f, t| {
         f.verify_number_of_errors_in_current_file(t, 1);
         f.go_to_marker(t, "1");
         f.insert(t, "  ");
@@ -3883,13 +3617,11 @@ use crate::tests::prelude::*;
 
 // incrementalParsingDynamicImport2_test.go:10
 pub fn test_incremental_parsing_dynamic_import2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es2015
+    fourslash::run_generated_test(t, r#"// @lib: es2015
 // @Filename: ./foo.ts
 export function bar() { return 1; }
 // @Filename: ./0.ts
-/*1*/ import { bar } from "./foo""#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*1*/ import { bar } from "./foo""#, |f, t| {
         f.verify_number_of_errors_in_current_file(t, 0);
         f.go_to_marker(t, "1");
         f.insert(t, "var x = ");
@@ -3904,13 +3636,11 @@ use crate::tests::prelude::*;
 
 // incrementalParsingDynamicImport3_test.go:10
 pub fn test_incremental_parsing_dynamic_import3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es2015
+    fourslash::run_generated_test(t, r"// @lib: es2015
 // @Filename: ./foo.ts
 export function bar() { return 1; }
 // @Filename: ./0.ts
-var x = import/*1*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+var x = import/*1*/", |f, t| {
         f.verify_number_of_errors_in_current_file(t, 0);
         f.go_to_marker(t, "1");
         f.insert(t, "(");
@@ -3925,14 +3655,12 @@ use crate::tests::prelude::*;
 
 // incrementalParsingDynamicImport4_test.go:10
 pub fn test_incremental_parsing_dynamic_import4(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es2015
+    fourslash::run_generated_test(t, r#"// @lib: es2015
 // @Filename: ./foo.ts
 export function bar() { return 1; }
 // @Filename: ./0.ts
 /*1*/
-import { bar } from "./foo""#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { bar } from "./foo""#, |f, t| {
         f.verify_number_of_errors_in_current_file(t, 0);
         f.go_to_marker(t, "1");
         f.insert(t, "import");
@@ -3947,15 +3675,13 @@ use crate::tests::prelude::*;
 
 // incrementalParsingInsertIntoMethod1_test.go:10
 pub fn test_incremental_parsing_insert_into_method1(t: &T) {
-    t.parallel();
-    let content: &str = r"class C {
+    fourslash::run_generated_test(t, r"class C {
     public foo1() { }
     public foo2() {
         return 1/*1*/;
     }
     public foo3() { }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_marker(t, "1");
         f.insert(t, " + 1");
     });
@@ -3968,13 +3694,11 @@ use crate::tests::prelude::*;
 
 // incrementalParsingTopLevelAwait1_test.go:10
 pub fn test_incremental_parsing_top_level_await1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @target: esnext
+    fourslash::run_generated_test(t, r"// @target: esnext
 // @module: esnext
 // @Filename: ./foo.ts
 await(1);
-/*1*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*1*/", |f, t| {
         f.verify_number_of_errors_in_current_file(t, 1);
         f.go_to_marker(t, "1");
         f.insert(t, "export {};");
@@ -3991,13 +3715,11 @@ use crate::tests::prelude::*;
 
 // incrementalParsingTopLevelAwait2_test.go:10
 pub fn test_incremental_parsing_top_level_await2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @target: esnext
+    fourslash::run_generated_test(t, r"// @target: esnext
 // @module: esnext
 // @Filename: ./foo.ts
 export {};
-/*1*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*1*/", |f, t| {
         f.verify_number_of_errors_in_current_file(t, 0);
         f.go_to_marker(t, "1");
         f.insert(t, "await(1);");
@@ -4014,13 +3736,11 @@ use crate::tests::prelude::*;
 
 // incrementalParsingWithJsDoc_test.go:10
 pub fn test_incremental_parsing_with_js_doc(t: &T) {
-    t.parallel();
-    let content: &str = r"[|import a from 'a/aaaaaaa/aaaaaaa/aaaaaa/aaaaaaa';
+    fourslash::run_generated_test(t, r"[|import a from 'a/aaaaaaa/aaaaaaa/aaaaaa/aaaaaaa';
 /**/import b from 'b';
 import c from 'c';|]
 [|/** @internal */|]
-export class LanguageIdentifier[| { }|]";
-    fourslash::run_generated_test(t, content, |f, t| {
+export class LanguageIdentifier[| { }|]", |f, t| {
         f.verify_outlining_spans(t, &[]);
         f.go_to_marker(t, "");
         f.backspace(t, 1);

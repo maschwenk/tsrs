@@ -5,8 +5,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsObjectBindingElementPropertyName04_test.go:10
 pub fn test_find_all_refs_object_binding_element_property_name04(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I {
+    fourslash::run_generated_test(t, r"interface I {
     /*0*/property1: number;
     property2: string;
 }
@@ -16,8 +15,7 @@ function f({ /*1*/property1: p1 }: I,
            { property1: p2 }) {
 
     return /*3*/property1 + 1;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
     });
 }
@@ -29,16 +27,14 @@ use crate::tests::prelude::*;
 
 // findAllRefsObjectBindingElementPropertyName05_test.go:10
 pub fn test_find_all_refs_object_binding_element_property_name05(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I {
+    fourslash::run_generated_test(t, r"interface I {
     property1: number;
     property2: string;
 }
 
 function f({ /**/property1: p }, { property1 }) {
     let x = property1;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &[""]);
     });
 }
@@ -50,8 +46,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsObjectBindingElementPropertyName06_test.go:10
 pub fn test_find_all_refs_object_binding_element_property_name06(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I {
+    fourslash::run_generated_test(t, r"interface I {
     /*0*/property1: number;
     property2: string;
 }
@@ -65,8 +60,7 @@ for (var { /*3*/property1: p1 } of elems) {
 }
 var p2;
 for ({ /*4*/property1 : p2 } of elems) {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "3", "4", "2"]);
     });
 }
@@ -78,11 +72,9 @@ use crate::tests::prelude::*;
 
 // findAllRefsObjectBindingElementPropertyName07_test.go:10
 pub fn test_find_all_refs_object_binding_element_property_name07(t: &T) {
-    t.parallel();
-    let content: &str = r"let p, b;
+    fourslash::run_generated_test(t, r"let p, b;
 
-p, [{ /*1*/a: p, b }] = [{ a: 10, b: true }];";
-    fourslash::run_generated_test(t, content, |f, t| {
+p, [{ /*1*/a: p, b }] = [{ a: 10, b: true }];", |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -94,15 +86,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsObjectBindingElementPropertyName10_test.go:10
 pub fn test_find_all_refs_object_binding_element_property_name10(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Recursive {
+    fourslash::run_generated_test(t, r"interface Recursive {
     /*1*/next?: Recursive;
     value: any;
 }
 
 function f (/*2*/{ /*3*/next: { /*4*/next: x} }: Recursive) {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -114,8 +104,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsOfConstructor_test.go:10
 pub fn test_find_all_refs_of_constructor(t: &T) {
-    t.parallel();
-    let content: &str = r#"class A {
+    fourslash::run_generated_test(t, r#"class A {
     /*aCtr*/constructor(s: string) {}
 }
 class B extends A { }
@@ -130,8 +119,7 @@ const a = new A("a");
 const b = new B("b");
 const c = new C();
 const d = new D("d");
-const e = new E();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const e = new E();"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["aCtr", "cCtr"]);
     });
@@ -144,8 +132,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsOfConstructor2_test.go:10
 pub fn test_find_all_refs_of_constructor2(t: &T) {
-    t.parallel();
-    let content: &str = r#"class A {
+    fourslash::run_generated_test(t, r#"class A {
     /*a*/constructor(s: string) {}
 }
 class B extends A {
@@ -160,8 +147,7 @@ class D extends B { }
 const a = new A("a");
 const b = new B();
 const c = new C();
-const d = new D();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const d = new D();"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["a", "b", "c"]);
     });
@@ -174,8 +160,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsOfConstructor_multipleFiles_test.go:10
 pub fn test_find_all_refs_of_constructor_multiple_files(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: f.ts
+    fourslash::run_generated_test(t, r#"// @Filename: f.ts
 class A {
     /*aCtr*/constructor(s: string) {}
 }
@@ -189,8 +174,7 @@ export { B as B1 } from "./f";
 // @Filename: b.ts
 import B, { B1 } from "./a";
 const d = new B("b");
-const d1 = new B1("b1");"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const d1 = new B1("b1");"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["aCtr"]);
     });
@@ -203,12 +187,10 @@ use crate::tests::prelude::*;
 
 // findAllRefsOfConstructor_withModifier_test.go:10
 pub fn test_find_all_refs_of_constructor_with_modifier(t: &T) {
-    t.parallel();
-    let content: &str = r"class X {
+    fourslash::run_generated_test(t, r"class X {
     public /*0*/constructor() {}
 }
-var x = new X();";
-    fourslash::run_generated_test(t, content, |f, t| {
+var x = new X();", |f, t| {
         f.verify_baseline_find_all_references(t, &["0"]);
     });
 }
@@ -220,8 +202,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsOnDecorators_test.go:10
 pub fn test_find_all_refs_on_decorators(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: a.ts
 /*1*/function /*2*/decorator(target) {
     return target;
 }
@@ -231,8 +212,7 @@ pub fn test_find_all_refs_on_decorators(t: &T) {
 class C {
     @/*6*/decorator
     method() {}
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6"]);
     });
 }
@@ -244,8 +224,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsOnDefinition_test.go:10
 pub fn test_find_all_refs_on_definition(t: &T) {
-    t.parallel();
-    let content: &str = r#"//@Filename: findAllRefsOnDefinition-import.ts
+    fourslash::run_generated_test(t, r#"//@Filename: findAllRefsOnDefinition-import.ts
 export class Test{
 
     constructor(){
@@ -265,8 +244,7 @@ import Second = require("./findAllRefsOnDefinition-import");
 
 var second = new Second.Test()
 second./*3*/start();
-second.stop();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+second.stop();"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -278,8 +256,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsOnDefinition2_test.go:10
 pub fn test_find_all_refs_on_definition2(t: &T) {
-    t.parallel();
-    let content: &str = r#"//@Filename: findAllRefsOnDefinition2-import.ts
+    fourslash::run_generated_test(t, r#"//@Filename: findAllRefsOnDefinition2-import.ts
 export module Test{
 
     /*1*/export interface /*2*/start { }
@@ -290,8 +267,7 @@ export module Test{
 import Second = require("./findAllRefsOnDefinition2-import");
 
 var start: Second.Test./*3*/start;
-var stop: Second.Test.stop;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+var stop: Second.Test.stop;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -303,8 +279,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsOnImportAliases_test.go:10
 pub fn test_find_all_refs_on_import_aliases(t: &T) {
-    t.parallel();
-    let content: &str = r#"//@Filename: a.ts
+    fourslash::run_generated_test(t, r#"//@Filename: a.ts
 export class /*0*/Class {
 }
 //@Filename: b.ts
@@ -312,8 +287,7 @@ import { /*1*/Class } from "./a";
 
 var c = new /*2*/Class();
 //@Filename: c.ts
-export { /*3*/Class } from "./a";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+export { /*3*/Class } from "./a";"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2"]);
     });
 }
@@ -325,15 +299,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsOnImportAliases2_test.go:10
 pub fn test_find_all_refs_on_import_aliases2(t: &T) {
-    t.parallel();
-    let content: &str = r#"//@Filename: a.ts
+    fourslash::run_generated_test(t, r#"//@Filename: a.ts
 [|export class /*class0*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}Class|] {}|]
 //@Filename: b.ts
 [|import { /*class1*/[|{| "contextRangeIndex": 2 |}Class|] as /*c2_0*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 2 |}C2|] } from "./a";|]
 var c = new /*c2_1*/[|C2|]();
 //@Filename: c.ts
-[|export { /*class2*/[|{| "contextRangeIndex": 6 |}Class|] as /*c3*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 6 |}C3|] } from "./a";|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|export { /*class2*/[|{| "contextRangeIndex": 6 |}Class|] as /*c3*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 6 |}C3|] } from "./a";|]"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["class0", "class1", "class2", "c2_0", "c2_1", "c3"]);
         f.verify_baseline_rename_at_ranges_with_text(t, None, &["Class", "C2", "C3"]);
     });
@@ -346,16 +318,14 @@ use crate::tests::prelude::*;
 
 // findAllRefsOnPrivateParameterProperty1_test.go:10
 pub fn test_find_all_refs_on_private_parameter_property1(t: &T) {
-    t.parallel();
-    let content: &str = r"class ABCD {
+    fourslash::run_generated_test(t, r"class ABCD {
     constructor(private x: number, public y: number, /*1*/private /*2*/z: number) {
     }
 
     func() {
         return this./*3*/z;
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -367,14 +337,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsParameterPropertyDeclaration1_test.go:10
 pub fn test_find_all_refs_parameter_property_declaration1(t: &T) {
-    t.parallel();
-    let content: &str = r"class Foo {
+    fourslash::run_generated_test(t, r"class Foo {
     constructor(private /*1*/privateParam: number) {
         let localPrivate = privateParam;
         this.privateParam += 10;
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -386,14 +354,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsParameterPropertyDeclaration2_test.go:10
 pub fn test_find_all_refs_parameter_property_declaration2(t: &T) {
-    t.parallel();
-    let content: &str = r"class Foo {
+    fourslash::run_generated_test(t, r"class Foo {
     constructor(public /*0*/publicParam: number) {
         let localPublic = /*1*/publicParam;
         this./*2*/publicParam += 10;
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2"]);
     });
 }
@@ -405,14 +371,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsParameterPropertyDeclaration3_test.go:10
 pub fn test_find_all_refs_parameter_property_declaration3(t: &T) {
-    t.parallel();
-    let content: &str = r"class Foo {
+    fourslash::run_generated_test(t, r"class Foo {
     constructor(protected /*0*/protectedParam: number) {
         let localProtected = /*1*/protectedParam;
         this./*2*/protectedParam += 10;
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2"]);
     });
 }
@@ -424,8 +388,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsParameterPropertyDeclaration_inheritance_test.go:10
 pub fn test_find_all_refs_parameter_property_declaration_inheritance(t: &T) {
-    t.parallel();
-    let content: &str = r"class C {
+    fourslash::run_generated_test(t, r"class C {
 	constructor(public /*0*/x: string) {
 		/*1*/x;
 	}
@@ -434,8 +397,7 @@ class D extends C {
 	constructor(public /*2*/x: string) {
 		super(/*3*/x);
 	}
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
     });
 }
@@ -447,8 +409,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsParameterPropertyWithConflictingMember_test.go:10
 pub fn test_find_all_refs_parameter_property_with_conflicting_member(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 // @filename: c1.ts
 class C1 {
   [|x|]() {}
@@ -468,8 +429,7 @@ class C2 {
   }
 }
 new C2(1).[|x|];
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.verify_baseline_find_all_references(t, &[]);
     });
 }
@@ -481,8 +441,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsPrefixSuffixPreference_test.go:12
 pub fn test_find_all_refs_prefix_suffix_preference(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /file1.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /file1.ts
 declare function log(s: string | number): void;
 [|const /*q0*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}q|] = 1;|]
 [|export { /*q1*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 2 |}q|] };|]
@@ -494,8 +453,7 @@ log(/*z2*/[|z|]);
 // @Filename: /file2.ts
 declare function log(s: string | number): void;
 [|import { /*q2*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 9 |}q|] } from "./file1";|]
-log(/*q3*/[|q|] + 1);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+log(/*q3*/[|q|] + 1);"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["q0", "q1", "q2", "q3", "z0", "z1", "z2"]);
         f.verify_baseline_rename(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::True, ..Default::default() }), &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[10])), Any::RangeMarker(Arc::clone(&f.ranges()[11]))]);
@@ -512,14 +470,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsPrimitiveJsDoc_test.go:10
 pub fn test_find_all_refs_primitive_js_doc(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noLib: true
+    fourslash::run_generated_test(t, r"// @noLib: true
 /**
  * @param {/*1*/number} n
  * @returns {/*2*/number}
  */
-function f(n: /*3*/number): /*4*/number {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+function f(n: /*3*/number): /*4*/number {}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -531,8 +487,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsPrivateNameAccessors_test.go:10
 pub fn test_find_all_refs_private_name_accessors(t: &T) {
-    t.parallel();
-    let content: &str = r"class C {
+    fourslash::run_generated_test(t, r"class C {
     /*1*/get /*2*/#foo(){ return 1; }
     /*3*/set /*4*/#foo(value: number){  }
     constructor() {
@@ -551,8 +506,7 @@ class E {
     constructor() {
         this./*10*/#foo();
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
     });
 }
@@ -564,8 +518,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsPrivateNameMethods_test.go:10
 pub fn test_find_all_refs_private_name_methods(t: &T) {
-    t.parallel();
-    let content: &str = r"class C {
+    fourslash::run_generated_test(t, r"class C {
     /*1*/#foo(){ }
     constructor() {
         this./*2*/#foo();
@@ -582,8 +535,7 @@ class E {
     constructor() {
         this./*4*/#foo();
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -595,8 +547,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsPrivateNameProperties_test.go:10
 pub fn test_find_all_refs_private_name_properties(t: &T) {
-    t.parallel();
-    let content: &str = r"class C {
+    fourslash::run_generated_test(t, r"class C {
     /*1*/#foo = 10;
     constructor() {
         this./*2*/#foo = 20;
@@ -614,8 +565,7 @@ class E {
     constructor() {
         this./*5*/#foo = 20;
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5"]);
     });
 }
@@ -627,8 +577,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsPropertyContextuallyTypedByTypeParam01_test.go:10
 pub fn test_find_all_refs_property_contextually_typed_by_type_param01(t: &T) {
-    t.parallel();
-    let content: &str = r#"interface IFoo {
+    fourslash::run_generated_test(t, r#"interface IFoo {
     /*1*/a: string;
 }
 class C<T extends IFoo> {
@@ -643,8 +592,7 @@ class C<T extends IFoo> {
 
 var x: IFoo = {
     a: "ss"
-};"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+};"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -656,10 +604,8 @@ use crate::tests::prelude::*;
 
 // findAllRefsReExport_broken_test.go:10
 pub fn test_find_all_refs_re_export_broken(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a.ts
-/*1*/export { /*2*/x };";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"// @Filename: /a.ts
+/*1*/export { /*2*/x };", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -671,10 +617,8 @@ use crate::tests::prelude::*;
 
 // findAllRefsReExport_broken2_test.go:10
 pub fn test_find_all_refs_re_export_broken2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
-/*1*/export { /*2*/x } from "nonsense";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
+/*1*/export { /*2*/x } from "nonsense";"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -686,8 +630,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsReExportLocal_test.go:10
 pub fn test_find_all_refs_re_export_local(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @noLib: true
+    fourslash::run_generated_test(t, r#"// @noLib: true
 // @strict: false
 // @Filename: /a.ts
 [|var /*ax0*/[|{| "isDefinition": true, "contextRangeIndex": 0 |}x|];|]
@@ -695,8 +638,7 @@ pub fn test_find_all_refs_re_export_local(t: &T) {
 [|export { /*ax2*/[|{| "contextRangeIndex": 4 |}x|] as /*ay*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 4 |}y|] };|]
 // @Filename: /b.ts
 [|import { /*bx0*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 7 |}x|], /*by0*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 7 |}y|] } from "./a";|]
-/*bx1*/[|x|]; /*by1*/[|y|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*bx1*/[|x|]; /*by1*/[|y|];"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["ax0", "ax1", "ax2", "bx0", "bx1", "ay", "by0", "by1"]);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[5]))]);
@@ -714,8 +656,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsReExportRightNameWrongSymbol_test.go:10
 pub fn test_find_all_refs_re_export_right_name_wrong_symbol(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 [|export const /*a*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}x|] = 0;|]
 // @Filename: /b.ts
 [|export const /*b*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 2 |}x|] = 0;|]
@@ -724,8 +665,7 @@ pub fn test_find_all_refs_re_export_right_name_wrong_symbol(t: &T) {
 [|import { /*cFromA*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 6 |}x|] } from "./a";|]
 /*cUse*/[|x|];
 // @Filename: /d.ts
-[|import { /*d*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 9 |}x|] } from "./c";|]"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+[|import { /*d*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 9 |}x|] } from "./c";|]"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["a", "b", "cFromB", "cFromA", "cUse", "d"]);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1]))]);
@@ -743,14 +683,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsReExportStar_test.go:10
 pub fn test_find_all_refs_re_export_star(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 export function /*0*/foo(): void {}
 // @Filename: /b.ts
 export * from "./a";
 // @Filename: /c.ts
-import { /*1*/foo } from "./b";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { /*1*/foo } from "./b";"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["0", "1"]);
     });
@@ -763,15 +701,13 @@ use crate::tests::prelude::*;
 
 // findAllRefsReExportStarAs_test.go:10
 pub fn test_find_all_refs_re_export_star_as(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /leafModule.ts
+    fourslash::run_generated_test(t, r"// @Filename: /leafModule.ts
 export const /*helloDef*/hello = () => 'Hello';
 // @Filename: /exporting.ts
 export * as /*leafDef*/Leaf from './leafModule';
 // @Filename: /importing.ts
  import { /*leafImportDef*/Leaf } from './exporting';
- /*leafUse*/[|Leaf|]./*helloUse*/[|hello|]()";
-    fourslash::run_generated_test(t, content, |f, t| {
+ /*leafUse*/[|Leaf|]./*helloUse*/[|hello|]()", |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["helloDef", "helloUse", "leafDef", "leafImportDef", "leafUse"]);
     });
@@ -784,12 +720,10 @@ use crate::tests::prelude::*;
 
 // findAllRefsReExports2_test.go:10
 pub fn test_find_all_refs_re_exports2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 export function /*1*/foo(): void {}
 // @Filename: /b.ts
-import { foo as oof } from "./a";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+import { foo as oof } from "./a";"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["1"]);
     });
@@ -802,8 +736,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsReExportsUseInImportType_test.go:12
 pub fn test_find_all_refs_re_exports_use_in_import_type(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /foo/types/types.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /foo/types/types.ts
 [|export type /*full0*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}Full|] = { prop: string; };|]
 // @Filename: /foo/types/index.ts
 [|import * as /*foo0*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 2 |}foo|] from './types';|]
@@ -812,8 +745,7 @@ pub fn test_find_all_refs_re_exports_use_in_import_type(t: &T) {
 [|import { /*foo2*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 6 |}foo|] } from './foo/types';|]
 export type fullType = /*foo3*/[|foo|]./*full1*/[|Full|];
 type namespaceImport = typeof import('./foo/types');
-type fullType2 = import('./foo/types')./*foo4*/[|foo|]./*full2*/[|Full|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+type fullType2 = import('./foo/types')./*foo4*/[|foo|]./*full2*/[|Full|];"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["full0", "full1", "full2", "foo0", "foo1", "foo2", "foo3", "foo4"]);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[9])), Any::RangeMarker(Arc::clone(&f.ranges()[11]))]);
@@ -831,8 +763,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsRedeclaredPropertyInDerivedInterface_test.go:10
 pub fn test_find_all_refs_redeclared_property_in_derived_interface(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noLib: true
+    fourslash::run_generated_test(t, r"// @noLib: true
 interface A {
     readonly /*0*/x: number | string;
 }
@@ -840,8 +771,7 @@ interface B extends A {
     readonly /*1*/x: number;
 }
 const a: A = { /*2*/x: 0 };
-const b: B = { /*3*/x: 0 };";
-    fourslash::run_generated_test(t, content, |f, t| {
+const b: B = { /*3*/x: 0 };", |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
     });
 }
@@ -853,13 +783,11 @@ use crate::tests::prelude::*;
 
 // findAllRefsRenameImportWithSameName_test.go:10
 pub fn test_find_all_refs_rename_import_with_same_name(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 [|export const /*0*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 0 |}x|] = 0;|]
 //@Filename: /b.ts
 [|import { /*1*/[|{| "contextRangeIndex": 2 |}x|] as /*2*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 2 |}x|] } from "./a";|]
-/*3*/[|x|];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*3*/[|x|];"#, |f, t| {
         f.verify_no_errors(t);
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
         f.verify_baseline_rename(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[4])), Any::RangeMarker(Arc::clone(&f.ranges()[5]))]);
@@ -873,12 +801,10 @@ use crate::tests::prelude::*;
 
 // findAllRefsRootSymbols_test.go:10
 pub fn test_find_all_refs_root_symbols(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I { /*0*/x: {}; }
+    fourslash::run_generated_test(t, r"interface I { /*0*/x: {}; }
 interface J { /*1*/x: {}; }
 declare const o: (I | J) & { /*2*/x: string };
-o./*3*/x;";
-    fourslash::run_generated_test(t, content, |f, t| {
+o./*3*/x;", |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
     });
 }
@@ -890,8 +816,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsThisKeyword_test.go:10
 pub fn test_find_all_refs_this_keyword(t: &T) {
-    t.parallel();
-    let content: &str = r"// @noLib: true
+    fourslash::run_generated_test(t, r"// @noLib: true
 /*1*/this;
 function f(/*2*/this) {
     return /*3*/this;
@@ -913,8 +838,7 @@ class C {
 }
 // These are *not* real uses of the 'this' keyword, they are identifiers.
 const x = { /*10*/this: 0 }
-x./*11*/this;";
-    fourslash::run_generated_test(t, content, |f, t| {
+x./*11*/this;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]);
     });
 }
@@ -926,8 +850,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsThisKeywordMultipleFiles_test.go:10
 pub fn test_find_all_refs_this_keyword_multiple_files(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: file1.ts
+    fourslash::run_generated_test(t, r"// @Filename: file1.ts
 /*1*/this; /*2*/this;
 // @Filename: file2.ts
 /*3*/this;
@@ -935,8 +858,7 @@ pub fn test_find_all_refs_this_keyword_multiple_files(t: &T) {
 // @Filename: file3.ts
  ((x = /*5*/this, y) => /*6*/this)(/*7*/this, /*8*/this);
  // different 'this'
- function f(this) { return this; }";
-    fourslash::run_generated_test(t, content, |f, t| {
+ function f(this) { return this; }", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8"]);
     });
 }
@@ -948,8 +870,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsTripleSlashRef1_test.go:10
 pub fn test_find_all_refs_triple_slash_ref1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /node_modules/@types/react/index.d.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /node_modules/@types/react/index.d.ts
 export type JSX = {};
 
 // @Filename: /node_modules/excalidraw/index.d.ts
@@ -957,8 +878,7 @@ export type JSX = {};
 
 // @Filename: /index.ts
 import type {JSX} from '/*m*/react';
-"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["m"]);
     });
 }
@@ -970,10 +890,8 @@ use crate::tests::prelude::*;
 
 // findAllRefsTypeParameterInMergedInterface_test.go:10
 pub fn test_find_all_refs_type_parameter_in_merged_interface(t: &T) {
-    t.parallel();
-    let content: &str = r"interface I</*1*/T> { a: /*2*/T }
-interface I</*3*/T> { b: /*4*/T }";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"interface I</*1*/T> { a: /*2*/T }
+interface I</*3*/T> { b: /*4*/T }", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -985,8 +903,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsTypedef_test.go:10
 pub fn test_find_all_refs_typedef(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: /a.js
 /**
  * @typedef I {Object}
@@ -995,8 +912,7 @@ pub fn test_find_all_refs_typedef(t: &T) {
 
 /** @type {I} */
 let x;
-x./*3*/p;";
-    fourslash::run_generated_test(t, content, |f, t| {
+x./*3*/p;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1008,16 +924,14 @@ use crate::tests::prelude::*;
 
 // findAllRefsTypedef_importType_test.go:10
 pub fn test_find_all_refs_typedef_import_type(t: &T) {
-    t.parallel();
-    let content: &str = r"// @allowJs: true
+    fourslash::run_generated_test(t, r"// @allowJs: true
 // @Filename: /a.js
 module.exports = 0;
 /** /*1*/@typedef {number} /*2*/Foo */
 const dummy = 0;
 // @Filename: /b.js
 /** @type {import('./a')./*3*/Foo} */
-const x = 0;";
-    fourslash::run_generated_test(t, content, |f, t| {
+const x = 0;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1029,12 +943,10 @@ use crate::tests::prelude::*;
 
 // findAllRefsTypeofImport_test.go:10
 pub fn test_find_all_refs_typeof_import(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.ts
+    fourslash::run_generated_test(t, r#"// @Filename: /a.ts
 /*1*/export const /*2*/x = 0;
 declare const a: typeof import("./a");
-a./*3*/x;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+a./*3*/x;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1046,8 +958,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsUnionProperty_test.go:10
 pub fn test_find_all_refs_union_property(t: &T) {
-    t.parallel();
-    let content: &str = r#"type T =
+    fourslash::run_generated_test(t, r#"type T =
     | { /*t0*/type: "a", /*p0*/prop: number }
     | { /*t1*/type: "b", /*p1*/prop: string };
 const tt: T = {
@@ -1059,8 +970,7 @@ if (t./*t3*/type === "a") {
     t./*t4*/type;
 } else {
     t./*t5*/type;
-}"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+}"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["t0", "t1", "t3", "t4", "t5", "t2", "p0", "p1", "p2"]);
     });
 }
@@ -1072,14 +982,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsUnresolvedSymbols1_test.go:10
 pub fn test_find_all_refs_unresolved_symbols1(t: &T) {
-    t.parallel();
-    let content: &str = r"let a: /*a0*/Bar;
+    fourslash::run_generated_test(t, r"let a: /*a0*/Bar;
 let b: /*a1*/Bar<string>;
 let c: /*a2*/Bar<string, number>;
 let d: /*b0*/Bar./*c0*/X;
 let e: /*b1*/Bar./*c1*/X<string>;
-let f: /*b2*/Bar./*d0*/X./*e0*/Y;";
-    fourslash::run_generated_test(t, content, |f, t| {
+let f: /*b2*/Bar./*d0*/X./*e0*/Y;", |f, t| {
         f.verify_baseline_find_all_references(t, &["a0", "a1", "a2", "b0", "b1", "b2", "c0", "c1", "d0", "e0"]);
     });
 }
@@ -1091,16 +999,14 @@ use crate::tests::prelude::*;
 
 // findAllRefsUnresolvedSymbols2_test.go:10
 pub fn test_find_all_refs_unresolved_symbols2(t: &T) {
-    t.parallel();
-    let content: &str = r#"import { /*a0*/Bar } from "does-not-exist";
+    fourslash::run_generated_test(t, r#"import { /*a0*/Bar } from "does-not-exist";
 
 let a: /*a1*/Bar;
 let b: /*a2*/Bar<string>;
 let c: /*a3*/Bar<string, number>;
 let d: /*a4*/Bar./*b0*/X;
 let e: /*a5*/Bar./*b1*/X<string>;
-let f: /*a6*/Bar./*c0*/X./*d0*/Y;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+let f: /*a6*/Bar./*c0*/X./*d0*/Y;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["a0", "a1", "a2", "a3", "a4", "a5", "a6", "b0", "b1", "c0", "d0"]);
     });
 }
@@ -1112,16 +1018,14 @@ use crate::tests::prelude::*;
 
 // findAllRefsUnresolvedSymbols3_test.go:10
 pub fn test_find_all_refs_unresolved_symbols3(t: &T) {
-    t.parallel();
-    let content: &str = r#"import * as /*a0*/Bar from "does-not-exist";
+    fourslash::run_generated_test(t, r#"import * as /*a0*/Bar from "does-not-exist";
 
 let a: /*a1*/Bar;
 let b: /*a2*/Bar<string>;
 let c: /*a3*/Bar<string, number>;
 let d: /*a4*/Bar./*b0*/X;
 let e: /*a5*/Bar./*b1*/X<string>;
-let f: /*a6*/Bar./*c0*/X./*d0*/Y;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+let f: /*a6*/Bar./*c0*/X./*d0*/Y;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["a0", "a1", "a2", "a3", "a4", "a5", "a6", "b0", "b1", "c0", "d0"]);
     });
 }
@@ -1133,14 +1037,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsWithLeadingUnderscoreNames1_test.go:10
 pub fn test_find_all_refs_with_leading_underscore_names1(t: &T) {
-    t.parallel();
-    let content: &str = r"class Foo {
+    fourslash::run_generated_test(t, r"class Foo {
     /*1*/public /*2*/_bar() { return 0; }
 }
 
 var x: Foo;
-x./*3*/_bar;";
-    fourslash::run_generated_test(t, content, |f, t| {
+x./*3*/_bar;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1152,14 +1054,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsWithLeadingUnderscoreNames2_test.go:10
 pub fn test_find_all_refs_with_leading_underscore_names2(t: &T) {
-    t.parallel();
-    let content: &str = r"class Foo {
+    fourslash::run_generated_test(t, r"class Foo {
     /*1*/public /*2*/__bar() { return 0; }
 }
 
 var x: Foo;
-x./*3*/__bar;";
-    fourslash::run_generated_test(t, content, |f, t| {
+x./*3*/__bar;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1171,14 +1071,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsWithLeadingUnderscoreNames3_test.go:10
 pub fn test_find_all_refs_with_leading_underscore_names3(t: &T) {
-    t.parallel();
-    let content: &str = r"class Foo {
+    fourslash::run_generated_test(t, r"class Foo {
     /*1*/public /*2*/___bar() { return 0; }
 }
 
 var x: Foo;
-x./*3*/___bar;";
-    fourslash::run_generated_test(t, content, |f, t| {
+x./*3*/___bar;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1190,14 +1088,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsWithLeadingUnderscoreNames4_test.go:10
 pub fn test_find_all_refs_with_leading_underscore_names4(t: &T) {
-    t.parallel();
-    let content: &str = r"class Foo {
+    fourslash::run_generated_test(t, r"class Foo {
     /*1*/public /*2*/____bar() { return 0; }
 }
 
 var x: Foo;
-x./*3*/____bar;";
-    fourslash::run_generated_test(t, content, |f, t| {
+x./*3*/____bar;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1209,8 +1105,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsWithLeadingUnderscoreNames5_test.go:10
 pub fn test_find_all_refs_with_leading_underscore_names5(t: &T) {
-    t.parallel();
-    let content: &str = r"class Foo {
+    fourslash::run_generated_test(t, r"class Foo {
     public _bar;
     public __bar;
     /*1*/public /*2*/___bar;
@@ -1221,8 +1116,7 @@ var x: Foo;
 x._bar;
 x.__bar;
 x./*3*/___bar;
-x.____bar;";
-    fourslash::run_generated_test(t, content, |f, t| {
+x.____bar;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1234,8 +1128,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsWithLeadingUnderscoreNames6_test.go:10
 pub fn test_find_all_refs_with_leading_underscore_names6(t: &T) {
-    t.parallel();
-    let content: &str = r"class Foo {
+    fourslash::run_generated_test(t, r"class Foo {
     public _bar;
     /*1*/public /*2*/__bar;
     public ___bar;
@@ -1246,8 +1139,7 @@ var x: Foo;
 x._bar;
 x./*3*/__bar;
 x.___bar;
-x.____bar;";
-    fourslash::run_generated_test(t, content, |f, t| {
+x.____bar;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1259,11 +1151,9 @@ use crate::tests::prelude::*;
 
 // findAllRefsWithLeadingUnderscoreNames7_test.go:10
 pub fn test_find_all_refs_with_leading_underscore_names7(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*/function /*2*/__foo() {
+    fourslash::run_generated_test(t, r"/*1*/function /*2*/__foo() {
     /*3*/__foo();
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1275,11 +1165,9 @@ use crate::tests::prelude::*;
 
 // findAllRefsWithLeadingUnderscoreNames8_test.go:10
 pub fn test_find_all_refs_with_leading_underscore_names8(t: &T) {
-    t.parallel();
-    let content: &str = r"(/*1*/function /*2*/__foo() {
+    fourslash::run_generated_test(t, r"(/*1*/function /*2*/__foo() {
     /*3*/__foo();
-})";
-    fourslash::run_generated_test(t, content, |f, t| {
+})", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1291,11 +1179,9 @@ use crate::tests::prelude::*;
 
 // findAllRefsWithLeadingUnderscoreNames9_test.go:10
 pub fn test_find_all_refs_with_leading_underscore_names9(t: &T) {
-    t.parallel();
-    let content: &str = r"(/*1*/function /*2*/___foo() {
+    fourslash::run_generated_test(t, r"(/*1*/function /*2*/___foo() {
     /*3*/___foo();
-})";
-    fourslash::run_generated_test(t, content, |f, t| {
+})", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1307,14 +1193,12 @@ use crate::tests::prelude::*;
 
 // findAllRefsWithShorthandPropertyAssignment_test.go:10
 pub fn test_find_all_refs_with_shorthand_property_assignment(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @lib: es5
+    fourslash::run_generated_test(t, r#"// @lib: es5
 var /*0*/name = "Foo";
 
 var obj = { /*1*/name };
 var obj1 = { /*2*/name: /*3*/name };
-obj./*4*/name;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+obj./*4*/name;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "3", "1", "2", "4"]);
     });
 }
@@ -1326,16 +1210,14 @@ use crate::tests::prelude::*;
 
 // findAllRefsWithShorthandPropertyAssignment2_test.go:10
 pub fn test_find_all_refs_with_shorthand_property_assignment2(t: &T) {
-    t.parallel();
-    let content: &str = r#"var /*0*/dx = "Foo";
+    fourslash::run_generated_test(t, r#"var /*0*/dx = "Foo";
 
 namespace M { export var /*1*/dx; }
 namespace M {
    var z = 100;
    export var y = { /*2*/dx, z };
 }
-M.y./*3*/dx;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+M.y./*3*/dx;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
     });
 }
@@ -1347,8 +1229,7 @@ use crate::tests::prelude::*;
 
 // findAllRefsWriteAccess_test.go:10
 pub fn test_find_all_refs_write_access(t: &T) {
-    t.parallel();
-    let content: &str = r"interface Obj {
+    fourslash::run_generated_test(t, r"interface Obj {
     [`/*1*/num`]: number;
 }
 
@@ -1364,8 +1245,7 @@ o['num'] = 2;
 o[`num`] = 3;
 
 o['num'];
-o[`num`];";
-    fourslash::run_generated_test(t, content, |f, t| {
+o[`num`];", |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -1377,16 +1257,14 @@ use crate::tests::prelude::*;
 
 // findReferencesAcrossMultipleProjects_test.go:10
 pub fn test_find_references_across_multiple_projects(t: &T) {
-    t.parallel();
-    let content: &str = r#"//@Filename: a.ts
+    fourslash::run_generated_test(t, r#"//@Filename: a.ts
 /*1*/var /*2*/x: number;
 //@Filename: b.ts
 /// <reference path="a.ts" />
 /*3*/x++;
 //@Filename: c.ts
 /// <reference path="a.ts" />
-/*4*/x++;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+/*4*/x++;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -1426,8 +1304,7 @@ use crate::tests::prelude::*;
 
 // findReferencesAfterEdit_test.go:10
 pub fn test_find_references_after_edit(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: a.ts
+    fourslash::run_generated_test(t, r"// @Filename: a.ts
 interface A {
     /*1*/foo: string;
 }
@@ -1436,8 +1313,7 @@ interface A {
 /**/
 function foo(x: A) {
     x./*2*/foo
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
         f.go_to_marker(t, "");
         f.insert(t, r"
@@ -1453,8 +1329,7 @@ use crate::tests::prelude::*;
 
 // findReferencesBindingPatternInJsdocNoCrash1_test.go:10
 pub fn test_find_references_binding_pattern_in_jsdoc_no_crash1(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: node_modules/use-query/package.json
 {
   "name": "use-query",
@@ -1479,8 +1354,7 @@ interface BottomSheetModalProps {
 }
 // @Filename: src/index.ts
 import { useQuery } from "use-query";
-const { /*1*/data } = useQuery();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const { /*1*/data } = useQuery();"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -1492,8 +1366,7 @@ use crate::tests::prelude::*;
 
 // findReferencesBindingPatternInJsdocNoCrash2_test.go:10
 pub fn test_find_references_binding_pattern_in_jsdoc_no_crash2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @moduleResolution: bundler
+    fourslash::run_generated_test(t, r#"// @moduleResolution: bundler
 // @Filename: node_modules/use-query/package.json
 {
   "name": "use-query",
@@ -1518,8 +1391,7 @@ interface BottomSheetModalProps {
 }
 // @Filename: src/index.ts
 import { useQuery } from "use-query";
-const { /*1*/data } = useQuery();"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const { /*1*/data } = useQuery();"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -1531,8 +1403,7 @@ use crate::tests::prelude::*;
 
 // findReferencesDefinitionDisplayParts_test.go:10
 pub fn test_find_references_definition_display_parts(t: &T) {
-    t.parallel();
-    let content: &str = r#"class Gre/*1*/eter {
+    fourslash::run_generated_test(t, r#"class Gre/*1*/eter {
     someFunction() { th/*2*/is;  }
 }
 
@@ -1540,8 +1411,7 @@ type Options = "opt/*3*/ion 1" | "option 2";
 let myOption: Options = "option 1";
 
 some/*4*/Label:
-break someLabel;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+break someLabel;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
     });
 }
@@ -1553,8 +1423,7 @@ use crate::tests::prelude::*;
 
 // findReferencesJSXTagName_test.go:10
 pub fn test_find_references_jsx_tag_name(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: index.tsx
+    fourslash::run_generated_test(t, r#"// @Filename: index.tsx
 import { /*1*/SubmissionComp } from "./RedditSubmission"
 function displaySubreddit(subreddit: string) {
     let components = submissions
@@ -1562,8 +1431,7 @@ function displaySubreddit(subreddit: string) {
 }
 // @Filename: RedditSubmission.ts
 export const /*2*/SubmissionComp = (submission: SubmissionProps) =>
-    <div style={{ fontFamily: "sans-serif" }}></div>;"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    <div style={{ fontFamily: "sans-serif" }}></div>;"#, |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2"]);
     });
 }
@@ -1575,11 +1443,9 @@ use crate::tests::prelude::*;
 
 // findReferencesJSXTagName2_test.go:10
 pub fn test_find_references_jsx_tag_name2(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: index.tsx
+    fourslash::run_generated_test(t, r"// @Filename: index.tsx
 /*1*/const /*2*/obj = {Component: () => <div/>};
-const element = </*3*/obj.Component/>;";
-    fourslash::run_generated_test(t, content, |f, t| {
+const element = </*3*/obj.Component/>;", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
     });
 }
@@ -1591,8 +1457,7 @@ use crate::tests::prelude::*;
 
 // findReferencesJSXTagName3_test.go:10
 pub fn test_find_references_jsx_tag_name3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @jsx: preserve
+    fourslash::run_generated_test(t, r"// @jsx: preserve
 // @Filename: /a.tsx
 namespace JSX {
     export interface Element { }
@@ -1609,8 +1474,7 @@ namespace JSX {
 
 const x = [|<[|/*7*/Comp|]>
     Content
-</[|/*8*/Comp|]>|];";
-    fourslash::run_generated_test(t, content, |f, t| {
+</[|/*8*/Comp|]>|];", |f, t| {
         f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8"]);
         f.verify_baseline_document_highlights(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[1])), Any::RangeMarker(Arc::clone(&f.ranges()[5])), Any::RangeMarker(Arc::clone(&f.ranges()[7])), Any::RangeMarker(Arc::clone(&f.ranges()[8])), Any::RangeMarker(Arc::clone(&f.ranges()[9]))]);
         f.verify_baseline_document_highlights(t, None, &[Any::RangeMarker(Arc::clone(&f.ranges()[3])), Any::RangeMarker(Arc::clone(&f.ranges()[11])), Any::RangeMarker(Arc::clone(&f.ranges()[12]))]);
@@ -1624,13 +1488,11 @@ use crate::tests::prelude::*;
 
 // findReferencesSeeTagInTs_test.go:10
 pub fn test_find_references_see_tag_in_ts(t: &T) {
-    t.parallel();
-    let content: &str = r"function doStuffWithStuff/*1*/(stuff: { quantity: number }) {}
+    fourslash::run_generated_test(t, r"function doStuffWithStuff/*1*/(stuff: { quantity: number }) {}
 
 declare const stuff: { quantity: number };
 /** @see {doStuffWithStuff} */
-if (stuff.quantity) {}";
-    fourslash::run_generated_test(t, content, |f, t| {
+if (stuff.quantity) {}", |f, t| {
         f.verify_baseline_find_all_references(t, &["1"]);
     });
 }
@@ -1642,8 +1504,7 @@ use crate::tests::prelude::*;
 
 // fixExactOptionalUnassignableProperties3_test.go:10
 pub fn test_fix_exact_optional_unassignable_properties3(t: &T) {
-    t.parallel();
-    let content: &str = r"// @strictNullChecks: true
+    fourslash::run_generated_test(t, r"// @strictNullChecks: true
 // @exactOptionalPropertyTypes: true
 // @Filename: fixExactOptionalUnassignableProperties2.ts
 import { INodeModules } from 'foo'
@@ -1657,8 +1518,7 @@ console.log(inm)
 // @Filename: node_modules/@types/foo/index.d.ts
 export interface INodeModules {
     a?: number
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_code_fix_not_available(t, &[]);
     });
 }
@@ -1670,8 +1530,7 @@ use crate::tests::prelude::*;
 
 // fixExactOptionalUnassignableProperties7_test.go:10
 pub fn test_fix_exact_optional_unassignable_properties7(t: &T) {
-    t.parallel();
-    let content: &str = r"// @strictNullChecks: true
+    fourslash::run_generated_test(t, r"// @strictNullChecks: true
 // @exactOptionalPropertyTypes: true
 // @Filename: fixExactOptionalUnassignableProperties6.ts
 class Feh {
@@ -1679,8 +1538,7 @@ class Feh {
         this._finishedPromiseCallback({ error/**/ });
     }
     private _finishedPromiseCallback: (arg: { error?: string }) => void = () => {};
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.verify_code_fix_not_available(t, &[]);
     });
 }
@@ -1692,8 +1550,7 @@ use crate::tests::prelude::*;
 
 // fixExactOptionalUnassignableProperties9_test.go:10
 pub fn test_fix_exact_optional_unassignable_properties9(t: &T) {
-    t.parallel();
-    let content: &str = r"// @strictNullChecks: true
+    fourslash::run_generated_test(t, r"// @strictNullChecks: true
 // @exactOptionalPropertyTypes: true
 interface IAny {
     a?: any
@@ -1703,8 +1560,7 @@ interface J {
 }
 declare var iany: IAny
 declare var j: J
-iany/**/ = j";
-    fourslash::run_generated_test(t, content, |f, t| {
+iany/**/ = j", |f, t| {
         f.verify_code_fix_not_available(t, &[]);
     });
 }
@@ -1716,11 +1572,9 @@ use crate::tests::prelude::*;
 
 // fixingTypeParametersQuickInfo_test.go:10
 pub fn test_fixing_type_parameters_quick_info(t: &T) {
-    t.parallel();
-    let content: &str = r"// @strict: false
+    fourslash::run_generated_test(t, r"// @strict: false
 declare function f<T>(x: T, y: (p: T) => T, z: (p: T) => T): T;
-var /*1*/result = /*2*/f(0, /*3*/x => null, /*4*/x => x.blahblah);";
-    fourslash::run_generated_test(t, content, |f, t| {
+var /*1*/result = /*2*/f(0, /*3*/x => null, /*4*/x => x.blahblah);", |f, t| {
         f.verify_quick_info_at(t, "1", "var result: number", "");
         f.verify_quick_info_at(t, "2", "function f<number>(x: number, y: (p: number) => number, z: (p: number) => number): number", "");
         f.verify_quick_info_at(t, "3", "(parameter) x: number", "");
@@ -1735,8 +1589,7 @@ use crate::tests::prelude::*;
 
 // foldingRangeJSXPropertyAccess_test.go:10
 pub fn test_folding_range_jsx_property_access(t: &T) {
-    t.parallel();
-    let content: &str = r"// @jsx: preserve
+    fourslash::run_generated_test(t, r"// @jsx: preserve
 // @Filename: /a.tsx
 const Components =[| {
   Nested: () => null
@@ -1744,8 +1597,7 @@ const Components =[| {
 
 export const Test = () =>[| {
   return [|<Components.Nested></Components.Nested>|];
-}|];";
-    fourslash::run_generated_test(t, content, |f, t| {
+}|];", |f, t| {
         f.verify_outlining_spans(t, &[]);
     });
 }
@@ -1822,8 +1674,7 @@ use crate::tests::prelude::*;
 
 // forceIndentAfterNewLineInsert_test.go:10
 pub fn test_force_indent_after_new_line_insert(t: &T) {
-    t.parallel();
-    let content: &str = r"function f1()
+    fourslash::run_generated_test(t, r"function f1()
 { return 0; }
 function f2()
 {
@@ -1832,8 +1683,7 @@ return 0;
 function g()
 { function h() {
 return 0;
-}}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}}", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"function f1() { return 0; }
 function f2() {
@@ -1854,10 +1704,8 @@ use crate::tests::prelude::*;
 
 // format01_test.go:10
 pub fn test_format01(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
-/**/namespace Default{var x= ( { } ) ;}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"// @lib: es5
+/**/namespace Default{var x= ( { } ) ;}", |f, t| {
         f.mark_test_as_strada_server();
         f.format_document(t, "");
         f.go_to_marker(t, "");
@@ -1872,10 +1720,8 @@ use crate::tests::prelude::*;
 
 // formatAfterMultilineComment_test.go:10
 pub fn test_format_after_multiline_comment(t: &T) {
-    t.parallel();
-    let content: &str = r#"/*foo
-*/"123123";"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"/*foo
+*/"123123";"#, |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r#"/*foo
 */"123123";"#);
@@ -1889,9 +1735,7 @@ use crate::tests::prelude::*;
 
 // formatAfterObjectLiteral_test.go:10
 pub fn test_format_after_object_literal(t: &T) {
-    t.parallel();
-    let content: &str = "/**/namespace Default{var x= ( { } ) ;}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "/**/namespace Default{var x= ( { } ) ;}", |f, t| {
         f.format_document(t, "");
         f.go_to_marker(t, "");
         f.verify_current_line_content(t, "namespace Default { var x = ({}); }");
@@ -1905,9 +1749,7 @@ use crate::tests::prelude::*;
 
 // formatAfterPasteInString_test.go:10
 pub fn test_format_after_paste_in_string(t: &T) {
-    t.parallel();
-    let content: &str = "/*2*/const x = f('aa/*1*/a').x()";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "/*2*/const x = f('aa/*1*/a').x()", |f, t| {
         f.go_to_marker(t, "1");
         f.paste(t, "bb");
         f.format_document(t, "");
@@ -1923,13 +1765,11 @@ use crate::tests::prelude::*;
 
 // formatAfterWhitespace_test.go:10
 pub fn test_format_after_whitespace(t: &T) {
-    t.parallel();
-    let content: &str = r"function foo()
+    fourslash::run_generated_test(t, r"function foo()
 {
     var bar;
     /*1*/
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_marker(t, "1");
         f.insert_line(t, "");
         f.verify_current_file_content(t, r"function foo()
@@ -1948,10 +1788,8 @@ use crate::tests::prelude::*;
 
 // formatAnyTypeLiteral_test.go:10
 pub fn test_format_any_type_literal(t: &T) {
-    t.parallel();
-    let content: &str = r"function foo(x: { } /*objLit*/){
-/**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"function foo(x: { } /*objLit*/){
+/**/", |f, t| {
         f.go_to_marker(t, "");
         f.insert(t, "}");
         f.go_to_marker(t, "objLit");
@@ -1966,8 +1804,7 @@ use crate::tests::prelude::*;
 
 // formatArrayLiteralExpression_test.go:10
 pub fn test_format_array_literal_expression(t: &T) {
-    t.parallel();
-    let content: &str = r"export let Things = [{
+    fourslash::run_generated_test(t, r"export let Things = [{
     Hat: 'hat', /*1*/
     Glove: 'glove',
     Umbrella: 'umbrella'
@@ -1987,8 +1824,7 @@ export let Things2 = [
         Salad: 'salad', /*7*/
         Burrito: ['burrito', 'carne asada', 'tinga de res', 'tinga de pollo'], /*8*/
         Pie: 'pie'
-    }];/*9*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+    }];/*9*/", |f, t| {
         f.format_document(t, "");
         f.go_to_marker(t, "1");
         f.verify_current_line_content(t, "    Hat: 'hat',");
@@ -2018,9 +1854,7 @@ use crate::tests::prelude::*;
 
 // formatArrayOrObjectLiteralsInVariableList_test.go:10
 pub fn test_format_array_or_object_literals_in_variable_list(t: &T) {
-    t.parallel();
-    let content: &str = "var v30 = [1, 2], v31, v32, v33 = [0], v34 = {'a': true}, v35;/**/";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "var v30 = [1, 2], v31, v32, v33 = [0], v34 = {'a': true}, v35;/**/", |f, t| {
         f.format_document(t, "");
         f.go_to_marker(t, "");
         f.verify_current_line_content(t, "var v30 = [1, 2], v31, v32, v33 = [0], v34 = { 'a': true }, v35;");
@@ -2034,11 +1868,9 @@ use crate::tests::prelude::*;
 
 // formatAsyncClassMethod1_test.go:10
 pub fn test_format_async_class_method1(t: &T) {
-    t.parallel();
-    let content: &str = r"class Foo {
+    fourslash::run_generated_test(t, r"class Foo {
     async     foo() {}
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"class Foo {
     async foo() { }
@@ -2053,11 +1885,9 @@ use crate::tests::prelude::*;
 
 // formatAsyncClassMethod2_test.go:10
 pub fn test_format_async_class_method2(t: &T) {
-    t.parallel();
-    let content: &str = r"class Foo {
+    fourslash::run_generated_test(t, r"class Foo {
     private    async     foo() {}
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"class Foo {
     private async foo() { }
@@ -2072,11 +1902,9 @@ use crate::tests::prelude::*;
 
 // formatAsyncComputedMethod_test.go:10
 pub fn test_format_async_computed_method(t: &T) {
-    t.parallel();
-    let content: &str = r"class C {
+    fourslash::run_generated_test(t, r"class C {
     /*method*/async [0]() { }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.format_document(t, "");
         f.go_to_marker(t, "method");
         f.verify_current_line_content(t, "    async [0]() { }");
@@ -2090,11 +1918,9 @@ use crate::tests::prelude::*;
 
 // formatAsyncKeyword_test.go:10
 pub fn test_format_async_keyword(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*/let x = async         () => 1;
+    fourslash::run_generated_test(t, r"/*1*/let x = async         () => 1;
 /*2*/let y = async() => 1;
-/*3*/let z = async    function   () { return 1; };";
-    fourslash::run_generated_test(t, content, |f, t| {
+/*3*/let z = async    function   () { return 1; };", |f, t| {
         f.format_document(t, "");
         f.go_to_marker(t, "1");
         f.verify_current_line_content(t, "let x = async () => 1;");
@@ -2112,12 +1938,10 @@ use crate::tests::prelude::*;
 
 // formatBracketInSwitchCase_test.go:10
 pub fn test_format_bracket_in_switch_case(t: &T) {
-    t.parallel();
-    let content: &str = r"// @lib: es5
+    fourslash::run_generated_test(t, r"// @lib: es5
 switch (x) {
     case[]:
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.mark_test_as_strada_server();
         f.format_document(t, "");
         f.verify_current_file_content(t, r"switch (x) {
@@ -2133,12 +1957,10 @@ use crate::tests::prelude::*;
 
 // formatColonAndQMark_test.go:10
 pub fn test_format_colon_and_q_mark(t: &T) {
-    t.parallel();
-    let content: &str = r"class foo {/*1*/
+    fourslash::run_generated_test(t, r"class foo {/*1*/
     constructor (n?: number, m = 5, o?: string) { }/*2*/
     x:number = 1?2:3;/*3*/
-}/*4*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+}/*4*/", |f, t| {
         f.format_document(t, "");
         f.go_to_marker(t, "1");
         f.verify_current_line_content(t, "class foo {");
@@ -2158,8 +1980,7 @@ use crate::tests::prelude::*;
 
 // formatComments_test.go:10
 pub fn test_format_comments(t: &T) {
-    t.parallel();
-    let content: &str = r"_.chain()
+    fourslash::run_generated_test(t, r"_.chain()
 // wow/*callChain1*/
   .then()
 // waa/*callChain2*/
@@ -2169,8 +1990,7 @@ wow(
 // uaa/*argument1*/
     4
 // wua/*argument2*/
-);";
-    fourslash::run_generated_test(t, content, |f, t| {
+);", |f, t| {
         f.format_document(t, "");
         f.go_to_marker(t, "callChain1");
         f.verify_current_line_content(t, "    // wow");
@@ -2190,9 +2010,7 @@ use crate::tests::prelude::*;
 
 // formatConflictDiff3Marker1_test.go:10
 pub fn test_format_conflict_diff3_marker1(t: &T) {
-    t.parallel();
-    let content: &str = "class C {\n<<<<<<< HEAD\nv = 1;\n||||||| merged common ancestors\nv = 3;\n=======\nv = 2;\n>>>>>>> Branch - a\n}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "class C {\n<<<<<<< HEAD\nv = 1;\n||||||| merged common ancestors\nv = 3;\n=======\nv = 2;\n>>>>>>> Branch - a\n}", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, "class C {\n<<<<<<< HEAD\nv = 1;\n||||||| merged common ancestors\nv = 3;\n=======\nv = 2;\n>>>>>>> Branch - a\n}");
     });
@@ -2205,9 +2023,7 @@ use crate::tests::prelude::*;
 
 // formatConflictMarker1_test.go:10
 pub fn test_format_conflict_marker1(t: &T) {
-    t.parallel();
-    let content: &str = "class C {\n<<<<<<< HEAD\nv = 1;\n=======\nv = 2;\n>>>>>>> Branch - a\n}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "class C {\n<<<<<<< HEAD\nv = 1;\n=======\nv = 2;\n>>>>>>> Branch - a\n}", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, "class C {\n<<<<<<< HEAD\nv = 1;\n=======\nv = 2;\n>>>>>>> Branch - a\n}");
     });
@@ -2220,11 +2036,9 @@ use crate::tests::prelude::*;
 
 // formatControlFlowConstructs_test.go:10
 pub fn test_format_control_flow_constructs(t: &T) {
-    t.parallel();
-    let content: &str = r"if (true)/**/
+    fourslash::run_generated_test(t, r"if (true)/**/
 {     
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.format_document(t, "");
         f.go_to_marker(t, "");
         f.verify_current_line_content(t, "if (true) {");
@@ -2238,10 +2052,8 @@ use crate::tests::prelude::*;
 
 // formatDebuggerStatement_test.go:10
 pub fn test_format_debugger_statement(t: &T) {
-    t.parallel();
-    let content: &str = r"if(false){debugger;}
-  if    (   false   )   {    debugger  ;   }";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"if(false){debugger;}
+  if    (   false   )   {    debugger  ;   }", |f, t| {
         f.format_document(t, "");
         f.go_to_bof(t);
         f.verify_current_line_content(t, "if (false) { debugger; }");
@@ -2288,11 +2100,9 @@ use crate::tests::prelude::*;
 
 // formatDocumentNoCrashJsxAttrUnterminatedString_test.go:10
 pub fn test_format_document_no_crash_jsx_attr_unterminated_string(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a.tsx
+    fourslash::run_generated_test(t, r"// @Filename: /a.tsx
 const x = <HangupButton customClass = 'ha
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"const x = <HangupButton customClass= 'ha
 ");
@@ -2306,11 +2116,9 @@ use crate::tests::prelude::*;
 
 // formatDocumentNoCrashJsxNamespacedName1_test.go:10
 pub fn test_format_document_no_crash_jsx_namespaced_name1(t: &T) {
-    t.parallel();
-    let content: &str = r"// @Filename: /a.tsx
+    fourslash::run_generated_test(t, r"// @Filename: /a.tsx
 const x = <foo:bar />;
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"const x = <foo:bar />;
 ");
@@ -2324,11 +2132,9 @@ use crate::tests::prelude::*;
 
 // formatDocumentNoCrashJsxNamespacedName2_test.go:10
 pub fn test_format_document_no_crash_jsx_namespaced_name2(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.tsx
+    fourslash::run_generated_test(t, r#"// @Filename: /a.tsx
 const x = <A my-ns:attr="val" />;
-"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+"#, |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r#"const x = <A my-ns:attr="val" />;
 "#);
@@ -2342,9 +2148,7 @@ use crate::tests::prelude::*;
 
 // formatDocumentNoCrashLeadingWhitespace1_test.go:10
 pub fn test_format_document_no_crash_leading_whitespace1(t: &T) {
-    t.parallel();
-    let content: &str = " \n";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, " \n", |f, t| {
         f.format_document(t, "");
     });
 }
@@ -2356,9 +2160,7 @@ use crate::tests::prelude::*;
 
 // formatDocumentNoCrashLeadingWhitespace2_test.go:10
 pub fn test_format_document_no_crash_leading_whitespace2(t: &T) {
-    t.parallel();
-    let content: &str = " \n;";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, " \n;", |f, t| {
         f.format_document(t, "");
     });
 }
@@ -2370,10 +2172,8 @@ use crate::tests::prelude::*;
 
 // formatDocumentNoCrashShortLastLine_test.go:10
 pub fn test_format_document_no_crash_short_last_line(t: &T) {
-    t.parallel();
-    let content: &str = r"type X = {
-	b}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"type X = {
+	b}", |f, t| {
         f.format_document(t, "");
     });
 }
@@ -2385,8 +2185,7 @@ use crate::tests::prelude::*;
 
 // formatDocumentPreserveTrailingWhitespace_test.go:11
 pub fn test_format_document_preserve_trailing_whitespace(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 var a;     
 var b     
      
@@ -2395,8 +2194,7 @@ function b(){
     while(true){     
     }     
 }     
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         let mut opts233 = f.get_options();
         opts233.format_code_settings.editor_settings.trim_trailing_whitespace = Tristate::False;
         f.configure(t, opts233);
@@ -2421,8 +2219,7 @@ use crate::tests::prelude::*;
 
 // formatDocumentWithJSDoc_test.go:10
 pub fn test_format_document_with_jsdoc(t: &T) {
-    t.parallel();
-    let content: &str = r"/**
+    fourslash::run_generated_test(t, r"/**
  * JSDoc for things
  */
 function f() {
@@ -2433,8 +2230,7 @@ function f() {
      * multiline
      */
     var multiline;
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"/**
  * JSDoc for things
@@ -2458,9 +2254,7 @@ use crate::tests::prelude::*;
 
 // formatDocumentWithTrivia_test.go:10
 pub fn test_format_document_with_trivia(t: &T) {
-    t.parallel();
-    let content: &str = "  \n// 1 below   \n    \n// 2 above   \n    \nlet x;\n  \n// abc\n  \nlet y;\n  \n// 3 above\n   \nwhile (true) {\n    while (true) {\n    }\n      \n    // 4 above   \n}\n  \n// 5 above  \n   \n   ";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "  \n// 1 below   \n    \n// 2 above   \n    \nlet x;\n  \n// abc\n  \nlet y;\n  \n// 3 above\n   \nwhile (true) {\n    while (true) {\n    }\n      \n    // 4 above   \n}\n  \n// 5 above  \n   \n   ", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"
 // 1 below   
@@ -2495,13 +2289,11 @@ use crate::tests::prelude::*;
 
 // formatDocumentZeroTabSize_test.go:11
 pub fn test_format_document_zero_tab_size(t: &T) {
-    t.parallel();
-    let content: &str = r"function foo() {
+    fourslash::run_generated_test(t, r"function foo() {
     if (true) {
         var x = 1;
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         let mut opts = f.get_options();
         opts.format_code_settings.editor_settings.tab_size = 0;
         opts.format_code_settings.editor_settings.indent_size = 0;
@@ -2523,13 +2315,11 @@ use crate::tests::prelude::*;
 
 // formatDotAfterNumber_test.go:10
 pub fn test_format_dot_after_number(t: &T) {
-    t.parallel();
-    let content: &str = r"1+ 2 .toString() +3/*1*/
+    fourslash::run_generated_test(t, r"1+ 2 .toString() +3/*1*/
 1+ 2. .toString() +3/*2*/
 1+ 2.0 .toString() +3/*3*/
 1+ (2) .toString() +3/*4*/
-1+ 2_000 .toString() +3/*5*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+1+ 2_000 .toString() +3/*5*/", |f, t| {
         f.format_document(t, "");
         f.go_to_marker(t, "1");
         f.verify_current_line_content(t, "1 + 2 .toString() + 3");
@@ -2551,9 +2341,7 @@ use crate::tests::prelude::*;
 
 // formatEmptyBlock_test.go:10
 pub fn test_format_empty_block(t: &T) {
-    t.parallel();
-    let content: &str = "{}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "{}", |f, t| {
         f.go_to_eof(t);
         f.insert(t, r"
 ");
@@ -2569,9 +2357,7 @@ use crate::tests::prelude::*;
 
 // formatEmptyParamList_test.go:10
 pub fn test_format_empty_param_list(t: &T) {
-    t.parallel();
-    let content: &str = "function f( f: function){/*1*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "function f( f: function){/*1*/", |f, t| {
         f.go_to_marker(t, "1");
         f.insert(t, "}");
         f.verify_current_line_content(t, "function f(f: function) { }");
@@ -2585,9 +2371,7 @@ use crate::tests::prelude::*;
 
 // formatExportAssignment_test.go:10
 pub fn test_format_export_assignment(t: &T) {
-    t.parallel();
-    let content: &str = "export='foo';";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "export='foo';", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, "export = 'foo';");
     });
@@ -2600,8 +2384,7 @@ use crate::tests::prelude::*;
 
 // formatIfTryCatchBlocks_test.go:11
 pub fn test_format_if_try_catch_blocks(t: &T) {
-    t.parallel();
-    let content: &str = r"try {
+    fourslash::run_generated_test(t, r"try {
 }
 catch {
 }
@@ -2609,8 +2392,7 @@ catch {
 try {
 }
 catch (e) {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         let mut opts187 = f.get_options();
         opts187.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::True;
         f.configure(t, opts187);
@@ -2638,10 +2420,8 @@ use crate::tests::prelude::*;
 
 // formatIfWithEmptyCondition_test.go:11
 pub fn test_format_if_with_empty_condition(t: &T) {
-    t.parallel();
-    let content: &str = r"if () {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"if () {
+}", |f, t| {
         let mut opts123 = f.get_options();
         opts123.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::True;
         f.configure(t, opts123);
@@ -2659,11 +2439,9 @@ use crate::tests::prelude::*;
 
 // formatImplicitModule_test.go:10
 pub fn test_format_implicit_module(t: &T) {
-    t.parallel();
-    let content: &str = r"       export class A {
+    fourslash::run_generated_test(t, r"       export class A {
 
-       }";
-    fourslash::run_generated_test(t, content, |f, t| {
+       }", |f, t| {
         f.format_document(t, "");
         f.go_to_bof(t);
         f.verify_current_line_content(t, "export class A {");
@@ -2679,14 +2457,12 @@ use crate::tests::prelude::*;
 
 // formatImportDeclaration_test.go:10
 pub fn test_format_import_declaration(t: &T) {
-    t.parallel();
-    let content: &str = r"namespace Foo {/*1*/
+    fourslash::run_generated_test(t, r"namespace Foo {/*1*/
 }/*2*/
 
 import bar  =    Foo;/*3*/
 
-import bar2=Foo;/*4*/";
-    fourslash::run_generated_test(t, content, |f, t| {
+import bar2=Foo;/*4*/", |f, t| {
         f.format_document(t, "");
         f.go_to_marker(t, "1");
         f.verify_current_line_content(t, "namespace Foo {");
@@ -2706,9 +2482,7 @@ use crate::tests::prelude::*;
 
 // formatInTryCatchFinally_test.go:10
 pub fn test_format_in_try_catch_finally(t: &T) {
-    t.parallel();
-    let content: &str = "try \n{\n    var x = 1/*1*/\n}\ncatch (e) \n{\n}";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "try \n{\n    var x = 1/*1*/\n}\ncatch (e) \n{\n}", |f, t| {
         f.go_to_marker(t, "1");
         f.insert(t, ";");
         f.verify_current_line_content(t, "    var x = 1;");
@@ -2722,12 +2496,10 @@ use crate::tests::prelude::*;
 
 // formatInTsxFiles_test.go:10
 pub fn test_format_in_tsx_files(t: &T) {
-    t.parallel();
-    let content: &str = r"//@Filename: file.tsx
+    fourslash::run_generated_test(t, r"//@Filename: file.tsx
 interface I<T1, T2> {
     next: I</* */
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.format_document(t, "");
     });
 }
@@ -2739,9 +2511,7 @@ use crate::tests::prelude::*;
 
 // formatInsertSpaceAfterCloseBraceBeforeCloseBracket_test.go:11
 pub fn test_format_insert_space_after_close_brace_before_close_bracket(t: &T) {
-    t.parallel();
-    let content: &str = "[{}]";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "[{}]", |f, t| {
         let mut opts122 = f.get_options();
         opts122.format_code_settings.insert_space_after_opening_and_before_closing_nonempty_brackets = Tristate::True;
         f.configure(t, opts122);
@@ -2757,8 +2527,7 @@ use crate::tests::prelude::*;
 
 // formatInterfaceWithMissingBraceAndLaterTemplateString1_test.go:10
 pub fn test_format_interface_with_missing_brace_and_later_template_string1(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 // @Filename: /resource-card.tsx
 interface Props {
   iconOnly?: boolean
@@ -2773,8 +2542,7 @@ const ResourceCard: React.FC<Props> = (props) => {
 }
 
 export default ResourceCard
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"interface Props {
     iconOnly?: boolean
@@ -2800,8 +2568,7 @@ use crate::tests::prelude::*;
 
 // formatInterfaceWithMissingBraceAndLaterTemplateString2_test.go:10
 pub fn test_format_interface_with_missing_brace_and_later_template_string2(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
 // @Filename: /FormCheck.tsx
 interface FormCheckProps {
 
@@ -2813,8 +2580,7 @@ const FormCheck: DynamicRefForwardingComponent<'input', FormCheckProps> =
   );
 
 FormCheck.displayName = 'FormCheck';
-";
-    fourslash::run_generated_test(t, content, |f, t| {
+", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"interface FormCheckProps {
 
@@ -2837,14 +2603,12 @@ use crate::tests::prelude::*;
 
 // formatJsxDottedTagName_test.go:10
 pub fn test_format_jsx_dotted_tag_name(t: &T) {
-    t.parallel();
-    let content: &str = r"//@Filename: file.tsx
+    fourslash::run_generated_test(t, r"//@Filename: file.tsx
 const x = (
 <a-b.c>
 <a-b.c></a-b.c>
 </a-b.c>
-);";
-    fourslash::run_generated_test(t, content, |f, t| {
+);", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"const x = (
     <a-b.c>
@@ -2861,10 +2625,8 @@ use crate::tests::prelude::*;
 
 // formatJsxWithKeywordInIdentifier_test.go:10
 pub fn test_format_jsx_with_keyword_in_identifier(t: &T) {
-    t.parallel();
-    let content: &str = r#"// @Filename: /a.tsx
-<div module-layout=""></div>"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r#"// @Filename: /a.tsx
+<div module-layout=""></div>"#, |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r#"<div module-layout=""></div>"#);
     });
@@ -2877,8 +2639,7 @@ use crate::tests::prelude::*;
 
 // formatLiteralTypeInUnionOrIntersectionType_test.go:10
 pub fn test_format_literal_type_in_union_or_intersection_type(t: &T) {
-    t.parallel();
-    let content: &str = r"type NumberAndString = {
+    fourslash::run_generated_test(t, r"type NumberAndString = {
     a: number
 } & {
     b: string
@@ -2893,8 +2654,7 @@ type NumberOrString = {
 type Complexed =
     Foo &
     Bar |
-    Baz;";
-    fourslash::run_generated_test(t, content, |f, t| {
+    Baz;", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"type NumberAndString = {
     a: number
@@ -2922,8 +2682,7 @@ use crate::tests::prelude::*;
 
 // formatMultilineComment_test.go:10
 pub fn test_format_multiline_comment(t: &T) {
-    t.parallel();
-    let content: &str = r"/*1*//** 1
+    fourslash::run_generated_test(t, r"/*1*//** 1
  */*2*/2
 /*3*/ 3*/
 
@@ -2939,8 +2698,7 @@ class Foo {
 /*11*/                           *11
 /*12*/          12*/
     }
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.format_document(t, "");
         f.go_to_marker(t, "1");
         f.verify_current_line_content(t, "/** 1");
@@ -2976,12 +2734,10 @@ use crate::tests::prelude::*;
 
 // formatMultilineImportBrace_test.go:11
 pub fn test_format_multiline_import_brace(t: &T) {
-    t.parallel();
-    let content: &str = r"import {
+    fourslash::run_generated_test(t, r"import {
 	basename,
 	extname, joinPath } from '../base/resources.js';
-import { URI } from '../base/uri.js';";
-    fourslash::run_generated_test(t, content, |f, t| {
+import { URI } from '../base/uri.js';", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"import {
     basename,
@@ -2998,8 +2754,7 @@ use crate::tests::prelude::*;
 
 // formatMultilineTypesWithMapped_test.go:10
 pub fn test_format_multiline_types_with_mapped(t: &T) {
-    t.parallel();
-    let content: &str = r"type Z = 'z'
+    fourslash::run_generated_test(t, r"type Z = 'z'
 type A = {
   a: 'a'
 } | {
@@ -3033,8 +2788,7 @@ const f = {
   f: 'f'
 } satisfies {
   [index: string]: string
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"type Z = 'z'
 type A = {
@@ -3081,8 +2835,7 @@ use crate::tests::prelude::*;
 
 // formatMultipleFunctionArguments_test.go:10
 pub fn test_format_multiple_function_arguments(t: &T) {
-    t.parallel();
-    let content: &str = r"
+    fourslash::run_generated_test(t, r"
  someRandomFunction({
    prop1: 1,
    prop2: 2
@@ -3101,8 +2854,7 @@ pub fn test_format_multiple_function_arguments(t: &T) {
        prop11: 5,
        prop2: 6
      }
- );";
-    fourslash::run_generated_test(t, content, |f, t| {
+ );", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"
 someRandomFunction({
@@ -3134,13 +2886,11 @@ use crate::tests::prelude::*;
 
 // formatNestedClassWithOpenBraceOnNewLines_test.go:11
 pub fn test_format_nested_class_with_open_brace_on_new_lines(t: &T) {
-    t.parallel();
-    let content: &str = r"module A
+    fourslash::run_generated_test(t, r"module A
 {
     class B {
         /*1*/
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         let mut opts168 = f.get_options();
         opts168.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::True;
         f.configure(t, opts168);
@@ -3165,8 +2915,7 @@ use crate::tests::prelude::*;
 
 // formatNoSpaceAfterTemplateHeadAndMiddle_test.go:11
 pub fn test_format_no_space_after_template_head_and_middle(t: &T) {
-    t.parallel();
-    let content: &str = r"const a1 = `${ 1 }${ 1 }`;
+    fourslash::run_generated_test(t, r"const a1 = `${ 1 }${ 1 }`;
 const a2 = `
     ${ 1 }${ 1 }
 `;
@@ -3185,8 +2934,7 @@ const a6 = `
     text ${ 1 }
     text ${ 1 }
     text
-`;";
-    fourslash::run_generated_test(t, content, |f, t| {
+`;", |f, t| {
         let mut opts429 = f.get_options();
         opts429.format_code_settings.insert_space_after_opening_and_before_closing_template_string_braces = Tristate::False;
         f.configure(t, opts429);
@@ -3221,9 +2969,7 @@ use crate::tests::prelude::*;
 
 // formatNoSpaceBeforeCloseBrace_test.go:10
 pub fn test_format_no_space_before_close_brace(t: &T) {
-    t.parallel();
-    let content: &str = "foo(1, /* comment */    );";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "foo(1, /* comment */    );", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, "foo(1, /* comment */);");
     });
@@ -3236,9 +2982,7 @@ use crate::tests::prelude::*;
 
 // formatNoSpaceBeforeCloseBrace1_test.go:10
 pub fn test_format_no_space_before_close_brace1(t: &T) {
-    t.parallel();
-    let content: &str = "new Foo(1, /* comment */    );";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "new Foo(1, /* comment */    );", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, "new Foo(1, /* comment */);");
     });
@@ -3251,9 +2995,7 @@ use crate::tests::prelude::*;
 
 // formatNoSpaceBeforeCloseBrace2_test.go:10
 pub fn test_format_no_space_before_close_brace2(t: &T) {
-    t.parallel();
-    let content: &str = "new Foo(1,     );";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "new Foo(1,     );", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, "new Foo(1,);");
     });
@@ -3266,9 +3008,7 @@ use crate::tests::prelude::*;
 
 // formatNoSpaceBeforeCloseBrace3_test.go:10
 pub fn test_format_no_space_before_close_brace3(t: &T) {
-    t.parallel();
-    let content: &str = "foo( \n 1, /* comment */    );";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "foo( \n 1, /* comment */    );", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"foo(
     1, /* comment */);");
@@ -3282,10 +3022,8 @@ use crate::tests::prelude::*;
 
 // formatNoSpaceBeforeCloseBrace4_test.go:10
 pub fn test_format_no_space_before_close_brace4(t: &T) {
-    t.parallel();
-    let content: &str = r"new Foo(1
-, /* comment */    );";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"new Foo(1
+, /* comment */    );", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"new Foo(1
     , /* comment */);");
@@ -3299,9 +3037,7 @@ use crate::tests::prelude::*;
 
 // formatNoSpaceBeforeCloseBrace5_test.go:10
 pub fn test_format_no_space_before_close_brace5(t: &T) {
-    t.parallel();
-    let content: &str = "new Foo(1, \n    /* comment */    );";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "new Foo(1, \n    /* comment */    );", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"new Foo(1,
     /* comment */);");
@@ -3315,9 +3051,7 @@ use crate::tests::prelude::*;
 
 // formatNoSpaceBeforeCloseBrace6_test.go:10
 pub fn test_format_no_space_before_close_brace6(t: &T) {
-    t.parallel();
-    let content: &str = "new Foo(1, /* comment */  \n  );";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "new Foo(1, /* comment */  \n  );", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"new Foo(1, /* comment */
 );");
@@ -3331,11 +3065,9 @@ use crate::tests::prelude::*;
 
 // formatNoSpaceBetweenClosingParenAndTemplateString_test.go:10
 pub fn test_format_no_space_between_closing_paren_and_template_string(t: &T) {
-    t.parallel();
-    let content: &str = r"foo() `abc`;
+    fourslash::run_generated_test(t, r"foo() `abc`;
 bar()`def`;
-baz()`a${x}b`;";
-    fourslash::run_generated_test(t, content, |f, t| {
+baz()`a${x}b`;", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"foo()`abc`;
 bar()`def`;
@@ -3350,12 +3082,10 @@ use crate::tests::prelude::*;
 
 // formatObjectBindingPattern_test.go:10
 pub fn test_format_object_binding_pattern(t: &T) {
-    t.parallel();
-    let content: &str = r"const {
+    fourslash::run_generated_test(t, r"const {
 x,
 y,
-} = 0;";
-    fourslash::run_generated_test(t, content, |f, t| {
+} = 0;", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"const {
     x,
@@ -3371,9 +3101,7 @@ use crate::tests::prelude::*;
 
 // formatObjectBindingPattern_restElementWithPropertyName_test.go:10
 pub fn test_format_object_binding_pattern_rest_element_with_property_name(t: &T) {
-    t.parallel();
-    let content: &str = "const { ...a: b } = {};";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "const { ...a: b } = {};", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, "const { ...a: b } = {};");
     });
@@ -3386,9 +3114,7 @@ use crate::tests::prelude::*;
 
 // formatOnEnterFunctionDeclaration_test.go:10
 pub fn test_format_on_enter_function_declaration(t: &T) {
-    t.parallel();
-    let content: &str = "/*0*/function listAPIFiles(path: string): string[] {/*1*/ }";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, "/*0*/function listAPIFiles(path: string): string[] {/*1*/ }", |f, t| {
         f.go_to_marker(t, "1");
         f.insert_line(t, "");
         f.go_to_marker(t, "0");
@@ -3403,11 +3129,9 @@ use crate::tests::prelude::*;
 
 // formatOnEnterInComment_test.go:10
 pub fn test_format_on_enter_in_comment(t: &T) {
-    t.parallel();
-    let content: &str = r"   /**
+    fourslash::run_generated_test(t, r"   /**
     * /*1*/
-    */";
-    fourslash::run_generated_test(t, content, |f, t| {
+    */", |f, t| {
         f.go_to_marker(t, "1");
         f.insert_line(t, "");
         f.verify_current_file_content(t, r"  /**
@@ -3424,11 +3148,9 @@ use crate::tests::prelude::*;
 
 // formatOnEnterOpenBraceAddNewLine_test.go:11
 pub fn test_format_on_enter_open_brace_add_new_line(t: &T) {
-    t.parallel();
-    let content: &str = r"if(true) {/*0*/}
+    fourslash::run_generated_test(t, r"if(true) {/*0*/}
 if(false)/*1*/{
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         let mut opts148 = f.get_options();
         opts148.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::True;
         f.configure(t, opts148);
@@ -3457,10 +3179,8 @@ use crate::tests::prelude::*;
 
 // formatOnOpenCurlyBraceRemoveNewLine_test.go:11
 pub fn test_format_on_open_curly_brace_remove_new_line(t: &T) {
-    t.parallel();
-    let content: &str = r"if(true)
-/**/ }";
-    fourslash::run_generated_test(t, content, |f, t| {
+    fourslash::run_generated_test(t, r"if(true)
+/**/ }", |f, t| {
         let mut opts124 = f.get_options();
         opts124.format_code_settings.place_open_brace_on_new_line_for_control_blocks = Tristate::False;
         f.configure(t, opts124);
@@ -3477,11 +3197,9 @@ use crate::tests::prelude::*;
 
 // formatOnSemiColonAfterBreak_test.go:10
 pub fn test_format_on_semi_colon_after_break(t: &T) {
-    t.parallel();
-    let content: &str = r"for (var a in b) {
+    fourslash::run_generated_test(t, r"for (var a in b) {
 break/**/
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.go_to_marker(t, "");
         f.insert(t, ";");
         f.verify_current_line_content(t, "    break;");
@@ -3495,8 +3213,7 @@ use crate::tests::prelude::*;
 
 // formatParameter_test.go:10
 pub fn test_format_parameter(t: &T) {
-    t.parallel();
-    let content: &str = r"function foo(
+    fourslash::run_generated_test(t, r"function foo(
     first:
     number,/*first*/
     second: (
@@ -3507,8 +3224,7 @@ pub fn test_format_parameter(t: &T) {
     boolean/*third*/
     )
 ) {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.format_document(t, "");
         f.go_to_marker(t, "first");
         f.verify_current_line_content(t, "        number,");
@@ -3526,12 +3242,10 @@ use crate::tests::prelude::*;
 
 // formatRangeEndingAfterCommaOfCall_test.go:10
 pub fn test_format_range_ending_after_comma_of_call(t: &T) {
-    t.parallel();
-    let content: &str = r#"someCall(
+    fourslash::run_generated_test(t, r#"someCall(
     /*start*/"firstParameter",/*end*/
     "something else"
-);"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+);"#, |f, t| {
         f.format_selection(t, "start", "end");
     });
 }
@@ -3543,14 +3257,12 @@ use crate::tests::prelude::*;
 
 // formatRemoveNewLineAfterOpenBrace_test.go:10
 pub fn test_format_remove_new_line_after_open_brace(t: &T) {
-    t.parallel();
-    let content: &str = r"function foo()
+    fourslash::run_generated_test(t, r"function foo()
 {
 }
 if (true)
 {
-}";
-    fourslash::run_generated_test(t, content, |f, t| {
+}", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"function foo() {
 }
@@ -3566,11 +3278,9 @@ use crate::tests::prelude::*;
 
 // formatRemoveSpaceBetweenDotDotDotAndTypeName_test.go:10
 pub fn test_format_remove_space_between_dot_dot_dot_and_type_name(t: &T) {
-    t.parallel();
-    let content: &str = r"let a: [... any[]];
+    fourslash::run_generated_test(t, r"let a: [... any[]];
 let b: [...   number[]];
-let c: [...     string[]];";
-    fourslash::run_generated_test(t, content, |f, t| {
+let c: [...     string[]];", |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r"let a: [...any[]];
 let b: [...number[]];
@@ -3585,12 +3295,10 @@ use crate::tests::prelude::*;
 
 // formatSatisfiesExpression_test.go:10
 pub fn test_format_satisfies_expression(t: &T) {
-    t.parallel();
-    let content: &str = r#"type Foo = "a" | "b" | "c";
+    fourslash::run_generated_test(t, r#"type Foo = "a" | "b" | "c";
 const foo1 = ["a"] satisfies Foo[];
 const foo2 = ["a"]satisfies Foo[];
-const foo3 = ["a"]  satisfies Foo[];"#;
-    fourslash::run_generated_test(t, content, |f, t| {
+const foo3 = ["a"]  satisfies Foo[];"#, |f, t| {
         f.format_document(t, "");
         f.verify_current_file_content(t, r#"type Foo = "a" | "b" | "c";
 const foo1 = ["a"] satisfies Foo[];

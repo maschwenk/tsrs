@@ -106,6 +106,7 @@ func (g *gen) deferStmt(d *ast.DeferStmt, rest []ast.Stmt) {
 
 // canonicalFourslashTest emits the overwhelmingly common test shape through one hand-written Rust helper:
 //
+//	t.Parallel()
 //	defer testutil.RecoverAndFail(t, "Panic on fourslash test")
 //	const content = "..."
 //	f, done := fourslash.NewFourslash(t, nil, content)
@@ -145,6 +146,17 @@ func (g *gen) canonicalFourslashTest(stmts []ast.Stmt) bool {
 	}
 	t, ok := recoverCall.Args[0].(*ast.Ident)
 	if !ok || !isTestingTPtr(g.info.TypeOf(t)) {
+		return false
+	}
+	if recoverAt != 1 {
+		return false
+	}
+	parallelCall, ok := isCallStmt(stmts[0])
+	if !ok || len(parallelCall.Args) != 0 {
+		return false
+	}
+	parallelSel, ok := parallelCall.Fun.(*ast.SelectorExpr)
+	if !ok || parallelSel.Sel.Name != "Parallel" || !sameExpr(t, parallelSel.X) {
 		return false
 	}
 
@@ -217,15 +229,17 @@ func (g *gen) canonicalFourslashTest(stmts []ast.Stmt) bool {
 		}
 	}
 
-	// Register the constant and the FourslashTest callback parameter as if the skipped statements had declared them.
-	g.stmts(stmts[:recoverAt])
-	g.stmts(rest[:1])
+	// Register the FourslashTest callback parameter as if NewFourslash had declared it. The constant is emitted
+	// directly as the helper argument; the checks above and below prove it has no other use.
 	fName := ident(fObj.Name())
 	g.vars[fObj] = &varInfo{name: fName, kind: kPlace}
 	g.curF = fName
 	tName := ident(t.Name)
-	contentName := ident(contentObj.Name())
-	g.line("fourslash::run_generated_test(%s, %s, |%s, %s| {", tName, contentName, fName, tName)
+	content := g.constLit(contentObj.Val(), contentObj.Type())
+	if g.literalFormattingFixture(rest[0]) {
+		g.line("#[expect(clippy::literal_string_with_formatting_args, reason = \"These braces are TypeScript fixture syntax, not Rust format placeholders.\")]")
+	}
+	g.line("fourslash::run_generated_test(%s, %s, |%s, %s| {", tName, content, fName, tName)
 	g.indent++
 	g.stmts(rest[3:])
 	g.indent--
