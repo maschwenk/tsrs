@@ -182,7 +182,7 @@ Run time (2026-10-13; M3 Max, 14 cores): the gate took 583 s, 540 s of it the sa
 in memory) with an rsync restore per case. A 200-case profile at one job put 61% in the module, 22% in the restore
 (rsync spawns) and 17% in native tsrs. Now native runs once per case for both file systems, the restore is in-process
 (`fs.cpSync`), each slot keeps one worker (instead of one per run, ~25 ms each), `--jobs` defaults to the CPU count, and
-the sets run concurrently: 164 s, the same results. In CI the native reference is the `ci-native` profile
+the sets run concurrently: 164 s, the same results. In CI the native reference is the `ci` profile
 (release without LTO: 53-59 s against 144 s cold here), built beside the module and `cargo test -p tsrs_wasm` in
 separate target directories, on a 32-vCPU runner (was 8, ~15 min in all).
 

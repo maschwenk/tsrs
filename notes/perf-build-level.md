@@ -176,7 +176,7 @@ mimalloc v3 is fastest at every checker count; the others use 3-7% less peak mem
 
 ## 5. `opt-level = "s"` for cold crates
 
-`[profile.dist.package.<crate>] opt-level = "s"` for tsrs_ls, tsrs_lsproto, tsrs_lsp, tsrs_project,
+`[profile.release.package.<crate>] opt-level = "s"` for tsrs_ls, tsrs_lsproto, tsrs_lsp, tsrs_project,
 tsrs_projectutil, tsrs_api, tsrs_api_transport, tsrs_api_codec, tsrs_fswatch, tsrs_transformers, tsrs_declarations,
 tsrs_sourcemap, tsrs_astnav. Opt-level is part of cargo's crate metadata hash, so this build has its own instrumented
 build and training. `.text` shrinks by 0.8 MB (5.9%); the check run does not change (table below, "os"). The cold
@@ -210,9 +210,9 @@ paths; left as is.
 
 ```sh
 # PGO as released: .github/workflows/release.yml; then, for BOLT:
-RUSTFLAGS="-Cprofile-use=<merged.profdata> -Clink-arg=-Wl,--emit-relocs" cargo build --profile dist --locked \
+RUSTFLAGS="-Cprofile-use=<merged.profdata> -Clink-arg=-Wl,--emit-relocs" cargo build --release --locked \
   -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash
-PATH=<llvm-23.1.1>/bin:$PATH .github/scripts/bolt.sh target/dist <work> <pgo bench dir>
+PATH=<llvm-23.1.1>/bin:$PATH .github/scripts/bolt.sh target/release <work> <pgo bench dir>
 # counters
 perf stat -e instructions,cycles,branch-misses,iTLB-load-misses,L1-icache-load-misses,itlb_misses.walk_active,icache_16b.ifdata_stall -- \
   tsrs -p . --noEmit --incremental false --pretty false --extendedDiagnostics --checkers 4

@@ -13,8 +13,8 @@ this repository.
 - You get a private git worktree `$TSRS_WORK/wt/<agent-name>` on branch `fix/<agent-name>`,
   created from `origin/main`. Work only there (never in the main checkout `$TSRS_WORK/tsrs`
   or another agent's worktree). `ts-ref` inside it is a symlink to the Go reference checkout.
-- Build with your own target dir: `CARGO_TARGET_DIR=$PWD/target cargo build --profile fast -p tsrs_testrunner -p tsrs_cli`
-  (`fast`: release optimization without LTO, incremental; a checker edit rebuilds in about 5 s, and the suite runs as
+- Build with your own target dir: `CARGO_TARGET_DIR=$PWD/target cargo build --profile dev -p tsrs_testrunner -p tsrs_cli`
+  (`dev`: release optimization without LTO, incremental; a checker edit rebuilds in about 5 s, and the suite runs as
   fast as on a `--release` build, notes/dev-loop-build.md. A debug build is much slower to run. Build `--release`
   only to measure performance.)
 
@@ -36,7 +36,7 @@ understand, read both versions and the Go source; do not blindly take one side.
 
 ## Running tests
 
-- Full suite: `./target/fast/tsrs-test run --suite all` -> summary table; per-class name lists in
+- Full suite: `./target/debug/tsrs-test run --suite all` -> summary table; per-class name lists in
   `target/test-results/{pass,codes,fail,crash,timeout}.txt`; `summary.json` has the first difference per test.
 - One test / a cluster: `tsrs-test run --filter <substring|regex>`, `tsrs-test show <suite/name>` (expected vs actual),
   `tsrs-test crashes --top 20` (panics grouped by location).
@@ -454,15 +454,15 @@ a watch without the post-cycle collect. notes/watch-macos.md ("Memory") has a wo
 
 ## Profiling
 
-Profile the `dist` profile. It inherits `release` (fat LTO, one codegen unit, symbols stripped, no debug info);
-release binaries also add PGO, and BOLT on Linux (`.github/workflows/release.yml`). Keep the symbols
-(`CARGO_PROFILE_DIST_STRIP=none`, as CI does for BOLT) and, for reliable stacks on Linux x86-64, frame pointers, in a
+Profile the `release` profile (fat LTO, one codegen unit, symbols stripped, no debug info); release binaries also add
+PGO, and BOLT on Linux (`.github/workflows/release.yml`). Keep the symbols (`CARGO_PROFILE_RELEASE_STRIP=none`, as CI
+does for BOLT) and, for reliable stacks on Linux x86-64, frame pointers, in a
 separate target directory (Apple arm64 always keeps frame pointers):
 
 ```sh
-CARGO_PROFILE_DIST_STRIP=none RUSTFLAGS="-C force-frame-pointers=yes" CARGO_TARGET_DIR=target/profiling \
-  cargo build --profile dist -p tsrs_cli
-samply record ./target/profiling/dist/tsrs -p <project> --noEmit --incremental false
+CARGO_PROFILE_RELEASE_STRIP=none RUSTFLAGS="-C force-frame-pointers=yes" CARGO_TARGET_DIR=target/profiling \
+  cargo build --release -p tsrs_cli
+samply record ./target/profiling/release/tsrs -p <project> --noEmit --incremental false
 ```
 
 For before/after numbers, compare instruction counts, not wall time: `python3 bench/count.py out.json -- <tsrs command>`

@@ -61,8 +61,8 @@ extra_runs() {
 
 # 1. The instrumented build and the training of today's pipeline (bench.yml / release.yml).
 step "instrumented build" env RUSTFLAGS=-Cprofile-generate="$out/raw-base" \
-  cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --target "$tgt"
-inst=$PWD/target/$tgt/dist
+  cargo build --release --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --target "$tgt"
+  inst=$PWD/target/$tgt/release
 train() { .github/scripts/pgo-train.sh "$inst" "$out/raw-base" "$work" > "$out/pgo-train.log" 2>&1 || { tail -40 "$out/pgo-train.log"; return 1; }; }
 step "pgo-train.sh" train
 step "extra PGO training ($EXTRA_TRAIN)" extra_runs "$inst/tsrs" "LLVM_PROFILE_FILE=$out/raw-extra/@P@-%p.profraw"
@@ -93,7 +93,7 @@ cat "$out/profile-coverage.txt"
 # 2. The final builds, in parallel (fat LTO links on one core). Relocations only change addresses, not code.
 dist_build() { # $1 = name, $2 = profile, $3 = extra RUSTFLAGS
   CARGO_TARGET_DIR="$out/t-$1" RUSTFLAGS="-Cprofile-use=$2 $3" \
-    cargo build --profile dist --locked -p tsrs_cli --target "$tgt" > "$out/build-$1.log" 2>&1 \
+    cargo build --release --locked -p tsrs_cli --target "$tgt" > "$out/build-$1.log" 2>&1 \
     || { tail -40 "$out/build-$1.log"; return 1; }
 }
 t0=$(date +%s)
@@ -105,7 +105,7 @@ dist_build B "$out/B.profdata" "" & pids+=($!)
 dist_build Br "$out/B.profdata" "-Clink-arg=-Wl,--emit-relocs" & pids+=($!)
 for pid in "${pids[@]}"; do wait "$pid"; done
 echo "final builds (5 in parallel)          $(($(date +%s) - t0)) s" | tee -a "$out/times.txt"
-for v in A0 A B; do mkdir -p "$out/bin/$v"; cp "$out/t-$v/$tgt/dist/tsrs" "$out/bin/$v/tsrs"; done
+for v in A0 A B; do mkdir -p "$out/bin/$v"; cp "$out/t-$v/$tgt/release/tsrs" "$out/bin/$v/tsrs"; done
 
 # 3. BOLT (instrumentation mode, as .github/scripts/bolt.sh; LBR sampling is not assumed on a VM).
 flags=(-reorder-blocks=ext-tsp -reorder-functions=cdsort -split-functions -split-all-cold -split-eh -icf=1
@@ -133,7 +133,7 @@ optimize() { # $1 = input binary, $2 = output name, $3.. = fdata files, then opt
   grep -E 'BOLT-INFO: (basic block reordering|splitting|ICF|hugify)|BOLT-WARNING' "$out/bolt/$name.log" | head -8 || true
   mkdir -p "$out/bin/$name"; cp "$out/bolt/$name.bolt" "$out/bin/$name/tsrs"
 }
-Ar=$out/t-Ar/$tgt/dist/tsrs; Br=$out/t-Br/$tgt/dist/tsrs
+Ar=$out/t-Ar/$tgt/release/tsrs; Br=$out/t-Br/$tgt/release/tsrs
 step "BOLT instrument (R)" instrument "$Ar" Ar-rel
 instrument "$Ar" Ar-v
 instrument "$Ar" Ar-ext

@@ -146,7 +146,7 @@ Wire contract the server has to speak (from the pinned `tsc/cmd/tsc/api.go`, `ts
 `.github/workflows/release.yml` runs on a pushed tag `v<workspace version>` or `v<npm version>` (e.g. `v0.1.0`):
 
 1. checks the tag against `Cargo.toml`, and runs `cargo check --workspace`;
-2. builds PGO release binaries (`dist` profile, trained by `.github/scripts/pgo-train.sh`) for macOS arm64 and Linux
+2. builds PGO release binaries (`release` profile, trained by `.github/scripts/pgo-train.sh`) for macOS arm64 and Linux
    x64 and arm64 GNU (`ubuntu-22.04`); on GNU, BOLT-optimizes them and runs the conformance and fourslash gates on the
    BOLT-optimized binaries (`.github/scripts/bolt.sh`); smoke-runs the native ones (`--version`, exit code 2 on a type
    error) and the installed package (`npm/sdk/smoke-consumer.mjs`);

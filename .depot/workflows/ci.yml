@@ -29,8 +29,8 @@ jobs:
     runs-on: depot-ubuntu-24.04-8
     timeout-minutes: 60
     env:
-      TSRS_TEST: target/ci-native/tsrs-test
-      TSRS_FOURSLASH: target/ci-native/tsrs-fourslash
+      TSRS_TEST: target/ci/tsrs-test
+      TSRS_FOURSLASH: target/ci/tsrs-fourslash
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
@@ -98,10 +98,10 @@ jobs:
           -p tsrs_tsoptions -p tsrs_printer -p tsrs_modulespecifiers -p tsrs_compiler -p tsrs_incremental -p tsrs_execute
           -p tsrs_testrunner -p tsrs_cli
 
-      # Correctness gates do not need release's fat LTO. ci-native keeps release optimization but omits LTO, and
-      # compiles the generated fourslash bodies at opt-level 0; release.yml still tests the dist/PGO binaries.
+      # Correctness gates do not need release's fat LTO. ci keeps release optimization but omits LTO, and compiles
+      # the generated fourslash bodies at opt-level 0; release.yml still tests the PGO release binaries.
       - name: Build correctness binaries
-        run: cargo build --profile ci-native --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash
+        run: cargo build --profile ci --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash
 
       # Errors, .types and .symbols baselines, in tsgo's check history (`--checkerAssignment go`, tsrs_core::compat),
       # which the reference baselines need for byte-identity.
@@ -122,12 +122,12 @@ jobs:
 
       # testdata/regressions: bugs found outside the conformance suite, each with tsgo-ref's output.
       - name: Regression cases
-        run: tools/regressions.sh target/ci-native/tsrs
+        run: tools/regressions.sh target/ci/tsrs
 
       # testdata/contentmapper: projects with a Node content mapper, run through the real process spawner, each with
       # tsgo's output.
       - name: Content mapper cases
-        run: tools/contentmapper-e2e.sh target/ci-native/tsrs
+        run: tools/contentmapper-e2e.sh target/ci/tsrs
 
       - name: Fourslash (language service) suite
         run: .github/scripts/fourslash-gate.sh
@@ -138,7 +138,7 @@ jobs:
       # npm/build.mjs compiles the unstable/* JS API with the npm workspace's build-only tools.
       - name: npm packaging smoke test
         run: |
-          node npm/build.mjs --binary x86_64-unknown-linux-gnu=target/ci-native/tsrs --pack
+          node npm/build.mjs --binary x86_64-unknown-linux-gnu=target/ci/tsrs --pack
           dir=$(mktemp -d)
           cd "$dir"
           printf '{"private":true}\n' > package.json
@@ -195,7 +195,7 @@ jobs:
         run: python3 bench/run.py --setup-only --projects xstate-main,webpack,nuxt,drizzle-orm
 
       - name: Determinism
-        run: tools/ci/determinism.sh --self-test && tools/ci/determinism.sh target/ci-native/tsrs
+        run: tools/ci/determinism.sh --self-test && tools/ci/determinism.sh target/ci/tsrs
 
       - name: Upload conformance results
         if: failure()
@@ -264,7 +264,7 @@ jobs:
         run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack | tee -a "$GITHUB_OUTPUT"
 
       # Each build has its own target directory, so that none waits on another's lock. The native binaries are the
-      # gate's reference, not what ships: the ci-native profile (no LTO) builds them in a third of the release time.
+      # gate's reference, not what ships: the ci profile (no LTO) builds them in a third of the release time.
       - parallel:
           - name: cargo check (wasm32-wasip1) and cargo test -p tsrs_wasm
             run: |
@@ -277,7 +277,7 @@ jobs:
               CARGO_TARGET_DIR=target/wasm tools/wasm/build.sh | tee target/wasm-size.txt
 
           - name: Build native binaries
-            run: CARGO_TARGET_DIR=target/native cargo build --profile ci-native --locked -p tsrs_cli -p tsrs_testrunner
+            run: CARGO_TARGET_DIR=target/native cargo build --profile ci --locked -p tsrs_cli -p tsrs_testrunner
 
           - name: Restore the bench compilers
             uses: actions/cache/restore@v4
@@ -301,13 +301,13 @@ jobs:
 
       - parallel:
           - name: pnpm test (npm/tsrs-wasm)
-            run: TSRS_NATIVE=$PWD/target/native/ci-native/tsrs pnpm --dir npm/tsrs-wasm test
+            run: TSRS_NATIVE=$PWD/target/native/ci/tsrs pnpm --dir npm/tsrs-wasm test
 
           - name: Set up the bench projects
             run: python3 bench/run.py --setup-only --projects xstate-main,webpack,Compiler,Compiler-Unions
 
       - name: Differential gate
-        run: TSRS_TEST=target/native/ci-native/tsrs-test tools/wasm/gate.sh target/native/ci-native/tsrs
+        run: TSRS_TEST=target/native/ci/tsrs-test tools/wasm/gate.sh target/native/ci/tsrs
 
       - name: Upload the gate results
         if: always()

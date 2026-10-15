@@ -67,7 +67,7 @@ jobs:
             }
           fi
 
-  # Release binaries are PGO builds with the `dist` profile (fat LTO, one codegen unit; Cargo.toml): an instrumented
+  # Release binaries are PGO builds with the `release` profile (fat LTO, one codegen unit; Cargo.toml): an instrumented
   # ThinLTO build of tsrs + tsrs-test + tsrs-fourslash, the training workload (.github/scripts/pgo-train.sh: the conformance and fourslash suites
   # and two open-source bench projects), then the final build with the merged profile. Numbers: notes/perf-pgo.md.
   # On Linux the final build is then optimized with BOLT (.github/scripts/bolt.sh; notes/perf-build-level.md), and
@@ -133,11 +133,11 @@ jobs:
           CARGO_TARGET_DIR: ${{ runner.temp }}/pgo/target
           # The same as the final build's: profile settings are part of every symbol name, and the profile only
           # applies to functions whose names match (notes/perf-pgo.md, 2026-10-09).
-          CARGO_PROFILE_DIST_STRIP: ${{ runner.os == 'Linux' && 'none' || 'symbols' }}
-        run: cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --target ${{ matrix.target }}
+          CARGO_PROFILE_RELEASE_STRIP: ${{ runner.os == 'Linux' && 'none' || 'symbols' }}
+        run: cargo build --release --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --target ${{ matrix.target }}
       - name: Training run
         shell: bash
-        run: .github/scripts/pgo-train.sh "$RUNNER_TEMP/pgo/target/${{ matrix.target }}/dist" "$RUNNER_TEMP/pgo/raw" "$RUNNER_TEMP/pgo/bench"
+        run: .github/scripts/pgo-train.sh "$RUNNER_TEMP/pgo/target/${{ matrix.target }}/release" "$RUNNER_TEMP/pgo/raw" "$RUNNER_TEMP/pgo/bench"
       - name: Merge profiles
         id: profile
         shell: bash
@@ -159,11 +159,11 @@ jobs:
           CFLAGS: ${{ runner.os == 'macOS' && '-fno-profile-use' || '' }}
           # BOLT needs the Linux binaries' symbols; bolt.sh strips the optimized tsrs after its correctness gates.
           # The instrumented build sets the same value.
-          CARGO_PROFILE_DIST_STRIP: ${{ runner.os == 'Linux' && 'none' || 'symbols' }}
+          CARGO_PROFILE_RELEASE_STRIP: ${{ runner.os == 'Linux' && 'none' || 'symbols' }}
         run: |
           pkgs=(-p tsrs_cli)
           [ "$RUNNER_OS" = Linux ] && pkgs+=(-p tsrs_testrunner -p tsrs_fourslash)
-          cargo build --profile dist --locked "${pkgs[@]}" --target ${{ matrix.target }}
+          cargo build --release --locked "${pkgs[@]}" --target ${{ matrix.target }}
       # BOLT from the LLVM release that matches rustc's LLVM. The tarball's tools need glibc 2.34 (22.04 has 2.35).
       - name: Install BOLT
         if: runner.os == 'Linux'
@@ -180,13 +180,13 @@ jobs:
       - name: BOLT and gates on the BOLT-optimized binaries
         if: runner.os == 'Linux'
         shell: bash
-        run: .github/scripts/bolt.sh "target/${{ matrix.target }}/dist" "$RUNNER_TEMP/bolt" "$RUNNER_TEMP/pgo/bench"
+        run: .github/scripts/bolt.sh "target/${{ matrix.target }}/release" "$RUNNER_TEMP/bolt" "$RUNNER_TEMP/pgo/bench"
       - name: Stage binary
         shell: bash
         run: |
           exe=tsrs; [ "${{ matrix.target }}" = x86_64-pc-windows-msvc ] && exe=tsrs.exe
           mkdir -p "out/${{ matrix.target }}"
-          cp "target/${{ matrix.target }}/dist/$exe" "out/${{ matrix.target }}/$exe"
+          cp "target/${{ matrix.target }}/release/$exe" "out/${{ matrix.target }}/$exe"
           if [ "${{ matrix.run }}" = true ]; then
             "out/${{ matrix.target }}/$exe" --version | tee version.txt
             grep -q "^Version $TSRS_TS_VERSION (" version.txt || { echo "::error::the binary is not stamped with TypeScript $TSRS_TS_VERSION"; exit 1; }
@@ -247,9 +247,9 @@ jobs:
       - name: Build and stage musl binary
         run: |
           rustup target add ${{ matrix.target }}
-          cargo zigbuild --profile dist --locked -p tsrs_cli --target ${{ matrix.target }}
+          cargo zigbuild --release --locked -p tsrs_cli --target ${{ matrix.target }}
           mkdir -p "out/${{ matrix.target }}"
-          cp "target/${{ matrix.target }}/dist/tsrs" "out/${{ matrix.target }}/tsrs"
+          cp "target/${{ matrix.target }}/release/tsrs" "out/${{ matrix.target }}/tsrs"
           "out/${{ matrix.target }}/tsrs" --version | tee version.txt
           grep -q "^Version $TSRS_TS_VERSION (" version.txt || { echo "::error::the binary is not stamped with TypeScript $TSRS_TS_VERSION"; exit 1; }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

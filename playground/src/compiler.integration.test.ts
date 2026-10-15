@@ -16,7 +16,7 @@ import { tsc } from "@ts-rs/wasm";
 import { compilerDefaults, createProject } from "./project";
 
 const native =
-  process.env.TSRS_NATIVE ?? fileURLToPath(new URL("../../target/fast/tsrs", import.meta.url));
+  process.env.TSRS_NATIVE ?? fileURLToPath(new URL("../../target/debug/tsrs", import.meta.url));
 const fixtures = [
   { name: "TS", source: "export const value: string = 1;\n", fileName: "input.ts", options: {} },
   {

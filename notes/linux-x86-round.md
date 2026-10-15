@@ -18,7 +18,7 @@ every run).
 Every run: `tsrs -p . --noEmit --incremental false --pretty false --extendedDiagnostics --checkers N` under
 `perf stat -e instructions,cycles,dTLB-load-misses,dTLB-store-misses` (user + kernel) and `/usr/bin/time` (wall,
 user, sys, minor faults, max RSS); `AnonHugePages` sampled from `/proc/<pid>/smaps_rollup` every second (maximum),
-and the system's `thp_fault_alloc` / `thp_fault_fallback` deltas from `/proc/vmstat`. Binaries are the `dist` profile
+and the system's `thp_fault_alloc` / `thp_fault_fallback` deltas from `/proc/vmstat`. Binaries are the `release` profile
 (fat LTO, one codegen unit) without PGO, built from one commit in one session. 5 interleaved rounds, binary order
 rotated every round; tables give medians, and deltas are medians of the per-round paired ratios (with their range).
 
@@ -183,7 +183,7 @@ moves and shifts that retire cheaply, and the smaller working set pays for part 
 
 ## Part 2: the check phase on x86-64
 
-Host B (Xeon 8375C, Ice Lake), main after part 1 (825cd63), the `dist` profile, and the same profile with PGO trained
+Host B (Xeon 8375C, Ice Lake), main after part 1 (825cd63), the `release` profile, and the same profile with PGO trained
 as the release workflow does (`.github/scripts/pgo-train.sh`: conformance and fourslash suites, xstate and webpack; it
 ran in the sandbox in about 80 s). `perf stat` (two runs per row, one event group each, no multiplexing) and `perf
 record` sampling cycles and `mem_load_retired.l3_miss:pp` (the guest has PEBS, `max_precise` 3, but counts only ~45%
@@ -307,8 +307,8 @@ Each against main after part 1, interleaved, 5 rounds unless noted, paired media
 ## Reproducing
 
 ```sh
-cargo build --profile dist -p tsrs_cli                                   # compressed (default)
-cargo build --profile dist -p tsrs_cli --features tsrs_core/plain-ptrs   # references
+cargo build --release -p tsrs_cli                                   # compressed (default)
+cargo build --release -p tsrs_cli --features tsrs_core/plain-ptrs   # references
 cd <38k-file codebase>
 perf stat -x, -e instructions,cycles,dTLB-load-misses,dTLB-store-misses -- \
   /usr/bin/time -f "%e %U %S %R %F %M" tsrs -p . --noEmit --incremental false --pretty false --extendedDiagnostics --checkers 4
@@ -319,7 +319,7 @@ perf stat -x, -e instructions,cycles,dTLB-load-misses,dTLB-store-misses -- \
 perf stat -e cycles,instructions,L1-dcache-load-misses,mem_load_retired.l2_miss,mem_load_retired.l3_miss,dTLB-load-misses -- tsrs ...
 perf record -e cycles -c 10000019 -- tsrs ... ; perf report --no-children --sort sym --time 5%-100% | c++filt
 perf record -e mem_load_retired.l3_miss:pp -c 5003 -- tsrs ...
-RUSTFLAGS="-C target-cpu=x86-64-v3" cargo build --profile dist -p tsrs_cli          # separate target dir per flag set
+RUSTFLAGS="-C target-cpu=x86-64-v3" cargo build --release -p tsrs_cli          # separate target dir per flag set
 MIMALLOC_PURGE_DELAY=-1 tsrs ... ; TSRS_SPARSE_ID_PAGES=1 tsrs ...
 # PGO as released: .github/workflows/release.yml (instrumented build, .github/scripts/pgo-train.sh, llvm-profdata merge)
 ```

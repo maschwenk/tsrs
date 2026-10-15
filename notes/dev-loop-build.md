@@ -4,10 +4,11 @@ Question: an agent's loop is edit, `cargo build --release -p tsrs_cli -p tsrs_te
 of it is the build, and what does the suite lose without the release profile's fat LTO?
 
 Answer: the build was 92% of the loop. Fat LTO with one codegen unit re-optimizes and relinks everything on every
-edit, so a one-line checker edit cost about as much as a clean build (176 s against 181 s). The `fast` profile
-(`release` with `lto = "off"`, 256 codegen units, incremental) rebuilds the same edit in 4.9 s, and the conformance
-suite gives byte-identical pass/fail lists in the same wall time. `lto = "off"` in `[profile.dev]` (`cargo test`) cuts
-its edit rebuild from 13.9 s to 5.2 s. `release` and `dist` are unchanged: performance numbers still come from them.
+edit, so a one-line checker edit cost about as much as a clean build (176 s against 181 s). The `dev` profile
+(`release` settings with `lto = "off"`, 256 codegen units, incremental) rebuilds the same edit in 4.9 s, and the
+conformance suite gives byte-identical pass/fail lists in the same wall time. `lto = "off"` in `[profile.dev]`
+(`cargo test`) cuts
+its edit rebuild from 13.9 s to 5.2 s. Performance numbers still come from `release`.
 
 ## Host and method
 
@@ -21,18 +22,18 @@ incremental compilation can skip. Each figure is one run, edits two runs; wall t
 | profile | clean build | after a checker edit | suite wall (CPU) |
 | --- | --- | --- | --- |
 | `release` (fat LTO, 1 CGU) | 181 s | 176 s | 15.4 s (47 s) |
-| `release`, `lto = false`, 16 CGU (= `ci-native`) | 59 s | 45 s | 14.6 s (47 s) |
+| `release`, `lto = false`, 16 CGU (= `ci` before disabling ThinLTO) | 59 s | 45 s | 14.6 s (47 s) |
 | `release`, `lto = false`, 256 CGU, incremental | 61 s | 18-27 s | 16.0 s (50 s) |
 | same at opt-level 2 | 59 s | 18 s | 14.7 s (49 s) |
 | same at opt-level 1 | 49 s | 14 s | 14.5 s (52 s) |
-| **`fast`: `lto = "off"`, 256 CGU, incremental** | **46 s** | **4.9 s** | **15.6 s (54 s)** |
+| **`dev`: `lto = "off"`, 256 CGU, incremental** | **46 s** | **4.9 s** | **15.6 s (54 s)** |
 | `lto = "off"`, opt-level 1 | 42 s | 4.8 s | 16.5 s (57 s) |
 
 `lto = false` is not "no LTO": with more than one codegen unit and opt-level > 0, rustc still runs ThinLTO across
 the crate's own codegen units. `-Ztime-passes` on the tsrs_checker rebuild (opt-level 1, `lto = false`) put 11.5 s
 of a 27.9 s compile in `LLVM_thinlto`; `"off"` removes that pass, and with it most of the rebuild.
 
-Other edits with `fast`: a new public function in tsrs_core rebuilds in 0.9 s (`release`: 184 s); a body change in a
+Other edits with `dev`: a new public function in tsrs_core rebuilds in 0.9 s (`release`: 184 s); a body change in a
 generic tsrs_core function, which every dependent crate instantiates again, in 19.9 s.
 
 The suite's wall time does not depend on the profile: one test, `compiler/intersectionConstructorReductionCrash`,
@@ -42,19 +43,19 @@ performance change, under the bar in AGENTS.md.
 ## Same results
 
 - `conformance-gate.sh` (errors, `.types`, `.symbols`): `pass`, `fail`, `types-pass`, `types-fail`, `symbols-pass`,
-  `symbols-fail` lists identical between `fast` and `release` (13,458 passes); 15.8 s against 15.8 s.
+  `symbols-fail` lists identical between `dev` and `release` (13,458 passes); 15.8 s against 15.8 s.
 - The default-mode gate (`TS_TEST_PROGRAM_SINGLE_THREADED=false TSRS_HISTORY=canonical`) and `tools/regressions.sh`
-  pass on `fast`.
+  pass on `dev`.
 - fourslash: 4,066 passes and 63 failures on both, identical pass lists. Building tsrs-fourslash after a checker edit
-  takes 17.5 s with `fast` and 273 s with `release`; the run takes 12.9 s against 9.8 s.
+  takes 17.5 s with `dev` and 273 s with `release`; the run takes 12.9 s against 9.8 s.
 
 ### Generated fourslash tests
 
 The 4,546 generated test bodies used to share a crate with the hand-written harness. On an arm64 macOS development
-host, a `fast` timing build spent 61.2 s compiling that crate: 5.4 s in the frontend and 55.8 s in code generation.
+host, a `dev` timing build spent 61.2 s compiling that crate: 5.4 s in the frontend and 55.8 s in code generation.
 Moving the harness into an optimized `tsrs_fourslash_harness` crate and compiling only the generated glue at
 opt-level 0 cut `tsrs_fourslash` to 6.2 s (5.0 s frontend, 1.3 s code generation), about 90%. The optimized harness
-crate took 3.1 s, and the whole candidate build took 29.54 s. Release and dist profiles are unchanged.
+crate took 3.1 s, and the whole candidate build took 29.54 s. The release profile is unchanged.
 
 The full suite took 4.3 s: 4,066 passed, 63 known failures, and 417 skipped. Before and after result files were
 byte-identical (SHA-256):
@@ -71,11 +72,11 @@ Extracting all four strings of at least 64 KiB into generated data files cut Rus
 but did not improve on that (4.69 s): `include_str!` still makes rustc load and embed the data. Not adopted.
 
 For correctness CI, `lto = false` still ran ThinLTO within every optimized crate. On the same 12-core arm64 host and
-commit, a clean `ci-native` build of `tsrs`, `tsrs-test` and `tsrs-fourslash` took 43.81 s with that setting and
+commit, a clean `ci` build of `tsrs`, `tsrs-test` and `tsrs-fourslash` took 43.81 s with that setting and
 34.57 s with `lto = "off"`, a 21.1% reduction. Keeping 16 codegen units was faster than raising it to 256 (37.32 s)
-and had less test-runtime cost, so `ci-native` changes only the LTO setting. Warm conformance was 9.52 s against
+and had less test-runtime cost, so `ci` changes only the LTO setting. Warm conformance was 9.52 s against
 9.70 s and fourslash 3.86-3.90 s against 4.01 s; all result lists were identical. With the generated-source change
-above as well, the final clean build took 33.56 s. Release and dist remain unchanged.
+above as well, the final clean build took 33.56 s. Release remains unchanged.
 
 ## `cargo test` (the CI "fast crates" list)
 

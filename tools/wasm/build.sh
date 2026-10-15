@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds the WebAssembly module (crates/tsrs_wasm) into npm/tsrs-wasm/tsrs.wasm and checks it.
-#   tools/wasm/build.sh                 opt-level from [profile.wasm], then wasm-opt at the same level
+#   tools/wasm/build.sh                 release with opt-level s, then wasm-opt -Os
 #   OPT=z tools/wasm/build.sh           opt-level z (wasm-opt --flatten --rereloop -Oz -Oz)
 #   OPT=s tools/wasm/build.sh           opt-level s + -C llvm-args=-inlinehint-threshold=150 (wasm-opt -Os)
 #   WASM_OPT=none tools/wasm/build.sh   skip wasm-opt (fast development builds)
@@ -18,13 +18,22 @@ TARGET_DIR=${CARGO_TARGET_DIR:-$ROOT/target}
 
 flags="--remap-path-prefix=$ROOT=/tsrs --remap-path-prefix=$CARGO_HOME/registry/src=/cargo --remap-path-prefix=$SYSROOT/lib/rustlib/src/rust=/rustc --remap-path-prefix=$HOME=/home"
 case "$OPT" in
-  z) export CARGO_PROFILE_WASM_OPT_LEVEL=z ;;
-  s) export CARGO_PROFILE_WASM_OPT_LEVEL=s; flags="$flags -C llvm-args=-inlinehint-threshold=150" ;;
+  z) wasm_opt_level=z ;;
+  s) wasm_opt_level=s; flags="$flags -C llvm-args=-inlinehint-threshold=150" ;;
   *) echo "OPT must be z or s" >&2; exit 2 ;;
 esac
+# Wasm shares the release profile, with the module's measured size settings scoped to this command. WebAssembly
+# cannot unwind; a panic prints and exits with status 5, as a panicked native driver thread does.
 # The target-only variable: native build scripts and proc macros keep their flags.
-CARGO_TARGET_WASM32_WASIP1_RUSTFLAGS="$flags" cargo build --profile wasm -p tsrs_wasm --target wasm32-wasip1 --locked
-RAW="$TARGET_DIR/wasm32-wasip1/wasm/tsrs_wasm.wasm"
+CARGO_PROFILE_RELEASE_OPT_LEVEL="$wasm_opt_level" \
+  CARGO_PROFILE_RELEASE_LTO=fat \
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+  CARGO_PROFILE_RELEASE_PANIC=abort \
+  CARGO_PROFILE_RELEASE_DEBUG=false \
+  CARGO_PROFILE_RELEASE_STRIP=debuginfo \
+  CARGO_TARGET_WASM32_WASIP1_RUSTFLAGS="$flags" \
+  cargo build --release -p tsrs_wasm --target wasm32-wasip1 --locked
+RAW="$TARGET_DIR/wasm32-wasip1/release/tsrs_wasm.wasm"
 WORK="$TARGET_DIR/wasm-build"
 mkdir -p "$WORK"
 cp "$RAW" "$WORK/tsrs.raw.wasm"

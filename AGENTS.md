@@ -5,7 +5,7 @@ practices. This file adds the rules below.
 
 ## Build and test
 
-Build with `cargo build --profile fast -p tsrs_cli -p tsrs_testrunner` and run `target/fast/tsrs-test`, not
+Build with `cargo build --profile dev -p tsrs_cli -p tsrs_testrunner` and run `target/debug/tsrs-test`, not
 `--release`: an edit rebuilds in seconds instead of minutes, with the same test results (notes/dev-loop-build.md).
 Use `--release` only for performance numbers.
 

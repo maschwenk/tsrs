@@ -2,20 +2,21 @@
 
 Question: is profile-guided optimization (with fat LTO and one codegen unit) worth it for the shipped `tsrs`
 binaries? Answer: yes. PGO cuts CPU time by 7-14% and instructions by 13-14% on every project measured,
-counters and output unchanged. Release builds now use it (`.github/workflows/release.yml`, profile `dist` in
+counters and output unchanged. Release builds now use it (`.github/workflows/release.yml`, profile `release` in
 `Cargo.toml`, training script `.github/scripts/pgo-train.sh`), and so does the README benchmark
 (`.depot/workflows/bench.yml`, since 2026-10-01). `cargo build --release` (development) was unchanged at the time.
 
-Status (2026-10-10): `[profile.release]` in Cargo.toml is now fat LTO, one codegen unit, `debug = false` and
+Status (2026-10-15): `[profile.release]` in Cargo.toml is now fat LTO, one codegen unit, `debug = false` and
 `strip = "symbols"` (the strip setting came with PR #245, section "2026-10-09" below; the size change is at the end),
-so `release` differs from `dist` only by PGO, and on Linux BOLT. Binary (a) below is the `release` profile as it was
+and is the sole shipping/performance profile; its workflow adds PGO, and on Linux BOLT. Binary (a) below is the
+`release` profile as it was
 when this was measured; `cargo build --release` numbers in notes older than that change are from the thin-LTO profile.
 
 ## Binaries
 
 - (a) the `release` profile of the time (opt-level 3, 16 codegen units, thin-local LTO; since changed, see the status
   above).
-- (b) (a) + `lto = "fat"`, `codegen-units = 1` (= profile `dist`).
+- (b) (a) + `lto = "fat"`, `codegen-units = 1` (= today's `release` profile).
 - (c) (b) + PGO: `-Cprofile-generate` build of tsrs + tsrs-test, training run, `llvm-profdata merge`,
   `-Cprofile-use` build (rustc 1.95, llvm-tools from rustup; `cargo pgo` not needed).
 
@@ -89,7 +90,7 @@ profile trained under Rosetta.
 | | xc | 16.89 -2.8% | 198.7 -4.4% | 71.1 -2.8% |
 | | xr | 15.58 -10.3% | 174.1 -16.2% | 65.7 -10.2% |
 
-## Correctness gates (PGO binary from the workflow's exact commands, profile `dist`)
+## Correctness gates (PGO binary from the workflow's exact commands, profile `release`)
 
 - Conformance `tsrs-test run --suite all --baselines types,symbols`, default mode and `TSRS_LAZY_MEMBERS=0`:
   whole `TSRS_TEST_RESULTS` trees identical to (a)'s except the per-test `ms` fields in `summary.json`
@@ -171,7 +172,8 @@ bench's +15.8% / +16.2%.
 Size (moved here from a former note on the release profile): on macOS arm64 at 3183bbd3, a clean `tsrs_cli` build with the
 new `[profile.release]` was 20,233,280 bytes against 33,226,472 before (-39.1%). Stripping symbols and debug
 information changes file metadata, not generated code, so it does not change retired instructions or peak RSS. The
-Linux `dist` build stays unstripped until after BOLT: release.yml and bench.yml set `CARGO_PROFILE_DIST_STRIP=none`
+Linux `release` build stays unstripped until after BOLT: release.yml and bench.yml set
+`CARGO_PROFILE_RELEASE_STRIP=none`
 for the PGO-use build (and, since the fix, the instrumented build), and `bolt.sh` strips the optimized `tsrs` after
 BOLT's training, optimization and correctness comparisons.
 
@@ -181,7 +183,7 @@ The release, benchmark and benchmark-comparison workflows append `-Clto=thin` to
 `-Cprofile-generate` RUSTFLAGS. The final build uses fat LTO with the collected profile; Linux also runs BOLT.
 This follows [Charlie Marsh's training-build experiment](https://x.com/charliermarsh/status/2108901980504567932).
 
-Use the rustc override rather than `CARGO_PROFILE_DIST_LTO=thin`. Cargo hashes its profile and LTO plan into
+Use the rustc override rather than `CARGO_PROFILE_RELEASE_LTO=thin`. Cargo hashes its profile and LTO plan into
 crate metadata, but excludes RUSTFLAGS from symbol metadata ([pinned Cargo implementation](https://github.com/rust-lang/cargo/blob/5f94df478/src/compiler/build_runner/compilation_files.rs#L776-L873)).
 The trailing rustc option overrides Cargo's `-C lto=fat` without changing the function names PGO matches.
 Both LLVM pre-link pipelines insert the ordinary PGO counters before their post-link LTO work diverges

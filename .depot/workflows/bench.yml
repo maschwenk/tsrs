@@ -56,7 +56,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # tsrs is measured as released: the PGO build of the `dist` profile, optimized with BOLT, with the same commands as
+  # tsrs is measured as released: the PGO build of the `release` profile, optimized with BOLT, with the same commands as
   # the build job of .github/workflows/release.yml (target x86_64-unknown-linux-gnu) and the same training workloads
   # (.github/scripts/pgo-train.sh and .github/scripts/bolt.sh), which run on the xstate-main and webpack checkouts set
   # up here (bench/.work). The measuring jobs get the binary as the `tsrs-pgo-dist` artifact, with the `rustc -V` that
@@ -191,11 +191,11 @@ jobs:
           RUSTFLAGS: -Cprofile-generate=/tmp/tsrs-pgo/raw -Clto=thin
           # The same as the final build's: profile settings are part of every symbol name, and the profile only
           # applies to functions whose names match (notes/perf-pgo.md, 2026-10-09).
-          CARGO_PROFILE_DIST_STRIP: none
-        run: cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --target x86_64-unknown-linux-gnu
+          CARGO_PROFILE_RELEASE_STRIP: none
+        run: cargo build --release --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --target x86_64-unknown-linux-gnu
 
       - name: PGO training run
-        run: .github/scripts/pgo-train.sh target/x86_64-unknown-linux-gnu/dist /tmp/tsrs-pgo/raw bench/.work
+        run: .github/scripts/pgo-train.sh target/x86_64-unknown-linux-gnu/release /tmp/tsrs-pgo/raw bench/.work
 
       - name: PGO merge profiles
         id: profile
@@ -208,13 +208,13 @@ jobs:
           echo "path=/tmp/tsrs-pgo/$sum.profdata" >> "$GITHUB_OUTPUT"
 
       # --emit-relocs keeps the relocations BOLT needs to move code (release.yml's Linux builds link the same way).
-      - name: Build tsrs (PGO, dist profile)
+      - name: Build tsrs (PGO, release profile)
         env:
           RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }} -Clink-arg=-Wl,--emit-relocs
           CARGO_TARGET_DIR: /tmp/tsrs-pgo/target
           # BOLT needs the input binary's symbols; bolt.sh strips its final output. The instrumented build sets the same.
-          CARGO_PROFILE_DIST_STRIP: none
-        run: cargo build --profile dist --locked -p tsrs_cli --target x86_64-unknown-linux-gnu
+          CARGO_PROFILE_RELEASE_STRIP: none
+        run: cargo build --release --locked -p tsrs_cli --target x86_64-unknown-linux-gnu
 
       # BOLT as in release.yml: the LLVM release that matches rustc's LLVM, then bolt.sh for tsrs alone (instrument,
       # train on xstate-main and webpack, optimize, byte-compare the output with the input binary's). The suite gates
@@ -235,13 +235,13 @@ jobs:
       - name: BOLT
         env:
           BOLT_TSRS_ONLY: "1"
-        run: .github/scripts/bolt.sh /tmp/tsrs-pgo/target/x86_64-unknown-linux-gnu/dist /tmp/tsrs-pgo/bolt bench/.work
+        run: .github/scripts/bolt.sh /tmp/tsrs-pgo/target/x86_64-unknown-linux-gnu/release /tmp/tsrs-pgo/bolt bench/.work
 
       # The checksum is printed here and in every measuring job, so the logs show that they measured this binary.
       - name: Package the binary for the measuring jobs
         run: |
           mkdir -p /tmp/tsrs-pgo/dist
-          cp /tmp/tsrs-pgo/target/x86_64-unknown-linux-gnu/dist/tsrs /tmp/tsrs-pgo/dist/tsrs
+          cp /tmp/tsrs-pgo/target/x86_64-unknown-linux-gnu/release/tsrs /tmp/tsrs-pgo/dist/tsrs
           rustc -V > /tmp/tsrs-pgo/dist/rustc.txt
           sha256sum /tmp/tsrs-pgo/dist/tsrs
           /tmp/tsrs-pgo/dist/tsrs --version
@@ -323,7 +323,7 @@ jobs:
           path: bench/.work/solutions/${{ matrix.project }}
           key: ${{ steps.cache-project.outputs.cache-primary-key }}
 
-      - name: Download tsrs (PGO, dist profile)
+      - name: Download tsrs (PGO, release profile)
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: tsrs-pgo-dist
@@ -521,7 +521,7 @@ jobs:
           /tmp/bun/bun-linux-x64/bun --revision
           /tmp/bun/bun-linux-x64/bun check --help | head -3
 
-      - name: Download tsrs (PGO, dist profile)
+      - name: Download tsrs (PGO, release profile)
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: tsrs-pgo-dist
@@ -613,7 +613,7 @@ jobs:
       - name: Set up vscode
         run: python3 bench/run.py --setup-only --projects vscode
 
-      - name: Download tsrs (PGO, dist profile)
+      - name: Download tsrs (PGO, release profile)
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: tsrs-pgo-dist

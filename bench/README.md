@@ -147,7 +147,7 @@ tsrs's errors (the table's errors paragraph names such projects).
   `execve`s the Go binary `@typescript/typescript-<os>-<arch>/lib/tsc`; the harness runs that binary directly (checked
   to be a native executable printing `Version 7.0.2`), so Node startup is not part of the measurement.
 - tsrs: by default the release build of the checked-out commit (`target/release/tsrs`). CI measures what the npm
-  package ships instead: the PGO build of the `dist` profile (fat LTO, one codegen unit), built with the commands of
+  package ships instead: the PGO build of the `release` profile (fat LTO, one codegen unit), built with the commands of
   the release workflow and trained with `.github/scripts/pgo-train.sh` (conformance suite + fourslash suite + xstate-main + webpack),
   then BOLT-optimized like the Linux release binaries (`.github/scripts/bolt.sh`, tsrs trained on xstate-main +
   webpack) on a machine of the bench spec (`--tsrs <binary> --tsrs-build pgo-dist`; notes/perf-pgo.md,

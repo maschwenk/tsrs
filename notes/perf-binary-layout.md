@@ -37,7 +37,7 @@ Variants, all built from the same source:
 | name | how |
 | --- | --- |
 | A0 | main between #143 and #153: the PGO profile has only the suite and fourslash counts (the tsrs runs wrote 0-byte profiles) |
-| A | today's bench binary: `pgo-train.sh` with the tsrs profiles written, `cargo build --profile dist` |
+| A | today's bench binary: `pgo-train.sh` with the tsrs profiles written, `cargo build --release` |
 | B | A's profile plus tsrs on vscode, t3code-server and formbricks-web at 4 and 32 checkers |
 | R | A linked with `--emit-relocs`, then BOLT exactly as `bolt.sh`: instrumented, trained on xstate-main + webpack |
 | Rv | R with the BOLT training extended by vscode at 4 checkers |

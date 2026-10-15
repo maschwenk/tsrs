@@ -48,7 +48,7 @@ The compiler version is pinned to the repository;
 
 ## Verification
 
-Build the native reference with `cargo build --profile fast -p tsrs_cli -p tsrs_testrunner` from the repository root.
+Build the native reference with `cargo build --profile dev -p tsrs_cli -p tsrs_testrunner` from the repository root.
 Then, from `playground/`:
 
 ```sh

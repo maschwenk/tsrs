@@ -779,7 +779,7 @@ interleaved, base dc59d8e): single-threaded peak 7.02 -> 6.02 GiB (-14.2%), 4 ch
 
 ## 2026-10-01: PGO release binaries
 
-Release binaries are built with PGO + fat LTO + one codegen unit (profile `dist`; training on the conformance suite
+Release binaries are built with PGO + fat LTO + one codegen unit (profile `release`; training on the conformance suite
 and two open-source bench projects; `cargo build --release` unchanged). The private monorepo: CPU -6.9% single /
 -10.5% on 4 checkers, instructions -13.5% / -13.7%, cycles -8.4% / -13.2%; vscode and mui-docs -11% / -14% CPU;
 output and counters identical. Details, x86_64 handling and build cost: `notes/perf-pgo.md`.
