@@ -67,6 +67,8 @@ One upstream fixture constructs a 583,770-byte file containing five long runs of
 literally made one generated Rust shard 589,068 lines. The generator now emits a runtime builder for local constants
 with newline runs of at least 1,024 bytes: the shard is 5,363 lines, and an isolated `tsrs_fourslash` compile fell
 from 5.79 s (4.83 s frontend) to 4.70 s (3.78 s frontend), with the suite hashes above unchanged.
+Extracting all four strings of at least 64 KiB into generated data files cut Rust source from 13.5 MiB to 7.0 MiB
+but did not improve on that (4.69 s): `include_str!` still makes rustc load and embed the data. Not adopted.
 
 For correctness CI, `lto = false` still ran ThinLTO within every optimized crate. On the same 12-core arm64 host and
 commit, a clean `ci-native` build of `tsrs`, `tsrs-test` and `tsrs-fourslash` took 43.81 s with that setting and
