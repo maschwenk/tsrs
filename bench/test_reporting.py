@@ -196,33 +196,43 @@ class PublishTests(unittest.TestCase):
                 cell['tsgo']['peak_rss_bytes'] /= tsgo_scale
         return result
 
-    def test_chart_draws_one_line_per_project_through_its_thread_counts(self):
+    def bars(self, root, metric):
+        ns = '{http://www.w3.org/2000/svg}'
+        panel = root.find(f".//{ns}g[@data-metric='{metric}']")
+        return {bar.get('data-compiler'): float(bar.get('data-total')) for bar in panel.iter(f'{ns}g')
+                if bar.get('data-compiler')}
+
+    def test_chart_sums_every_compiler_at_four_threads_each(self):
         result = self.with_wide_points(self.result(self.commits[0]))
         self.assertTrue(self.publish(result))
         _, svg, dark_svg = self.latest()
         ns = '{http://www.w3.org/2000/svg}'
+        cells = [project['wide-checkers4'] for project in result['projects'].values()]
         for image in (svg, dark_svg):
             root = ET.fromstring(image)
-            self.assertIn('Both compilers at the same number of checker threads (4, 8 and 16) on 16 vCPUs',
+            self.assertIn('Summed over 1 TypeScript project · 4 threads each · 16-vCPU Linux machine',
                           [element.text for element in root.iter(f'{ns}text')])
-            vscode = root.find(f".//{ns}g[@data-project='vscode']")
-            self.assertEqual(['4', '8', '16'], [c.get('data-checkers') for c in vscode.iter(f'{ns}circle')])
-            self.assertEqual(3, len(vscode.find(f'{ns}polyline').get('points').split()))
-            metadata = root.find(f'{ns}metadata').text
-            self.assertIn('modes: wide-checkers4, wide-checkers8, checkers16', metadata)
-            cell = result['projects']['vscode']['checkers16']
+            for metric in ('wall_s', 'peak_rss_bytes'):
+                bars = self.bars(root, metric)
+                self.assertEqual(['tsrs', 'bun', 'tsgo'], list(bars))
+                for compiler, total in bars.items():
+                    self.assertAlmostEqual(sum(cell[compiler][metric] for cell in cells), total, delta=total * 1e-5)
+            self.assertIn('mode: wide-checkers4', root.find(f'{ns}metadata').text)
             description = root.find(f'{ns}desc').text
-            self.assertIn(f"tsrs {chart.format_value('wall_s', cell['tsrs']['wall_s'])}", description)
+            self.assertIn(f"tsrs {chart.format_value('wall_s', cells[0]['tsrs']['wall_s'])}", description)
 
-    def test_chart_draws_the_points_a_result_has(self):
-        self.assertTrue(self.publish(self.result(self.commits[0])))
+    def test_chart_falls_back_to_sixteen_threads_and_leaves_out_unmeasured_compilers(self):
+        result = self.result(self.commits[0])
+        for project in result['projects'].values():
+            project['checkers16'].pop('bun')
+        self.assertTrue(self.publish(result))
         _, svg, _ = self.latest()
         root = ET.fromstring(svg)
         ns = '{http://www.w3.org/2000/svg}'
-        self.assertIn('Both compilers at 16 checker threads on 16 vCPUs', [element.text for element in root.iter(f'{ns}text')])
-        vscode = root.find(f".//{ns}g[@data-project='vscode']")
-        self.assertEqual(['16'], [c.get('data-checkers') for c in vscode.iter(f'{ns}circle')])
-        self.assertIsNone(vscode.find(f'{ns}polyline'))
+        texts = [element.text for element in root.iter(f'{ns}text')]
+        self.assertIn('tsrs vs tsgo', texts)
+        self.assertIn('Summed over 1 TypeScript project · 16 threads each · 16-vCPU Linux machine', texts)
+        self.assertEqual(['tsrs', 'tsgo'], list(self.bars(root, 'wall_s')))
 
     def test_publishes_sixteen_vcpu_tables_at_four_eight_and_sixteen_checkers(self):
         self.assertTrue(self.publish(self.with_wide_points(self.result(self.commits[0]))))

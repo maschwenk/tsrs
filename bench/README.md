@@ -10,14 +10,15 @@ inputs. It measures every project on the fixed-spec 8-vCPU machine in four modes
 16-vCPU machines' tables, with tsgo, tsrs and bun check side by side: the default mode (each compiler at its own
 thread count) and both compilers at `--checkers` 4 (tsgo's default), 8 and 16 (tsrs's default there).
 
-The [README chart](large-projects.svg) plots TypeScript 7 against tsrs on VS Code, T3 Code and MUI docs from the
-16-vCPU equal-thread measurements (`wide-checkers4`, `wide-checkers8`, `checkers16`) of the PGO-optimized `dist`
-build: one line per project through a point per thread count, up is how many times faster tsrs is (TypeScript 7's
-wall time over tsrs's), right is how many times less peak memory it uses. Both axes start at 1x, the same as
-TypeScript 7. The results commit step runs `bench/publish.py` to generate the tables and a light and a dark SVG
-together ([`large-projects-dark.svg`](large-projects-dark.svg)); README.md shows the one matching the reader's GitHub
-theme, links to stable paths and is not rewritten by CI. The absolute times and memory are in the SVG's description
-and the report, with the error comparisons, all modes and raw measurements.
+The [README chart](large-projects.svg) sums the check time and peak memory of every project for tsrs, bun check and
+tsgo from the 16-vCPU equal-thread measurements of the PGO-optimized `dist` build: two panels of three bars, with
+each total and its multiple of tsgo's. It uses the fewest threads every project was measured at: 4 (`wide-checkers4`,
+tsgo's default), or 16 (`checkers16`) for results older than that mode. Bun check is drawn when every project has it.
+A sum weights the large projects most: they are where the wait is. The results commit step runs `bench/publish.py`
+to generate the tables and a light and a dark SVG together ([`large-projects-dark.svg`](large-projects-dark.svg));
+README.md shows the one matching the reader's GitHub theme, links to stable paths and is not rewritten by CI. Each
+project's times and memory are in the SVG's description and the report, with the error comparisons, all modes and raw
+measurements.
 
 ```sh
 cargo build --release -p tsrs_cli

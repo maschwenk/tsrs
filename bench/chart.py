@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Draw the README's chart from a recorded benchmark result.
 
-One line per project through its points at 4, 8 and 16 checker threads, both compilers at the same count on the
-16-vCPU machine: up is how many times faster tsrs is than TypeScript 7, right is how many times less peak memory it
-uses.
+Two panels of three bars: tsrs's, bun check's and tsgo's check time and peak memory, each summed over the projects
+of bench/projects.json, all three at the same thread count on the 16-vCPU machine (4, tsgo's default, when the result
+has it). Shorter is better.
 """
 from __future__ import annotations
 
@@ -16,41 +16,34 @@ import xml.etree.ElementTree as ET
 import run
 
 
-PROJECTS = (("vscode", "VS Code", "microsoft/vscode · src"),
-            ("t3code-server", "T3 Code", "pingdotgg/t3code · apps/server"),
-            ("mui-docs", "MUI docs", "mui/material-ui · docs"))
-COMPILERS = ("tsgo", "tsrs")
-# The points of each line: both compilers at the same checker count on the 16-vCPU machine (bench/run.py
-# WIDE_CHECKER_MODES), so every point compares thread for thread. At their defaults tsrs would run 16 checker threads
-# there and tsgo its fixed 4.
+# Drawn top to bottom; bun check only when the result measured it on every project.
+COMPILERS = ("tsrs", "bun", "tsgo")
+NAMES = {"tsrs": "tsrs", "bun": "bun check", "tsgo": "tsgo"}
+# The 16-vCPU machine's equal-thread modes (bench/run.py WIDE_CHECKER_MODES; bench/publish.py publishes their tables).
 POINTS = run.WIDE_CHECKER_MODES
-# The mode a result must have for the chart to be drawn (bench/publish.py); the other points are drawn when measured.
+# The mode a result must have for the chart to be drawn (bench/publish.py). The chart uses the fewest threads every
+# project was measured at: 4 since the 4-thread mode exists, 16 for older results.
 MODE = POINTS[16]
+PANELS = (("wall_s", "Check time", "faster"), ("peak_rss_bytes", "Peak memory", "less memory"))
 # The README shows the light or dark chart to match the reader's GitHub theme.
 THEMES = {
-    "light": {"series": ("#3178c6", "#087b5b", "#b35900"), "background": "#fafcfb", "border": "#dce5e1",
-              "text": "#162d27", "muted": "#52655e", "grid": "#e3eae6", "axis": "#9fb0a9"},
-    "dark": {"series": ("#58a6ff", "#3fb98c", "#f0883e"), "background": "#0d1117", "border": "#30363d",
-             "text": "#e6edf3", "muted": "#9198a1", "grid": "#262c33", "axis": "#4b535d"},
+    "light": {"tsrs": "#087b5b", "bun": "#d99a1e", "tsgo": "#3178c6", "background": "#ffffff", "border": "#e5e7eb",
+              "text": "#111827", "muted": "#6b7280", "faint": "#9ca3af", "track": "#f3f4f6"},
+    "dark": {"tsrs": "#3fb98c", "bun": "#e3b341", "tsgo": "#58a6ff", "background": "#0d1117", "border": "#30363d",
+             "text": "#e6edf3", "muted": "#9198a1", "faint": "#6e7681", "track": "#21262d"},
 }
 GIB = 2**30
-WIDTH, HEIGHT = 960, 700
-# The plot area: x is the memory ratio, y the speedup, both from 1x (the same as TypeScript 7).
-LEFT, RIGHT, TOP, BOTTOM = 96, 620, 136, 584
-DOT = 7  # the radius of a point
+WIDTH, HEIGHT = 1200, 500
+FONT = "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+# One panel: its left edge, the bars' start and full length, the first bar's center, the row pitch and bar height.
+PANEL_X, BAR_X, BAR_LENGTH, ROW_Y, ROW_PITCH, BAR_HEIGHT = (48, 624), 128, 290, 228, 92, 30
 
 
 def measured(cell: dict, compiler: str, metric: str) -> float | None:
     sample = cell.get(compiler) or {}
     value = sample.get(metric)
     return value if (sample.get("ok_runs") and isinstance(value, (int, float))
-                     and math.isfinite(value) and value >= 0) else None
-
-
-def ratio(cell: dict, metric: str) -> float | None:
-    """TypeScript 7's value over tsrs's: how many times faster, or how many times less memory."""
-    tsgo, tsrs = (measured(cell, compiler, metric) for compiler in COMPILERS)
-    return tsgo / tsrs if tsgo and tsrs else None
+                     and math.isfinite(value) and value > 0) else None
 
 
 def format_value(metric: str, value: float | None) -> str:
@@ -59,140 +52,101 @@ def format_value(metric: str, value: float | None) -> str:
     return run.fmt_s(value) if metric == "wall_s" else f"{value / GIB:.2f} GiB"
 
 
-def axis_max(values: list[float], minimum: float) -> tuple[float, float]:
-    """The axis end and tick step: a 1-2-5 step giving at most 8 ticks above 1x, the end a multiple of it."""
-    top = max([minimum, *values])
-    step = next(s for s in (1, 2, 5, 10, 20, 50, 100) if (top - 1) / s <= 8)
-    return max(minimum, math.ceil(top * 1.08 / step) * step), step
+def total_text(metric: str, value: float) -> str:
+    return f"{value:.1f} s" if metric == "wall_s" else f"{value / GIB:.1f} GiB"
 
 
-def ticks(end: float, step: float) -> list[float]:
-    """1x (the axis origin), then the multiples of `step` up to `end`, leaving out one too close to 1x to label."""
-    return [1.0] + [k * step for k in range(1, int(end / step) + 1) if k * step - 1 >= 0.6 * step]
+def chart_mode(result: dict) -> str:
+    """The fewest equal threads every project has a tsgo and tsrs measurement at."""
+    for checkers in sorted(POINTS):
+        mode = POINTS[checkers]
+        if all(measured(p.get(mode) or {}, c, m) is not None for p in result["projects"].values()
+               for c in ("tsgo", "tsrs") for m, *_ in PANELS):
+            return mode
+    raise ValueError(f"no benchmark results with every project measured in one of {', '.join(POINTS.values())}")
 
 
 def svg(result: dict, theme: str = "light") -> str:
     colors = THEMES[theme]
     if not any(MODE in project for project in result["projects"].values()):
         raise ValueError(f"no benchmark results for mode {MODE!r}")
-    lines = []  # (name, title, source, files, [(checkers, cell, speedup, memory)])
-    for name, title, source in PROJECTS:
-        project = result["projects"].get(name, {})
-        points = []
-        for checkers, mode in POINTS.items():
-            cell = project.get(mode) or {}
-            speedup, memory = ratio(cell, "wall_s"), ratio(cell, "peak_rss_bytes")
-            if speedup is not None and memory is not None:
-                points.append((checkers, cell, speedup, memory))
-        files = next((f for _, cell, _, _ in reversed(points) if (f := measured(cell, "tsrs", "files")) is not None), None)
-        lines.append((name, title, source, files, points))
-    machine = next((cell.get("machine", result["machine"]) for *_, points in lines for _, cell, _, _ in points),
-                   result["machine"])
-    counts = sorted({checkers for *_, points in lines for checkers, *_ in points})
-    if len(counts) > 1:
-        setting = (f"Both compilers at the same number of checker threads ({', '.join(map(str, counts[:-1]))} and "
-                   f"{counts[-1]}) on {machine.get('cpus')} vCPUs")
-    else:
-        setting = f"Both compilers at {counts[0] if counts else 'n/a'} checker threads on {machine.get('cpus')} vCPUs"
-    x_max, x_step = axis_max([memory for *_, points in lines for *_, memory in points], 6)
-    y_max, y_step = axis_max([speedup for *_, points in lines for _, _, speedup, _ in points], 10)
-    x_of = lambda value: LEFT + (RIGHT - LEFT) * (value - 1) / (x_max - 1)
-    y_of = lambda value: BOTTOM - (BOTTOM - TOP) * (value - 1) / (y_max - 1)
+    mode = chart_mode(result)
+    checkers = next(c for c, m in POINTS.items() if m == mode)
+    cells = {name: project[mode] for name, project in result["projects"].items()}
+    compilers = [c for c in COMPILERS if all(measured(cell, c, m) is not None for cell in cells.values()
+                                             for m, *_ in PANELS)]
+    totals = {metric: {c: sum(measured(cell, c, metric) for cell in cells.values()) for c in compilers}
+              for metric, *_ in PANELS}
+    machine = next((cell["machine"] for cell in cells.values() if "machine" in cell), result["machine"])
+    threads = f"--checkers {checkers}" + (f", bun check with --threads {checkers}" if "bun" in compilers else "")
+    title = " vs ".join(NAMES[c] for c in compilers)
+    setting = (f"Summed over {len(cells)} TypeScript project{'s' if len(cells) != 1 else ''} · {checkers} threads each · "
+               f"{machine.get('cpus')}-vCPU {machine.get('platform', 'Linux').split()[0]} machine")
 
     root = ET.Element("svg", {"xmlns": "http://www.w3.org/2000/svg", "width": str(WIDTH), "height": str(HEIGHT),
                               "viewBox": f"0 0 {WIDTH} {HEIGHT}", "role": "img", "aria-labelledby": "title description"})
-    ET.SubElement(root, "title", id="title").text = "Performance"
+    ET.SubElement(root, "title", id="title").text = title
     details = []
-    for name, title, source, files, points in lines:
-        detail = f"{title} ({source}): {f'{files:,.0f}' if files is not None else 'n/a'} files loaded by tsrs. "
-        for checkers, cell, speedup, memory in points:
-            times = [format_value("wall_s", measured(cell, c, "wall_s")) for c in COMPILERS]
-            peaks = [format_value("peak_rss_bytes", measured(cell, c, "peak_rss_bytes")) for c in COMPILERS]
-            detail += (f"{checkers} checker threads: TypeScript 7 {times[0]}, {peaks[0]}; tsrs {times[1]}, {peaks[1]}; "
-                       f"{speedup:.1f}x faster, {memory:.1f}x less memory. ")
-        details.append(detail)
+    for name, cell in cells.items():
+        parts = [f"{NAMES[c]} {format_value('wall_s', measured(cell, c, 'wall_s'))}, "
+                 f"{format_value('peak_rss_bytes', measured(cell, c, 'peak_rss_bytes'))}" for c in compilers]
+        details.append(f"{name}: {'; '.join(parts)}. ")
+    summary = " ".join(
+        f"{label}: " + ", ".join(f"{NAMES[c]} {total_text(metric, totals[metric][c])}" for c in compilers) + "."
+        for metric, label, _ in PANELS)
     build = run.TSRS_BUILDS[result["tsrs"].get("build", "release")].replace("`", "")
-    modes = [POINTS[c] for c in counts]
-    ET.SubElement(root, "desc", id="description").text = "".join(details) + (
-        f"{setting}. Up is faster, right is less peak memory; both axes start at 1x, the same as TypeScript 7. "
-        f"{run.reps_text(result, modes).capitalize()}. tsrs uses {build}. Machine: {machine['label'].replace('`', '')}. "
-        f"File counts include libraries and dependencies. Measured {result['date']}; tsrs commit {result['tsrs']['commit']}. "
+    ET.SubElement(root, "desc", id="description").text = (
+        f"{setting}. {summary} Shorter is better. Per project: " + "".join(details) +
+        f"tsgo and tsrs with {threads}. {run.reps_text(result, [mode]).capitalize()}. tsrs uses {build}. "
+        f"Machine: {machine['label'].replace('`', '')}. Measured {result['date']}; tsrs commit {result['tsrs']['commit']}. "
         f"TypeScript {result['tsgo']['version']}; TypeScript reference {(result.get('reference') or {}).get('commit', 'not recorded')}.")
     ET.SubElement(root, "metadata").text = (
-        f"Generated by bench/chart.py; modes: {', '.join(modes)}; tsrs commit: {result['tsrs']['commit']}; "
+        f"Generated by bench/chart.py; mode: {mode}; tsrs commit: {result['tsrs']['commit']}; "
         f"measured: {result['date']}; build: {result['tsrs'].get('build', 'release')}. "
         "Details: https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md")
 
     def element(parent, tag, **attrs):
         return ET.SubElement(parent, tag, {key.replace('_', '-'): str(value) for key, value in attrs.items()})
 
-    def text(parent, x, y, value, size, weight=None, fill=None, anchor=None, **attrs):
-        attrs.update(x=x, y=y, font_size=size)
-        if weight is not None:
-            attrs['font_weight'] = weight
+    def text(parent, x, y, value, size, weight=400, fill=None, anchor=None):
+        attrs = {"x": x, "y": y, "font_size": size, "font_weight": weight}
         if fill:
-            attrs['fill'] = fill
+            attrs["fill"] = fill
         if anchor:
-            attrs['text_anchor'] = anchor
+            attrs["text_anchor"] = anchor
         element(parent, "text", **attrs).text = value
 
     element(root, "rect", x=0.5, y=0.5, width=WIDTH - 1, height=HEIGHT - 1, rx=20, fill=colors["background"],
             stroke=colors["border"])
-    drawing = element(root, "g", font_family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", fill=colors["text"])
-    text(drawing, 40, 55, "Performance", 34, 700)
-    text(drawing, 40, 88, setting, 17, fill=colors["muted"])
+    drawing = element(root, "g", font_family=FONT, fill=colors["text"])
+    text(drawing, 48, 72, title, 36, 700)
+    text(drawing, 48, 110, setting, 17, fill=colors["muted"])
 
-    plot = element(drawing, "g", id="plot")
-    for tick in ticks(x_max, x_step):
-        x = x_of(tick)
-        element(plot, "line", x1=f"{x:.1f}", y1=TOP, x2=f"{x:.1f}", y2=BOTTOM, stroke=colors["grid"] if tick > 1 else colors["axis"])
-        text(plot, f"{x:.1f}", BOTTOM + 24, f"{tick:g}×", 15, fill=colors["muted"], anchor="middle")
-    for tick in ticks(y_max, y_step):
-        y = y_of(tick)
-        element(plot, "line", x1=LEFT, y1=f"{y:.1f}", x2=RIGHT, y2=f"{y:.1f}", stroke=colors["grid"] if tick > 1 else colors["axis"])
-        text(plot, LEFT - 10, f"{y + 5:.1f}", f"{tick:g}×", 15, fill=colors["muted"], anchor="end")
-    text(plot, (LEFT + RIGHT) / 2, BOTTOM + 54, "Less peak memory than TypeScript 7 →", 17, 600, anchor="middle")
-    text(plot, 34, (TOP + BOTTOM) / 2, "Faster than TypeScript 7 →", 17, 600, anchor="middle",
-         transform=f"rotate(-90 34 {(TOP + BOTTOM) / 2})")
+    for (metric, label, word), left in zip(PANELS, PANEL_X):
+        values = totals[metric]
+        full = max(values.values())
+        panel = element(drawing, "g", data_metric=metric)
+        text(panel, left, 170, label, 20, 600)
+        text(panel, left + BAR_X + BAR_LENGTH, 170, "shorter is better", 14, fill=colors["faint"], anchor="end")
+        for row, compiler in enumerate(compilers):
+            y = ROW_Y + row * ROW_PITCH
+            top = y - BAR_HEIGHT / 2
+            length = max(BAR_HEIGHT, BAR_LENGTH * values[compiler] / full)
+            bar = element(panel, "g", data_compiler=compiler, data_total=f"{values[compiler]:.6g}")
+            element(bar, "rect", x=left + BAR_X, y=top, width=BAR_LENGTH, height=BAR_HEIGHT, rx=BAR_HEIGHT / 2,
+                    fill=colors["track"])
+            element(bar, "rect", x=left + BAR_X, y=top, width=f"{length:.1f}", height=BAR_HEIGHT, rx=BAR_HEIGHT / 2,
+                    fill=colors[compiler])
+            text(bar, left + BAR_X - 14, y + 6, NAMES[compiler], 18, 600 if compiler == "tsrs" else 500, anchor="end")
+            value_x = left + BAR_X + BAR_LENGTH + 18
+            text(bar, value_x, y + 7, total_text(metric, values[compiler]), 19, 700, colors[compiler])
+            if compiler != "tsgo":
+                text(bar, value_x, y + 32, f"{values['tsgo'] / values[compiler]:.1f}x {word}", 14, 500,
+                     colors["muted"])
 
-    legend_x = RIGHT + 48
-    # Every point is a dot at its exact position, its thread count beside it on the first side where the label covers
-    # no other dot or label (points of one project can nearly coincide: T3 Code is about as fast at 4 as at 8 threads).
-    dots = [(x_of(memory), y_of(speedup)) for *_, points in lines for _, _, speedup, memory in points]
-    taken: list[tuple[float, float, float, float]] = [(x - DOT, y - DOT, x + DOT, y + DOT) for x, y in dots]
-    overlaps = lambda a, b: a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
-    for index, (name, title, source, files, points) in enumerate(lines):
-        color = colors["series"][index % len(colors["series"])]
-        series = element(plot, "g", id=name, data_project=name)
-        if len(points) > 1:
-            element(series, "polyline", fill="none", stroke=color, stroke_width=3, stroke_linejoin="round",
-                    points=" ".join(f"{x_of(memory):.1f},{y_of(speedup):.1f}" for _, _, speedup, memory in points))
-        for checkers, _, speedup, memory in points:
-            x, y = x_of(memory), y_of(speedup)
-            element(series, "circle", data_checkers=checkers, cx=f"{x:.1f}", cy=f"{y:.1f}", r=DOT, fill=color,
-                    stroke=colors["background"], stroke_width=2)
-            width = 9 * len(str(checkers))
-            sides = [(x + DOT + 4, y + 5, "start"), (x - DOT - 4, y + 5, "end"), (x, y - DOT - 6, "middle"),
-                     (x, y + DOT + 18, "middle")]
-            box_of = lambda lx, ly, anchor: (lx - {"start": 0, "end": width, "middle": width / 2}[anchor], ly - 14,
-                                             lx + {"start": width, "end": 0, "middle": width / 2}[anchor], ly + 2)
-            lx, ly, anchor = next((side for side in sides if not any(overlaps(box_of(*side), t) for t in taken)), sides[0])
-            taken.append(box_of(lx, ly, anchor))
-            text(series, f"{lx:.1f}", f"{ly:.1f}", str(checkers), 15, 700, color, anchor)
-
-        y = TOP + 8 + index * 118
-        entry = element(drawing, "g", data_legend=name)
-        element(entry, "rect", x=legend_x, y=y, width=16, height=16, rx=3, fill=color)
-        text(entry, legend_x + 26, y + 15, title, 21, 700)
-        text(entry, legend_x + 26, y + 39, source, 14, fill=colors["muted"])
-        text(entry, legend_x + 26, y + 60, (f"{files:,.0f}" if files is not None else "n/a") + " files", 14, fill=colors["muted"])
-        if points:
-            checkers, _, speedup, memory = points[-1]
-            text(entry, legend_x + 26, y + 82, f"{checkers} threads: {speedup:.1f}× faster,", 14, 600, color)
-            text(entry, legend_x + 26, y + 100, f"{memory:.1f}× less memory", 14, 600, color)
-
-    text(drawing, 40, HEIGHT - 28, "Each point: TypeScript 7 ÷ tsrs, wall time (up) and peak memory (right), with both at "
-         "the thread count beside it. Up and to the right is better.", 14, fill=colors["muted"])
+    text(drawing, 48, HEIGHT - 28, f"tsgo and tsrs with {threads}. Wall time and peak RSS, "
+         f"{run.reps_text(result, [mode])}. tsrs {result['tsrs']['commit'][:12]}, measured {result['date'][:10]}.",
+         13, fill=colors["faint"])
     ET.indent(root, space="  ")
     return ET.tostring(root, encoding="unicode") + "\n"
 
