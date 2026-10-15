@@ -39,5 +39,5 @@ pub fn create_host(compiler_host: Arc<dyn CompilerHost>) -> Box<dyn Host + Send 
 // host.go:37
 // Go returns the zero time.Time when the file does not exist; Rust returns None.
 pub fn get_m_time(host: &dyn CompilerHost, file_name: &str) -> Option<SystemTime> {
-    host.fs().stat(file_name).and_then(|stat| stat.mod_time())
+    host.fs().stat(file_name)?.mod_time()
 }

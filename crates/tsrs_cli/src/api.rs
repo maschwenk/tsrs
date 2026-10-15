@@ -481,7 +481,7 @@ mod tests {
         }
 
         assert_eq!(call(&s, "disposeBuildOrchestrator", &format!("{{\"buildOrchestratorID\":{id}}}")), Value::Bool(true));
-        assert!(s.handle_request("build", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).is_err());
+        s.handle_request("build", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).unwrap_err();
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -85,7 +85,7 @@ impl<K: 'static, V: 'static> LinkStore<K, V> {
     pub fn try_get(&self, key: P<K>) -> Option<P<V>> {
         match self.index(key) {
             Some(index) => Some(self.at(index)),
-            None => self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(key)),
+            None => self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN)?.try_get(key),
         }
     }
 
@@ -239,7 +239,7 @@ impl<K: 'static, V: KeyedLinks + 'static> KeyedLinkStore<K, V> {
         let chunks = &self.chunks;
         match self.slots.find(Self::hash(key), |&i| keyed_at(chunks, i).link_key().get() == key).map(|&i| keyed_at(chunks, i)) {
             Some(v) => Some(v),
-            None => self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get_pkey(key)),
+            None => self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN)?.try_get_pkey(key),
         }
     }
 
@@ -474,7 +474,7 @@ impl<V: 'static> IdLinkStore<V> {
     pub fn try_get(&self, id: u64) -> Option<P<V>> {
         match self.slot(id) {
             Some(slot) => Some(self.at(slot)),
-            None => self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(id)),
+            None => self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN)?.try_get(id),
         }
     }
 
@@ -638,7 +638,7 @@ impl<V: 'static> InlineIdStore<V> {
         };
         match own {
             Some(v) => Some(v),
-            None => self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(id)),
+            None => self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN)?.try_get(id),
         }
     }
 
@@ -796,7 +796,7 @@ impl<V: 'static> NodeLinkStore<V> {
         let id = ast::get_assigned_node_id(node)?;
         match self.store.narrow(id) {
             Some(v) => Some(v),
-            None => self.store.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.narrow(id)),
+            None => self.store.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN)?.narrow(id),
         }
     }
 }
@@ -849,7 +849,7 @@ impl<V: 'static> SymbolArenaLinkStore<V> {
         let id = ast::get_assigned_symbol_id(symbol)?;
         match self.store.narrow_slot(id) {
             Some(slot) => Some(self.store.at(slot)),
-            None => self.store.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(id as u64)),
+            None => self.store.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN)?.try_get(id as u64),
         }
     }
 

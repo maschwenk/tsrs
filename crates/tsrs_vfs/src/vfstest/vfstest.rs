@@ -639,7 +639,7 @@ impl MapFS {
         let path = path.strip_prefix('/').unwrap_or(path);
         let inner = self.inner.read().unwrap();
         let canonical = self.get_canonical_path(path);
-        inner.m.get(&canonical).and_then(|f| f.file.mod_time)
+        inner.m.get(&canonical)?.file.mod_time
     }
 
     pub fn entries(&self) -> Vec<(String, MapFile)> {

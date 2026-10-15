@@ -316,7 +316,7 @@ pub fn set_max_memory_from_cli(bytes: usize) {
 // The target in bytes (0: off).
 fn max_memory() -> usize {
     static MAX: OnceLock<usize> = OnceLock::new();
-    *MAX.get_or_init(|| CLI_MAX_MEMORY.get().copied().or_else(|| std::env::var("TSRS_MAX_MEMORY").ok().and_then(|v| parse_memory_size(&v))).unwrap_or(0))
+    *MAX.get_or_init(|| CLI_MAX_MEMORY.get().copied().or_else(|| parse_memory_size(&std::env::var("TSRS_MAX_MEMORY").ok()?)).unwrap_or(0))
 }
 
 // A checker whose region holds less than this is never retired (`TSRS_RETIRE_MIN=<size>` overrides it, for tests):
@@ -1333,7 +1333,7 @@ const CHECKERS_PER_THIEF: usize = 4;
 
 fn max_thieves_per_queue(checker_count: usize) -> u32 {
     static VALUE: OnceLock<Option<u32>> = OnceLock::new();
-    let configured = *VALUE.get_or_init(|| std::env::var("TSRS_STEAL_MAX_THIEVES").ok().and_then(|v| v.parse().ok()));
+    let configured = *VALUE.get_or_init(|| std::env::var("TSRS_STEAL_MAX_THIEVES").ok()?.parse().ok());
     configured.unwrap_or(if THIEF_LIMIT_CHECKERS.contains(&checker_count) { (checker_count / CHECKERS_PER_THIEF) as u32 } else { 0 })
 }
 

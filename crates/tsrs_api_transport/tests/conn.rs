@@ -78,7 +78,7 @@ fn decode_message_kinds() {
     assert!(decode_message(br#"{"jsonrpc":"2.0","id":"x","method":"m"}"#).unwrap().is_request());
     assert!(decode_message(br#"{"jsonrpc":"2.0","method":"m"}"#).unwrap().is_notification());
     assert!(decode_message(br#"{"jsonrpc":"2.0","id":3,"result":null}"#).unwrap().is_response());
-    assert!(decode_message(br#"{"id":2147483648,"method":"m"}"#).is_err());
+    decode_message(br#"{"id":2147483648,"method":"m"}"#).unwrap_err();
 }
 
 /// Test handler: `call` makes a server-to-client call with the request params as the method name.
@@ -182,7 +182,7 @@ fn sync_callback_nested_request_and_errors() {
     let (t, m, p) = c.recv();
     assert_eq!((t, m.as_str()), (MessageType::Error, "call"));
     assert!(String::from_utf8(p).unwrap().starts_with("ipc: connection closed"));
-    assert!(run.join().unwrap().is_ok());
+    run.join().unwrap().unwrap();
     assert_eq!(*handler.log.lock().unwrap(), ["bin@0", "call@0", "depth@1", "call@0", "nope@0", "call@0"]);
 }
 

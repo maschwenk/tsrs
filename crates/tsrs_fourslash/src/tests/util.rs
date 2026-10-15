@@ -10,6 +10,7 @@ use tsrs_ls as ls;
 pub use super::util_gen::*;
 
 // util.go:18
+#[expect(clippy::unnecessary_wraps, reason = "Matches the Go pointer result used directly in optional completion edit fields by generated fixtures.")]
 pub fn insert_replace_text_edit(
     new_text: &str,
     edit_range: lsproto::Range,

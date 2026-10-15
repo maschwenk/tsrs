@@ -551,23 +551,13 @@ fn default_semantic_token_modifiers() -> Vec<String> {
 
 // If modifying the defaults, update GetDefaultCapabilities too.
 // fourslash.go:446
-#[expect(clippy::unnecessary_wraps, reason = "LSP optional boolean fields use this helper at many construction sites")]
-fn ptr_true() -> Option<bool> {
-    Some(true)
-}
-
-#[expect(clippy::unnecessary_wraps, reason = "LSP optional boolean fields use this helper at many construction sites")]
-fn ptr_false() -> Option<bool> {
-    Some(false)
-}
-
 static DEFAULT_COMPLETION_CAPABILITIES: LazyLock<lsproto::CompletionClientCapabilities> = LazyLock::new(|| lsproto::CompletionClientCapabilities {
     completion_item: Some(lsproto::ClientCompletionItemOptions {
-        snippet_support: ptr_false(),
-        commit_characters_support: ptr_true(),
-        preselect_support: ptr_true(),
-        label_details_support: ptr_false(),
-        insert_replace_support: ptr_true(),
+        snippet_support: Some(false),
+        commit_characters_support: Some(true),
+        preselect_support: Some(true),
+        label_details_support: Some(false),
+        insert_replace_support: Some(true),
         documentation_format: Some(vec![lsproto::MarkupKind::Markdown, lsproto::MarkupKind::PlainText]),
         ..Default::default()
     }),
@@ -579,13 +569,13 @@ static DEFAULT_COMPLETION_CAPABILITIES: LazyLock<lsproto::CompletionClientCapabi
 });
 
 static DEFAULT_DEFINITION_CAPABILITIES: LazyLock<lsproto::DefinitionClientCapabilities> =
-    LazyLock::new(|| lsproto::DefinitionClientCapabilities { link_support: ptr_true(), ..Default::default() });
+    LazyLock::new(|| lsproto::DefinitionClientCapabilities { link_support: Some(true), ..Default::default() });
 
 static DEFAULT_TYPE_DEFINITION_CAPABILITIES: LazyLock<lsproto::TypeDefinitionClientCapabilities> =
-    LazyLock::new(|| lsproto::TypeDefinitionClientCapabilities { link_support: ptr_true(), ..Default::default() });
+    LazyLock::new(|| lsproto::TypeDefinitionClientCapabilities { link_support: Some(true), ..Default::default() });
 
 static DEFAULT_IMPLEMENTATION_CAPABILITIES: LazyLock<lsproto::ImplementationClientCapabilities> =
-    LazyLock::new(|| lsproto::ImplementationClientCapabilities { link_support: ptr_true(), ..Default::default() });
+    LazyLock::new(|| lsproto::ImplementationClientCapabilities { link_support: Some(true), ..Default::default() });
 
 static DEFAULT_HOVER_CAPABILITIES: LazyLock<lsproto::HoverClientCapabilities> = LazyLock::new(|| lsproto::HoverClientCapabilities {
     content_format: Some(vec![lsproto::MarkupKind::Markdown, lsproto::MarkupKind::PlainText]),
@@ -593,22 +583,22 @@ static DEFAULT_HOVER_CAPABILITIES: LazyLock<lsproto::HoverClientCapabilities> = 
 });
 
 static DEFAULT_EXPERIMENTAL_CAPABILITIES: LazyLock<lsproto::ExperimentalClientCapabilities> =
-    LazyLock::new(|| lsproto::ExperimentalClientCapabilities { hover_verbosity_level: ptr_true() });
+    LazyLock::new(|| lsproto::ExperimentalClientCapabilities { hover_verbosity_level: Some(true) });
 
 static DEFAULT_SIGNATURE_HELP_CAPABILITIES: LazyLock<lsproto::SignatureHelpClientCapabilities> =
     LazyLock::new(|| lsproto::SignatureHelpClientCapabilities {
         signature_information: Some(lsproto::ClientSignatureInformationOptions {
             documentation_format: Some(vec![lsproto::MarkupKind::Markdown, lsproto::MarkupKind::PlainText]),
-            parameter_information: Some(lsproto::ClientSignatureParameterInformationOptions { label_offset_support: ptr_true() }),
-            active_parameter_support: ptr_true(),
+            parameter_information: Some(lsproto::ClientSignatureParameterInformationOptions { label_offset_support: Some(true) }),
+            active_parameter_support: Some(true),
             ..Default::default()
         }),
-        context_support: ptr_true(),
+        context_support: Some(true),
         ..Default::default()
     });
 
 static DEFAULT_DOCUMENT_SYMBOL_CAPABILITIES: LazyLock<lsproto::DocumentSymbolClientCapabilities> =
-    LazyLock::new(|| lsproto::DocumentSymbolClientCapabilities { hierarchical_document_symbol_support: ptr_true(), ..Default::default() });
+    LazyLock::new(|| lsproto::DocumentSymbolClientCapabilities { hierarchical_document_symbol_support: Some(true), ..Default::default() });
 
 static DEFAULT_FOLDING_RANGE_CAPABILITIES: LazyLock<lsproto::FoldingRangeClientCapabilities> =
     LazyLock::new(|| lsproto::FoldingRangeClientCapabilities {
@@ -618,14 +608,14 @@ static DEFAULT_FOLDING_RANGE_CAPABILITIES: LazyLock<lsproto::FoldingRangeClientC
             value_set: Some(vec![lsproto::FoldingRangeKind::Comment, lsproto::FoldingRangeKind::Imports, lsproto::FoldingRangeKind::Region]),
         }),
         folding_range: Some(lsproto::ClientFoldingRangeOptions {
-            collapsed_text: ptr_true(), // Unused by our testing, but set to exercise the code.
+            collapsed_text: Some(true), // Unused by our testing, but set to exercise the code.
         }),
         ..Default::default()
     });
 
 static DEFAULT_DIAGNOSTIC_CAPABILITIES: LazyLock<lsproto::DiagnosticClientCapabilities> =
     LazyLock::new(|| lsproto::DiagnosticClientCapabilities {
-        related_information: ptr_true(),
+        related_information: Some(true),
         tag_support: Some(lsproto::ClientDiagnosticsTagOptions {
             value_set: vec![lsproto::DiagnosticTag::Unnecessary, lsproto::DiagnosticTag::Deprecated],
         }),
@@ -634,7 +624,7 @@ static DEFAULT_DIAGNOSTIC_CAPABILITIES: LazyLock<lsproto::DiagnosticClientCapabi
 
 static DEFAULT_PUBLISH_DIAGNOSTIC_CAPABILITIES: LazyLock<lsproto::PublishDiagnosticsClientCapabilities> =
     LazyLock::new(|| lsproto::PublishDiagnosticsClientCapabilities {
-        related_information: ptr_true(),
+        related_information: Some(true),
         tag_support: Some(lsproto::ClientDiagnosticsTagOptions {
             value_set: vec![lsproto::DiagnosticTag::Unnecessary, lsproto::DiagnosticTag::Deprecated],
         }),
@@ -643,7 +633,7 @@ static DEFAULT_PUBLISH_DIAGNOSTIC_CAPABILITIES: LazyLock<lsproto::PublishDiagnos
 
 static DEFAULT_WORKSPACE_EDIT_CAPABILITIES: LazyLock<lsproto::WorkspaceEditClientCapabilities> =
     LazyLock::new(|| lsproto::WorkspaceEditClientCapabilities {
-        document_changes: ptr_true(),
+        document_changes: Some(true),
         resource_operations: Some(vec![lsproto::ResourceOperationKind::Rename]),
         ..Default::default()
     });
@@ -656,15 +646,15 @@ pub fn get_default_capabilities() -> Option<lsproto::ClientCapabilities> {
             position_encodings: Some(vec![lsproto::PositionEncodingKind::UTF8]),
             ..Default::default()
         }),
-        experimental: Some(lsproto::ExperimentalClientCapabilities { hover_verbosity_level: ptr_true() }),
+        experimental: Some(lsproto::ExperimentalClientCapabilities { hover_verbosity_level: Some(true) }),
         text_document: Some(lsproto::TextDocumentClientCapabilities {
             completion: Some(lsproto::CompletionClientCapabilities {
                 completion_item: Some(lsproto::ClientCompletionItemOptions {
-                    snippet_support: ptr_false(),
-                    commit_characters_support: ptr_true(),
-                    preselect_support: ptr_true(),
-                    label_details_support: ptr_false(),
-                    insert_replace_support: ptr_true(),
+                    snippet_support: Some(false),
+                    commit_characters_support: Some(true),
+                    preselect_support: Some(true),
+                    label_details_support: Some(false),
+                    insert_replace_support: Some(true),
                     documentation_format: Some(vec![lsproto::MarkupKind::Markdown, lsproto::MarkupKind::PlainText]),
                     ..Default::default()
                 }),
@@ -675,22 +665,22 @@ pub fn get_default_capabilities() -> Option<lsproto::ClientCapabilities> {
                 ..Default::default()
             }),
             diagnostic: Some(lsproto::DiagnosticClientCapabilities {
-                related_information: ptr_true(),
+                related_information: Some(true),
                 tag_support: Some(lsproto::ClientDiagnosticsTagOptions {
                     value_set: vec![lsproto::DiagnosticTag::Unnecessary, lsproto::DiagnosticTag::Deprecated],
                 }),
                 ..Default::default()
             }),
             publish_diagnostics: Some(lsproto::PublishDiagnosticsClientCapabilities {
-                related_information: ptr_true(),
+                related_information: Some(true),
                 tag_support: Some(lsproto::ClientDiagnosticsTagOptions {
                     value_set: vec![lsproto::DiagnosticTag::Unnecessary, lsproto::DiagnosticTag::Deprecated],
                 }),
                 ..Default::default()
             }),
-            definition: Some(lsproto::DefinitionClientCapabilities { link_support: ptr_true(), ..Default::default() }),
-            type_definition: Some(lsproto::TypeDefinitionClientCapabilities { link_support: ptr_true(), ..Default::default() }),
-            implementation: Some(lsproto::ImplementationClientCapabilities { link_support: ptr_true(), ..Default::default() }),
+            definition: Some(lsproto::DefinitionClientCapabilities { link_support: Some(true), ..Default::default() }),
+            type_definition: Some(lsproto::TypeDefinitionClientCapabilities { link_support: Some(true), ..Default::default() }),
+            implementation: Some(lsproto::ImplementationClientCapabilities { link_support: Some(true), ..Default::default() }),
             hover: Some(lsproto::HoverClientCapabilities {
                 content_format: Some(vec![lsproto::MarkupKind::Markdown, lsproto::MarkupKind::PlainText]),
                 ..Default::default()
@@ -698,29 +688,29 @@ pub fn get_default_capabilities() -> Option<lsproto::ClientCapabilities> {
             signature_help: Some(lsproto::SignatureHelpClientCapabilities {
                 signature_information: Some(lsproto::ClientSignatureInformationOptions {
                     documentation_format: Some(vec![lsproto::MarkupKind::Markdown, lsproto::MarkupKind::PlainText]),
-                    parameter_information: Some(lsproto::ClientSignatureParameterInformationOptions { label_offset_support: ptr_true() }),
-                    active_parameter_support: ptr_true(),
+                    parameter_information: Some(lsproto::ClientSignatureParameterInformationOptions { label_offset_support: Some(true) }),
+                    active_parameter_support: Some(true),
                     ..Default::default()
                 }),
-                context_support: ptr_true(),
+                context_support: Some(true),
                 ..Default::default()
             }),
-            document_symbol: Some(lsproto::DocumentSymbolClientCapabilities { hierarchical_document_symbol_support: ptr_true(), ..Default::default() }),
+            document_symbol: Some(lsproto::DocumentSymbolClientCapabilities { hierarchical_document_symbol_support: Some(true), ..Default::default() }),
             folding_range: Some(lsproto::FoldingRangeClientCapabilities {
                 range_limit: Some(5000),
                 folding_range_kind: Some(lsproto::ClientFoldingRangeKindOptions {
                     value_set: Some(vec![lsproto::FoldingRangeKind::Comment, lsproto::FoldingRangeKind::Imports, lsproto::FoldingRangeKind::Region]),
                 }),
-                folding_range: Some(lsproto::ClientFoldingRangeOptions { collapsed_text: ptr_true() }),
+                folding_range: Some(lsproto::ClientFoldingRangeOptions { collapsed_text: Some(true) }),
                 ..Default::default()
             }),
             ..Default::default()
         }),
         workspace: Some(lsproto::WorkspaceClientCapabilities {
-            configuration: ptr_true(),
-            file_operations: Some(lsproto::FileOperationClientCapabilities { will_rename: ptr_true(), ..Default::default() }),
+            configuration: Some(true),
+            file_operations: Some(lsproto::FileOperationClientCapabilities { will_rename: Some(true), ..Default::default() }),
             workspace_edit: Some(lsproto::WorkspaceEditClientCapabilities {
-                document_changes: ptr_true(),
+                document_changes: Some(true),
                 resource_operations: Some(vec![lsproto::ResourceOperationKind::Rename]),
                 ..Default::default()
             }),
@@ -802,7 +792,7 @@ pub(crate) fn get_capabilities_with_defaults(capabilities: Option<&lsproto::Clie
     if text_document.semantic_tokens.is_none() {
         text_document.semantic_tokens = Some(lsproto::SemanticTokensClientCapabilities {
             requests: lsproto::ClientSemanticTokensRequestOptions {
-                full: Some(lsproto::BooleanOrClientSemanticTokensRequestFullDelta { boolean: ptr_true(), ..Default::default() }),
+                full: Some(lsproto::BooleanOrClientSemanticTokensRequestFullDelta { boolean: Some(true), ..Default::default() }),
                 ..Default::default()
             },
             token_types: default_semantic_token_types(),
@@ -813,13 +803,13 @@ pub(crate) fn get_capabilities_with_defaults(capabilities: Option<&lsproto::Clie
     }
     let workspace = capabilities_with_defaults.workspace.get_or_insert_with(Default::default);
     if workspace.file_operations.is_none() {
-        workspace.file_operations = Some(lsproto::FileOperationClientCapabilities { will_rename: ptr_true(), ..Default::default() });
+        workspace.file_operations = Some(lsproto::FileOperationClientCapabilities { will_rename: Some(true), ..Default::default() });
     }
     if workspace.workspace_edit.is_none() {
         workspace.workspace_edit = Some(DEFAULT_WORKSPACE_EDIT_CAPABILITIES.clone());
     }
     if workspace.configuration.is_none() {
-        workspace.configuration = ptr_true();
+        workspace.configuration = Some(true);
     }
     let text_document = capabilities_with_defaults.text_document.as_mut().unwrap();
     if text_document.definition.is_none() {
@@ -997,14 +987,12 @@ pub static ANY_TEXT_EDITS: LazyLock<Option<Vec<lsproto::TextEdit>>> =
 pub static NO_TEXT_EDITS: LazyLock<Option<Vec<lsproto::TextEdit>>> =
     LazyLock::new(|| Some(vec![lsproto::TextEdit { new_text: "\u{0}fourslash.NoTextEdits\u{0}".to_string(), ..Default::default() }]));
 
-#[expect(clippy::ref_option, reason = "the whole Option value is compared with a Go pointer-identity sentinel")]
-pub(crate) fn is_any_text_edits(edits: &Option<Vec<lsproto::TextEdit>>) -> bool {
-    *edits == *ANY_TEXT_EDITS
+pub(crate) fn is_any_text_edits(edits: Option<&[lsproto::TextEdit]>) -> bool {
+    edits == ANY_TEXT_EDITS.as_deref()
 }
 
-#[expect(clippy::ref_option, reason = "the whole Option value is compared with a Go pointer-identity sentinel")]
-pub(crate) fn is_no_text_edits(edits: &Option<Vec<lsproto::TextEdit>>) -> bool {
-    *edits == *NO_TEXT_EDITS
+pub(crate) fn is_no_text_edits(edits: Option<&[lsproto::TextEdit]>) -> bool {
+    edits == NO_TEXT_EDITS.as_deref()
 }
 
 // fourslash.go:5718
@@ -1327,15 +1315,13 @@ impl FourslashTest {
     }
 
     // fourslash.go:1064
-    #[expect(clippy::needless_pass_by_ref_mut, reason = "generated tests call this Go harness method through a mutable test handle")]
-    pub fn verify_current_file_content(&mut self, t: &T, expected_content: &str) {
+    pub fn verify_current_file_content(&self, t: &T, expected_content: &str) {
         let actual_content = self.get_script_info(&self.active_filename.clone()).content;
         crate::go::assert::equal(t, actual_content.as_str(), expected_content, "");
     }
 
     // fourslash.go:1070
-    #[expect(clippy::needless_pass_by_ref_mut, reason = "generated tests call this Go harness method through a mutable test handle")]
-    pub fn verify_current_line_content(&mut self, t: &T, expected_content: &str) {
+    pub fn verify_current_line_content(&self, t: &T, expected_content: &str) {
         let actual_content = self
             .get_script_info(&self.active_filename.clone())
             .get_line_content(self.current_caret_position.line as usize);
@@ -1348,12 +1334,8 @@ impl FourslashTest {
     }
 
     // fourslash.go:1083
-    #[expect(
-        clippy::needless_pass_by_ref_mut,
-        clippy::unused_self,
-        reason = "the unimplemented Go-compatible harness entry point keeps its generated-call signature"
-    )]
-    pub fn verify_indentation(&mut self, _t: &T, _num_spaces: usize) {
+    #[expect(clippy::unused_self, reason = "Preserves the Go harness instance API for the unported indentation assertion.")]
+    pub fn verify_indentation(&self, _t: &T, _num_spaces: usize) {
         // not implemented
     }
 
@@ -1769,11 +1751,11 @@ impl FourslashTest {
             if !err.is_empty() {
                 return err;
             }
-            if is_any_text_edits(&expected.additional_text_edits) {
+            if is_any_text_edits(expected.additional_text_edits.as_deref()) {
                 if actual.additional_text_edits.as_ref().is_none_or(std::vec::Vec::is_empty) {
                     return "Expected non-nil AdditionalTextEdits for auto-import completion item".to_string();
                 }
-            } else if is_no_text_edits(&expected.additional_text_edits) && actual.additional_text_edits.as_ref().is_some_and(|e| !e.is_empty()) {
+            } else if is_no_text_edits(expected.additional_text_edits.as_deref()) && actual.additional_text_edits.as_ref().is_some_and(|e| !e.is_empty()) {
                 return "Expected no AdditionalTextEdits for auto-import completion item".to_string();
             }
             if expected.label_details.is_some() {
@@ -1790,13 +1772,13 @@ impl FourslashTest {
             if !err.is_empty() {
                 return err;
             }
-            if is_any_text_edits(&expected.additional_text_edits) {
+            if is_any_text_edits(expected.additional_text_edits.as_deref()) {
                 if actual.additional_text_edits.as_ref().is_none_or(std::vec::Vec::is_empty) {
                     return "Expected non-empty AdditionalTextEdits for completion item".to_string();
                 }
             } else {
                 // NoTextEdits is a pointer to a nil slice in Go.
-                let expected_edits = if is_no_text_edits(&expected.additional_text_edits) { Some(Vec::new()) } else { expected.additional_text_edits.clone() };
+                let expected_edits = if is_no_text_edits(expected.additional_text_edits.as_deref()) { Some(Vec::new()) } else { expected.additional_text_edits.clone() };
                 let err = diff(&actual.additional_text_edits, &expected_edits);
                 if !err.is_empty() {
                     return format!("AdditionalTextEdits mismatch:\n{err}");
@@ -2977,7 +2959,7 @@ impl FourslashTest {
             Some(MarkerAndItem { marker, item: result.hover })
         }));
 
-        let get_range = |item: &Option<lsproto::Hover>| -> Option<lsproto::Range> { item.as_ref().and_then(|item| item.range) };
+        let get_range = |item: &Option<lsproto::Hover>| -> Option<lsproto::Range> { item.as_ref()?.range };
 
         let get_tooltip_lines = |item: &Option<lsproto::Hover>, _prev: &Option<lsproto::Hover>| -> Vec<String> {
             let item = item.as_ref().unwrap();
@@ -3012,7 +2994,7 @@ impl FourslashTest {
             Some(MarkerAndItem { marker, item: result.hover })
         }));
 
-        let get_range = |item: &Option<lsproto::Hover>| -> Option<lsproto::Range> { item.as_ref().and_then(|item| item.range) };
+        let get_range = |item: &Option<lsproto::Hover>| -> Option<lsproto::Range> { item.as_ref()?.range };
 
         let get_tooltip_lines = |item: &Option<lsproto::Hover>, _prev: &Option<lsproto::Hover>| -> Vec<String> {
             let Some(item) = item else {
@@ -3084,7 +3066,7 @@ impl FourslashTest {
             }
         }
 
-        let get_range = |item: &Option<HoverWithVerbosity>| -> Option<lsproto::Range> { item.as_ref().and_then(|item| item.hover.as_ref()).and_then(|h| h.range) };
+        let get_range = |item: &Option<HoverWithVerbosity>| -> Option<lsproto::Range> { item.as_ref()?.hover.as_ref()?.range };
 
         let get_tooltip_lines = |item: &Option<HoverWithVerbosity>, _prev: &Option<HoverWithVerbosity>| -> Vec<String> {
             let Some(item) = item else {
@@ -3939,12 +3921,11 @@ impl FourslashTest {
             ..Default::default()
         };
         let result = self.send_request(t, lsproto::TEXT_DOCUMENT_SIGNATURE_HELP_INFO, params);
-        self.verify_signature_help_result(t, result.signature_help.as_ref(), expected, &prefix);
+        Self::verify_signature_help_result(t, result.signature_help.as_ref(), expected, &prefix);
     }
 
     // fourslash.go:4642
-    #[expect(clippy::unused_self, reason = "this mirrors the Go harness method used by signature-help verification")]
-    fn verify_signature_help_result(&self, t: &T, actual: Option<&lsproto::SignatureHelp>, expected: Option<&lsproto::SignatureHelp>, prefix: &str) {
+    fn verify_signature_help_result(t: &T, actual: Option<&lsproto::SignatureHelp>, expected: Option<&lsproto::SignatureHelp>, prefix: &str) {
         assert_deep_equal(t, &actual, &expected, &format!("{prefix} SignatureHelp mismatch"));
     }
 
@@ -4213,7 +4194,7 @@ impl FourslashTest {
                 let file_name = uri.file_name();
                 let script = self.get_or_load_script_info(&file_name).expect("nil pointer dereference: scriptInfo");
                 let changes: Vec<TextChange> =
-                    edits.iter().map(|edit| TextChange { text_range: self.from_lsp_range(&script, edit.range), new_text: edit.new_text.clone() }).collect();
+                    edits.iter().map(|edit| TextChange { text_range: self.lsp_range_to_text_range(&script, edit.range), new_text: edit.new_text.clone() }).collect();
                 self.edit_script_and_update_markers_worker(t, &file_name, &changes);
             }
         }
@@ -4229,7 +4210,7 @@ impl FourslashTest {
                         .iter()
                         .map(|edit| {
                             let text_edit = edit.text_edit.as_ref().expect("nil pointer dereference: TextEdit");
-                            TextChange { text_range: self.from_lsp_range(&script, text_edit.range), new_text: text_edit.new_text.clone() }
+                            TextChange { text_range: self.lsp_range_to_text_range(&script, text_edit.range), new_text: text_edit.new_text.clone() }
                         })
                         .collect();
                     self.edit_script_and_update_markers_worker(t, &file_name, &changes);
@@ -4281,7 +4262,7 @@ impl FourslashTest {
                 let file_name = uri.file_name();
                 let script = self.get_or_load_script_info(&file_name).unwrap();
                 let changes: Vec<TextChange> =
-                    edits.iter().map(|edit| TextChange { text_range: self.from_lsp_range(&script, edit.range), new_text: edit.new_text.clone() }).collect();
+                    edits.iter().map(|edit| TextChange { text_range: self.lsp_range_to_text_range(&script, edit.range), new_text: edit.new_text.clone() }).collect();
                 self.edit_script_and_update_markers_worker(t, &file_name, &changes);
             }
         }
@@ -4297,7 +4278,7 @@ impl FourslashTest {
                         .iter()
                         .map(|edit| {
                             let text_edit = edit.text_edit.as_ref().unwrap();
-                            TextChange { text_range: self.from_lsp_range(&script, text_edit.range), new_text: text_edit.new_text.clone() }
+                            TextChange { text_range: self.lsp_range_to_text_range(&script, text_edit.range), new_text: text_edit.new_text.clone() }
                         })
                         .collect();
                     self.edit_script_and_update_markers_worker(t, &file_name, &changes);
@@ -4459,11 +4440,10 @@ impl FourslashTest {
     }
 
     // fourslash.go:5257
-    #[expect(clippy::needless_pass_by_ref_mut, reason = "the Go harness finalizer receives the mutable test handle")]
-    pub(crate) fn verify_baselines(&mut self, t: &T, test_path: &str) {
+    pub(crate) fn verify_baselines(&self, t: &T, test_path: &str) {
         if !self.test_data.is_state_baselining_enabled() {
             for (command, content) in &self.baselines {
-                crate::testutil::baseline::run(t, &get_baseline_file_name(t, *command), content, self.get_baseline_options(*command, test_path));
+                crate::testutil::baseline::run(t, &get_baseline_file_name(t, *command), content, Self::get_baseline_options(*command, test_path));
             }
         } else {
             let baseline = self.state_baseline.as_ref().map(|s| s.baseline.clone()).unwrap_or_default();
@@ -5355,8 +5335,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:4133
-    #[expect(clippy::wrong_self_convention, reason = "the name mirrors the Go converter-backed harness method")]
-    pub(crate) fn from_lsp_range(&self, script: &ScriptInfo, r: lsproto::Range) -> TextRange {
+    pub(crate) fn lsp_range_to_text_range(&self, script: &ScriptInfo, r: lsproto::Range) -> TextRange {
         let ranges = self.converters.converters.from_lsp_range(script.clone(), r, Feature::All);
         if ranges.len() != 1 {
             return TextRange::default();
@@ -5780,7 +5759,7 @@ impl FourslashTest {
                 let related_script_info = self.try_get_script_info(&info.location.uri.file_name())?;
                 let related_diagnostic = FourslashDiagnostic {
                     file: new_fourslash_diagnostic_file(&related_script_info.file_name, &related_script_info.content),
-                    loc: self.from_lsp_range(&related_script_info, info.location.range),
+                    loc: self.lsp_range_to_text_range(&related_script_info, info.location.range),
                     code,
                     category,
                     message: info.message.clone(),
@@ -5792,7 +5771,7 @@ impl FourslashTest {
 
         FourslashDiagnostic {
             file: new_fourslash_diagnostic_file(&script_info.file_name, &script_info.content),
-            loc: self.from_lsp_range(script_info, lsp_diagnostic.range),
+            loc: self.lsp_range_to_text_range(script_info, lsp_diagnostic.range),
             code,
             category,
             message: lsp_diagnostic.message.as_string(),

@@ -153,7 +153,7 @@ impl configFileRegistryBuilder {
         logger: &LogTree,
     ) -> Option<P<ParsedCommandLine>> {
         match load_kind {
-            projectLoadKind::Find => self.configs.load(config_file_path).and_then(|entry| entry.value().and_then(|v| v.command_line)),
+            projectLoadKind::Find => self.configs.load(config_file_path)?.value()?.command_line,
             projectLoadKind::Create => self.acquire_config_for_file(config_file_name, config_file_path, file_path, logger),
         }
     }
@@ -322,7 +322,7 @@ impl configFileRegistryBuilder {
         if content_mappers_changed {
             self.invalidate_content_mappers();
         }
-        entry.value().and_then(|v| v.command_line)
+        entry.value()?.command_line
     }
 
     // configfileregistrybuilder.go:313
@@ -354,7 +354,7 @@ impl configFileRegistryBuilder {
         if content_mappers_changed {
             self.invalidate_content_mappers();
         }
-        entry.value().and_then(|v| v.command_line)
+        entry.value()?.command_line
     }
 
     // configfileregistrybuilder.go:343

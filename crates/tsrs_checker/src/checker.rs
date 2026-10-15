@@ -425,7 +425,7 @@ impl InferenceContext {
         }
     }
     pub fn return_mapper(&self) -> Option<P<TypeMapper>> {
-        self.rare().and_then(|r| r.return_mapper.get())
+        self.rare()?.return_mapper.get()
     }
     // The return mappers live and die with the context: they escape when it does (`escape` walks them), and
     // `recycle` frees them with it (notes/mem-scoped-arenas.md).
@@ -440,7 +440,7 @@ impl InferenceContext {
         }
     }
     pub fn outer_return_mapper(&self) -> Option<P<TypeMapper>> {
-        self.rare().and_then(|r| r.outer_return_mapper.get())
+        self.rare()?.outer_return_mapper.get()
     }
     pub fn set_outer_return_mapper(&self, mapper: Option<P<TypeMapper>>) {
         if mapper.is_some() || self.rare().is_some() {

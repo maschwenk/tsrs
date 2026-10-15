@@ -38,6 +38,11 @@ type varInfo struct {
 	fOwner string // for fclosures: the FourslashTest variable they belong to
 }
 
+type nonNilBinding struct {
+	expr ast.Expr
+	name string
+}
+
 type gen struct {
 	l    *Loaded
 	p    *Package
@@ -64,6 +69,7 @@ type gen struct {
 	movableUses        map[*ast.Ident]bool
 	resultTypes        []types.Type
 	inResultFunc       bool
+	nonNil             []nonNilBinding
 }
 
 func (g *gen) line(format string, args ...any) {
@@ -438,6 +444,7 @@ func (g *gen) genFunc(d *ast.FuncDecl, isTest bool) (code string, skip string, s
 		}
 	}()
 	g.vars = map[types.Object]*varInfo{}
+	g.nonNil = nil
 	g.curF, g.curT = "", ""
 	g.tmp = 0
 	g.assigned = map[types.Object]bool{}
@@ -478,6 +485,13 @@ func (g *gen) genFunc(d *ast.FuncDecl, isTest bool) (code string, skip string, s
 	g.inResultFunc = sig.Results().Len() > 0
 	params, prologue := g.params(sig, d.Type.Params, false, -1, "")
 	ret := g.results(sig)
+	if len(stmts) == 1 && len(g.resultTypes) == 1 && isOptionPtr(g.resultTypes[0]) {
+		if r, ok := stmts[0].(*ast.ReturnStmt); ok && len(r.Results) == 1 {
+			if addr, ok := r.Results[0].(*ast.UnaryExpr); ok && addr.Op == token.AND {
+				fmt.Fprintln(&b, "#[expect(clippy::unnecessary_wraps, reason = \"The generated Go pointer result remains optional at its call sites.\")]")
+			}
+		}
+	}
 	fmt.Fprintf(&b, "// %s:%d\npub fn %s(%s)%s {\n", filepath.Base(pos.Filename), pos.Line, ident(d.Name.Name), strings.Join(params, ", "), ret)
 	g.indent = 1
 	for _, p := range prologue {
@@ -486,7 +500,7 @@ func (g *gen) genFunc(d *ast.FuncDecl, isTest bool) (code string, skip string, s
 	resetAnonStructs()
 	header := b.String()
 	b.Reset()
-	g.stmts(stmts)
+	g.stmtsWithTailReturn(stmts, true)
 	body := b.String()
 	b.Reset()
 	b.WriteString(header)
@@ -639,6 +653,9 @@ func (g *gen) collectLastUses(body *ast.BlockStmt) {
 }
 
 func (g *gen) canMove(e ast.Expr) bool {
+	if g.borrowedPointer(e) != "" {
+		return false
+	}
 	root := e
 	for {
 		sel, ok := root.(*ast.SelectorExpr)

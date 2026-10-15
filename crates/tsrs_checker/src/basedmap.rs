@@ -49,7 +49,7 @@ impl<K: PackedKey, V: Copy> Based<PackedMap<K, V>> {
     pub fn get(&self, key: &K) -> Option<V> {
         match self.own.get(key) {
             Some(v) => Some(v),
-            None => self.base.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|b| b.get(key)),
+            None => self.base.filter(|_| tsrs_core::sharedgraph::COMPILED_IN)?.get(key),
         }
     }
 

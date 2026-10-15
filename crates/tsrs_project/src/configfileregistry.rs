@@ -137,7 +137,7 @@ impl Cloneable for configFileEntry {
 impl ConfigFileRegistry {
     // configfileregistry.go:123
     pub fn get_config(&self, path: &Path) -> Option<P<ParsedCommandLine>> {
-        self.configs.get(path).and_then(|entry| entry.command_line)
+        self.configs.get(path)?.command_line
     }
 
     // configfileregistry.go:130

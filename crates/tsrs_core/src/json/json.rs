@@ -481,9 +481,9 @@ mod tests {
         }
         assert_eq!(marshal(&Value::Integer(i64::MIN)).unwrap(), i64::MIN.to_string());
         assert_eq!(marshal_string("plain/ascii run é \"q\" \\ tab\t end"), "\"plain/ascii run é \\\"q\\\" \\\\ tab\\t end\"");
-        assert!(marshal_f64(f64::NAN).is_err());
-        assert!(unmarshal("{\"a\":1,\"a\":2}").is_err());
-        assert!(unmarshal("[1,]").is_err());
+        marshal_f64(f64::NAN).unwrap_err();
+        unmarshal("{\"a\":1,\"a\":2}").unwrap_err();
+        unmarshal("[1,]").unwrap_err();
         // The integer fast path agrees with the general parse, including the sign of zero.
         for text in ["0", "-0", "7", "-42", "123456789012345", "-999999999999999", "1234567890123456", "1.5", "2e3"] {
             let Value::Number(n) = unmarshal(text).unwrap() else { panic!() };
@@ -507,15 +507,15 @@ mod tests {
             .stack_size(256 << 20)
             .spawn(|| {
                 let nested = |open: &str, close: &str, depth: usize| format!("{}{}", open.repeat(depth), close.repeat(depth));
-                assert!(unmarshal(&nested("[", "]", MAX_NESTING_DEPTH)).is_ok());
-                assert!(unmarshal(&format!("{{\"a\":{}}}", nested("[", "]", MAX_NESTING_DEPTH - 1))).is_ok());
+                unmarshal(&nested("[", "]", MAX_NESTING_DEPTH)).unwrap();
+                unmarshal(&format!("{{\"a\":{}}}", nested("[", "]", MAX_NESTING_DEPTH - 1))).unwrap();
                 assert_eq!(unmarshal(&nested("[", "]", MAX_NESTING_DEPTH + 1)).unwrap_err(), "jsontext: exceeded max depth at offset 10000");
                 let deep_object = format!("{{\"a\":{}", nested("[", "]", MAX_NESTING_DEPTH));
                 assert_eq!(unmarshal(&deep_object).unwrap_err(), "jsontext: exceeded max depth at offset 10004");
                 // Far deeper than the stack could recurse.
-                assert!(unmarshal(&nested("[", "]", 2_000_000)).is_err());
+                unmarshal(&nested("[", "]", 2_000_000)).unwrap_err();
                 // Scalars at the limit are fine.
-                assert!(unmarshal(&format!("{}1{}", "[".repeat(MAX_NESTING_DEPTH), "]".repeat(MAX_NESTING_DEPTH))).is_ok());
+                unmarshal(&format!("{}1{}", "[".repeat(MAX_NESTING_DEPTH), "]".repeat(MAX_NESTING_DEPTH))).unwrap();
             })
             .unwrap()
             .join()

@@ -11,20 +11,22 @@ pub fn configure_quote_preference(t: &T, f: &mut fourslash::FourslashTest, quote
     f.configure(t, opts);
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "The generated Go pointer result remains optional at its call sites.")]
 // completionsObjectPropertyName_quotePreference_test.go:25
 pub fn required_key(name: &str) -> Option<lsproto::CompletionItem> {
-    return Some(lsproto::CompletionItem { label: name.to_string(), ..Default::default() });
+    Some(lsproto::CompletionItem { label: name.to_string(), ..Default::default() })
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "The generated Go pointer result remains optional at its call sites.")]
 // completionsObjectPropertyName_quotePreference_test.go:30
 pub fn optional_key(name: &str) -> Option<lsproto::CompletionItem> {
-    return Some(lsproto::CompletionItem { label: format!("{name}?"), insert_text: Some(name.to_string()), filter_text: Some(name.to_string()), sort_text: Some("12".to_string()), ..Default::default() });
+    Some(lsproto::CompletionItem { label: format!("{name}?"), insert_text: Some(name.to_string()), filter_text: Some(name.to_string()), sort_text: Some("12".to_string()), ..Default::default() })
 }
 
 // completionsObjectPropertyName_quotePreference_test.go:39
 pub fn verify_object_literal_key_completions(t: &T, f: &mut fourslash::FourslashTest, items: &[lsproto::CompletionItem]) {
     t.helper();
-    let mut expected = vec![Default::default(); (items.len() as i32) as usize];
+    let mut expected = vec![Any::default(); (items.len() as i32) as usize];
     for (i, item) in items.iter().cloned().enumerate() {
         let i = i as i32;
         expected[i as usize] = Any::CompletionItem(item);
@@ -3356,7 +3358,7 @@ use crate::tests::prelude::*;
 pub fn new_content_mapper_fourslash(t: &T, content: &str, mapper: &str, extensions: &[&str]) -> (fourslash::FourslashTest, fourslash::DoneFn) {
     let mut content = content.to_string();
     t.helper();
-    let mut quoted_extensions = vec![Default::default(); (extensions.len() as i32) as usize];
+    let mut quoted_extensions = vec![String::default(); (extensions.len() as i32) as usize];
     for (i, extension) in go::owned_strs(extensions).into_iter().enumerate() {
         let i = i as i32;
         quoted_extensions[i as usize] = go::quote(extension.as_str());
@@ -3378,7 +3380,7 @@ pub fn new_content_mapper_fourslash(t: &T, content: &str, mapper: &str, extensio
 {}
 
 {}"#, go::strings::join(&go::strs(&quoted_extensions), ", ").as_str(), contentmappertest::package_json(mapper).as_str(), content.as_str());
-    return fourslash::new_fourslash_with_options(t, content.as_str(), Some(fourslash::FourslashOptions { content_mapper_spawner: contentmappertest::new_spawner(), run_external_code: true, ..Default::default() }));
+    fourslash::new_fourslash_with_options(t, content.as_str(), Some(fourslash::FourslashOptions { content_mapper_spawner: contentmappertest::new_spawner(), run_external_code: true, ..Default::default() }))
 }
 
 }
@@ -3653,7 +3655,7 @@ card.se/*incoming*/ttings;
         let f = &mut f;
         let __defer2 = go::run(|| {
             let property_completions = |items: &[Any]| -> Option<fourslash::CompletionsExpectedList> {
-                return Some(fourslash::CompletionsExpectedList { item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: items.to_vec(), ..Default::default() }), ..Default::default() });
+                Some(fourslash::CompletionsExpectedList { item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: items.to_vec(), ..Default::default() }), ..Default::default() })
             };
             f.verify_completions(t, Any::String("exact".to_string()), property_completions(&[Any::String("title".to_string())]));
             f.verify_completions(t, Any::String("outgoing".to_string()), property_completions(&[Any::String("color".to_string())]));
@@ -3751,7 +3753,7 @@ import {{}} from "./[|/*unloadedPath*/Un|]";
         let f = &mut f;
         let __defer2 = go::run(|| {
             let path_completion = |f: &mut fourslash::FourslashTest, label: &str, range_index: i32| -> Option<fourslash::CompletionsExpectedList> {
-                return Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: label.to_string(), detail: Some(label.to_string()), kind: Some(lsproto::CompletionItemKind::File), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: label.to_string(), range: f.ranges()[range_index as usize].ls_range }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() });
+                Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: label.to_string(), detail: Some(label.to_string()), kind: Some(lsproto::CompletionItemKind::File), text_edit: Some(lsproto::TextEditOrInsertReplaceEdit { text_edit: Some(lsproto::TextEdit { new_text: label.to_string(), range: f.ranges()[range_index as usize].ls_range }), ..Default::default() }), ..Default::default() })], ..Default::default() }), ..Default::default() })
             };
             { let __arg0 = t; let __arg1 = Any::String("loadedPath".to_string()); let __arg2 = path_completion(&mut *f, "Loaded.vue", 0); f.verify_completions(__arg0, __arg1, __arg2) };
             { let __arg0 = t; let __arg1 = Any::String("unloadedPath".to_string()); let __arg2 = path_completion(&mut *f, "Unloaded.vue", 1); f.verify_completions(__arg0, __arg1, __arg2) };

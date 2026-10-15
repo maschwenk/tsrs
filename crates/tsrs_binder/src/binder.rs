@@ -1566,7 +1566,7 @@ impl Binder {
         }
         if let Some(declaration) = container.declaration_data() {
             if let Some(symbol) = declaration.symbol.get() {
-                return symbol.exports().and_then(|exports| (*exports).get(name));
+                return (*symbol.exports()?).get(name);
             }
         }
         None

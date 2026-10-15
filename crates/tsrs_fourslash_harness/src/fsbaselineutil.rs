@@ -49,7 +49,7 @@ impl FSDiffer {
     }
 
     fn default_libs(&self) -> Option<FxHashSet<String>> {
-        self.default_libs.as_ref().and_then(|f| f())
+        (self.default_libs.as_ref()?)()
     }
 
     // differ.go:46

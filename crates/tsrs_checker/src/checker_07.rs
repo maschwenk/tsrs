@@ -1973,7 +1973,7 @@ pub(crate) fn get_excluded_symbol_flags(flags: SymbolFlags) -> SymbolFlags {
 
 // A Go `ast.SymbolTable` field lookup, where a nil map yields nil.
 fn lookup_export(symbol: P<Symbol>, name: &str) -> Option<P<Symbol>> {
-    symbol.exports().and_then(|exports| exports.lookup(name))
+    symbol.exports()?.lookup(name)
 }
 
 impl Checker {

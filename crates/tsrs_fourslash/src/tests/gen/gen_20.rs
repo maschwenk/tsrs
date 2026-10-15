@@ -2733,8 +2733,8 @@ function abcdef(x) { }
             let mut user_preferences = lsutil::new_default_user_preferences();
             user_preferences.enable_jsdoc_completions = Tristate::False;
             let list = f.get_completions(t, Some(user_preferences));
-            if list.is_some() {
-                for item in list.as_ref().unwrap().items.clone() {
+            if let Some(__present3) = list.as_ref() {
+                for item in __present3.items.clone() {
                     go::assert::assert(t, item.label.as_str() != "/** */", "");
                 }
             }

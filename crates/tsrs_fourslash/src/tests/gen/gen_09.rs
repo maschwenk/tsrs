@@ -204,7 +204,7 @@ supplementalV/*completion*/;
             f.verify_baseline_find_all_references(t, &["use"]);
             f.go_to_marker(t, "completion");
             let completions = f.get_completions(t, None);
-            let mut completion: Option<lsproto::CompletionItem> = Default::default();
+            let mut completion: Option<lsproto::CompletionItem> = Option::<lsproto::CompletionItem>::default();
             for item in completions.as_ref().unwrap().items.clone() {
                 if item.label.as_str() == "supplementalValue" {
                     completion = Some(item);

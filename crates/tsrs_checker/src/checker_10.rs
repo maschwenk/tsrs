@@ -644,7 +644,7 @@ impl Checker {
 
     // checker.go:20143
     pub(crate) fn get_index_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Symbol>> {
-        self.get_members_of_symbol(symbol).and_then(|m| m.lookup(InternalSymbolNameIndex))
+        self.get_members_of_symbol(symbol)?.lookup(InternalSymbolNameIndex)
     }
 
     // checker.go:20147

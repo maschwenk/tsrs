@@ -3320,8 +3320,8 @@ use crate::tests::prelude::*;
 pub fn test_really_large_file(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: String = { let mut s = String::with_capacity(583770); s.push_str(r"// @Filename: file.d.ts
-namespace /*1*/Foo {"); for _ in 0..108834 { s.push('\n'); } s.push_str("////"); for _ in 0..94974 { s.push('\n'); } s.push_str("////"); for _ in 0..94974 { s.push('\n'); } s.push_str("////"); for _ in 0..94974 { s.push('\n'); } s.push_str("////"); for _ in 0..94974 { s.push('\n'); } s.push_str("////"); for _ in 0..94975 { s.push('\n'); } s.push_str("}"); s };
+        let content: String = { let mut s = String::with_capacity(583_770); s.push_str(r"// @Filename: file.d.ts
+namespace /*1*/Foo {"); for _ in 0..108_834 { s.push('\n'); } s.push_str("////"); for _ in 0..94_974 { s.push('\n'); } s.push_str("////"); for _ in 0..94_974 { s.push('\n'); } s.push_str("////"); for _ in 0..94_974 { s.push('\n'); } s.push_str("////"); for _ in 0..94_974 { s.push('\n'); } s.push_str("////"); for _ in 0..94_975 { s.push('\n'); } s.push('}'); s };
         let (mut f, done) = fourslash::new_fourslash(t, None, content.as_str());
         let f = &mut f;
         let __defer2 = go::run(|| {

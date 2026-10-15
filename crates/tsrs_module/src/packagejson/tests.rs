@@ -199,8 +199,8 @@ fn test_parse() {
 
 #[test]
 fn test_parse_errors_and_dependencies() {
-    assert!(parse("[]").is_err());
-    assert!(parse("{").is_err());
+    parse("[]").unwrap_err();
+    parse("{").unwrap_err();
     assert_eq!(parse("null").unwrap(), Fields::default());
 
     let got = parse(r#"{ "dependencies": { "a": "1", "b": "2" }, "peerDependencies": { "c": 1 }, "devDependencies": { "d": "1", "d": "2" } }"#).unwrap();

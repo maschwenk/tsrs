@@ -320,11 +320,11 @@ impl<'a> Decoder<'a> {
     }
 
     pub(crate) fn single_child(&self, child_indices: &[usize]) -> Option<P<Node>> {
-        child_indices.first().and_then(|&ci| self.nodes[ci])
+        self.nodes[*child_indices.first()?]
     }
 
     pub(crate) fn single_node_list_child(&self, child_indices: &[usize]) -> Option<P<NodeList>> {
-        child_indices.first().and_then(|&ci| self.lists[ci])
+        self.lists[*child_indices.first()?]
     }
 
     // ── hand-written extended data (Go decodeExtendedData_*) ──

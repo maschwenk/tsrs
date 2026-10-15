@@ -66,8 +66,7 @@ impl FourslashTest {
     }
 
     // baselineutil.go:96
-    #[expect(clippy::unused_self, reason = "this mirrors the Go harness method called by the shared baseline flow")]
-    pub(crate) fn get_baseline_options(&self, command: BaselineCommand, _test_path: &str) -> baseline::Options {
+    pub(crate) fn get_baseline_options(command: BaselineCommand, _test_path: &str) -> baseline::Options {
         baseline::Options { subfolder: format!("fourslash/{}", normalize_command_name(command.0)), ..Default::default() }
     }
 }
@@ -179,7 +178,7 @@ impl FourslashTest {
                 }
             }
 
-            baseline_entries.push(self.get_baseline_content_for_file(path, &content, ranges, &mut span_to_context_id, options));
+            baseline_entries.push(Self::get_baseline_content_for_file(path, &content, ranges, &mut span_to_context_id, options));
         };
         if options.preserve_result_order {
             for uri in &options.ordered_files {
@@ -201,7 +200,7 @@ impl FourslashTest {
             if !found_additional_location {
                 let file_name = additional_span.uri.file_name();
                 if let Some(content) = self.text_of_file(&file_name) {
-                    baseline_entries.push(self.get_baseline_content_for_file(
+                    baseline_entries.push(Self::get_baseline_content_for_file(
                         &file_name,
                         &content,
                         std::slice::from_ref(additional_span),
@@ -222,7 +221,7 @@ impl FourslashTest {
                 // If we didn't find the marker in any file, we need to add it.
                 let marker_file_name = marker.file_name();
                 if let Some(content) = self.text_of_file(&marker_file_name) {
-                    baseline_entries.push(self.get_baseline_content_for_file(&marker_file_name, &content, &[], &mut span_to_context_id, options));
+                    baseline_entries.push(Self::get_baseline_content_for_file(&marker_file_name, &content, &[], &mut span_to_context_id, options));
                 }
             }
         }
@@ -322,9 +321,7 @@ impl BaselineDetail {
 
 impl FourslashTest {
     // baselineutil.go:319
-    #[expect(clippy::unused_self, reason = "this mirrors the Go harness method called by the generated tests")]
     pub(crate) fn get_baseline_content_for_file(
-        &self,
         file_name: &str,
         content: &str,
         spans_in_file: &[DocumentSpan],

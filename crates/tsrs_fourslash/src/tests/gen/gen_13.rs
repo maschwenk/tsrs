@@ -1941,7 +1941,7 @@ pub fn test_get_edits_for_file_rename_duplicate_unresolved_imports(t: &T) {
     let __defer1 = go::run(|| {
         let num_files: i32 = 60;
         let num_imports: i32 = 60;
-        let mut content: String = Default::default();
+        let mut content: String = String::default();
         content.push_str(r#"// @Filename: /tsconfig.json
 { "compilerOptions": { "allowJs": true } }
 "#);
@@ -1962,7 +1962,7 @@ export const v{} = {};
         let (mut f, done) = fourslash::new_fourslash(t, None, content.clone().as_str());
         let f = &mut f;
         let __defer2 = go::run(|| {
-            let mut expected: String = Default::default();
+            let mut expected: String = String::default();
             for _ in 0..num_imports {
                 expected.push_str(r#"import "@some/unresolved-module";
 "#);
@@ -1983,14 +1983,14 @@ pub fn itoa_small(n: i32) -> String {
     if n == 0 {
         return "0".to_string();
     }
-    let mut b: Vec<u8> = Default::default();
+    let mut b: Vec<u8> = Vec::<u8>::default();
     {
         while n > 0 {
             b = go::append(vec![(48 + (n % 10)) as u8], &b[..]);
             n /= 10;
         }
     }
-    return String::from_utf8(b).unwrap();
+    String::from_utf8(b).unwrap()
 }
 
 }
@@ -2709,9 +2709,9 @@ helper;"#;
                 t.fatal("workspace/willRenameFiles returned no document changes");
             }
             for change in result.workspace_edit.as_ref().unwrap().document_changes.as_ref().unwrap().clone() {
-                if change.text_document_edit.is_some() && (change.text_document_edit.as_ref().unwrap().text_document.uri.file_name().as_str() == "/app/main.ts") {
-                    for edit in change.text_document_edit.as_ref().unwrap().edits.clone() {
-                        if edit.text_edit.is_some() && (edit.text_edit.as_ref().unwrap().new_text.as_str() == "../lib/renamed-helper") {
+                if let Some(__present3) = change.text_document_edit.as_ref() && __present3.text_document.uri.file_name().as_str() == "/app/main.ts" {
+                    for edit in __present3.edits.clone() {
+                        if let Some(__present4) = edit.text_edit.as_ref() && __present4.new_text.as_str() == "../lib/renamed-helper" {
                             return;
                         }
                     }

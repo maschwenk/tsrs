@@ -86,5 +86,5 @@ fn program_reads_through_client_callbacks() {
 
 #[test]
 fn unknown_callbacks_are_rejected() {
-    assert!(CallbackConfig::parse(&["nope"]).is_err());
+    CallbackConfig::parse(&["nope"]).unwrap_err();
 }

@@ -100,7 +100,8 @@ impl<K: Eq + Hash + Clone + 'static, V: Clone + 'static> GoMap<K, V> {
     where
         K: std::borrow::Borrow<Q>,
     {
-        self.0.get().and_then(|m| tsrs_core::sharedgraph::with_ref(&m, |m| m.get(key).cloned()))
+        let m = self.0.get()?;
+        tsrs_core::sharedgraph::with_ref(&m, |m| m.get(key).cloned())
     }
     #[inline]
     pub fn has(&self, key: &K) -> bool {
@@ -1185,7 +1186,7 @@ pub trait TypeAliasOptExt {
 impl TypeAliasOptExt for Option<P<TypeAlias>> {
     #[inline]
     fn symbol(self) -> Option<P<Symbol>> {
-        self.and_then(|a| a.symbol.get())
+        self?.symbol.get()
     }
     #[inline]
     fn type_arguments(self) -> &'static [P<Type>] {
@@ -1844,7 +1845,7 @@ impl Type {
 
     #[inline]
     pub fn alias(&self) -> Option<P<TypeAlias>> {
-        self.symbol_or_alias.get().record().and_then(|r| r.alias.get())
+        self.symbol_or_alias.get().record()?.alias.get()
     }
 
     #[inline]
@@ -2272,7 +2273,7 @@ impl StructuredType {
 
     #[inline]
     pub fn members(&self) -> Option<P<SymbolTable>> {
-        self.resolved.get().and_then(|r| r.members.get())
+        self.resolved.get()?.members.get()
     }
     #[inline]
     pub fn set_members(&self, members: Option<P<SymbolTable>>) {
@@ -2743,7 +2744,7 @@ impl UnionOrIntersectionType {
     }
     #[inline]
     pub fn resolved_properties(&self) -> Option<&'static [P<Symbol>]> {
-        self.rare().and_then(|r| r.resolved_properties.get())
+        self.rare()?.resolved_properties.get()
     }
     #[inline]
     pub fn set_resolved_properties(&self, properties: Option<&'static [P<Symbol>]>) {
@@ -2796,7 +2797,7 @@ impl UnionType {
     }
     #[inline]
     pub fn resolved_reduced_type(&self) -> Option<P<Type>> {
-        self.union_rare().and_then(|r| r.resolved_reduced_type.get())
+        self.union_rare()?.resolved_reduced_type.get()
     }
     #[inline]
     pub fn set_resolved_reduced_type(&self, t: Option<P<Type>>) {
@@ -2806,7 +2807,7 @@ impl UnionType {
     }
     #[inline]
     pub fn regular_type(&self) -> Option<P<Type>> {
-        self.union_rare().and_then(|r| r.regular_type.get())
+        self.union_rare()?.regular_type.get()
     }
     #[inline]
     pub fn set_regular_type(&self, t: Option<P<Type>>) {
@@ -2816,7 +2817,7 @@ impl UnionType {
     }
     #[inline]
     pub fn origin(&self) -> Option<P<Type>> {
-        self.union_rare().and_then(|r| r.origin.get())
+        self.union_rare()?.origin.get()
     }
     #[inline]
     pub fn set_origin(&self, t: Option<P<Type>>) {
@@ -2883,7 +2884,7 @@ impl IntersectionType {
     }
     #[inline]
     pub fn resolved_apparent_type(&self) -> Option<P<Type>> {
-        self.intersection_rare().and_then(|r| r.resolved_apparent_type.get())
+        self.intersection_rare()?.resolved_apparent_type.get()
     }
     #[inline]
     pub fn set_resolved_apparent_type(&self, t: Option<P<Type>>) {
@@ -2893,7 +2894,7 @@ impl IntersectionType {
     }
     #[inline]
     pub fn unique_literal_filled_instantiation(&self) -> Option<P<Type>> {
-        self.intersection_rare().and_then(|r| r.unique_literal_filled_instantiation.get())
+        self.intersection_rare()?.unique_literal_filled_instantiation.get()
     }
     #[inline]
     pub fn set_unique_literal_filled_instantiation(&self, t: Option<P<Type>>) {
@@ -3196,7 +3197,7 @@ impl Signature {
         if self.rare.no_type_predicate() {
             return Some(no_type_predicate);
         }
-        self.rare.tail().and_then(|r| r.resolved_type_predicate.get())
+        self.rare.tail()?.resolved_type_predicate.get()
     }
     /// Go `sig.resolvedTypePredicate = predicate`; `no_type_predicate` is the checker's `noTypePredicate`.
     #[inline]
@@ -3210,7 +3211,7 @@ impl Signature {
     }
     #[inline]
     pub fn this_parameter(&self) -> Option<P<Symbol>> {
-        self.rare.tail().and_then(|r| r.this_parameter.get())
+        self.rare.tail()?.this_parameter.get()
     }
     #[inline]
     pub fn set_this_parameter(&self, this_parameter: Option<P<Symbol>>) {
@@ -3220,7 +3221,7 @@ impl Signature {
     }
     #[inline]
     pub fn isolated_signature_type(&self) -> Option<P<Type>> {
-        self.rare.tail().and_then(|r| r.isolated_signature_type.get())
+        self.rare.tail()?.isolated_signature_type.get()
     }
     #[inline]
     pub fn set_isolated_signature_type(&self, t: Option<P<Type>>) {
@@ -3230,7 +3231,7 @@ impl Signature {
     }
     #[inline]
     pub fn composite(&self) -> Option<P<CompositeSignature>> {
-        self.rare.tail().and_then(|r| r.composite.get())
+        self.rare.tail()?.composite.get()
     }
     #[inline]
     pub fn set_composite(&self, composite: Option<P<CompositeSignature>>) {

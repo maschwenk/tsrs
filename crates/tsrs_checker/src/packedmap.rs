@@ -146,7 +146,8 @@ impl<K: PackedKey + 'static, V: Copy + 'static> GoPackedMap<K, V> {
     /// Go `v, ok := m[k]` (reading a nil map is allowed).
     #[inline]
     pub fn get(&self, key: &K) -> Option<V> {
-        self.0.get().and_then(|m| tsrs_core::sharedgraph::with_ref(&m, |m| m.get(key)))
+        let m = self.0.get()?;
+        tsrs_core::sharedgraph::with_ref(&m, |m| m.get(key))
     }
 
     /// Go `m[k] = v`. Creates the map if it is nil, as `GoMap::set` does.
@@ -213,7 +214,7 @@ impl StringLiteralTypes {
         let h = Self::hash(value);
         match self.table.find(h, |&t| Self::value_of(t) == value) {
             Some(&t) => Some(t),
-            None => self.base.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|b| b.table.find(h, |&t| Self::value_of(t) == value).copied()),
+            None => self.base.filter(|_| tsrs_core::sharedgraph::COMPILED_IN)?.table.find(h, |&t| Self::value_of(t) == value).copied(),
         }
     }
 

@@ -3220,7 +3220,7 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_member_of_structured_type_ex(&mut self, t: P<Type>, name: &str, instantiate: bool) -> Option<P<Symbol>> {
         if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
-            return t.as_structured_type().members().and_then(|m| m.lookup(name));
+            return t.as_structured_type().members()?.lookup(name);
         }
         self.get_member_of_unresolved_structured_type(t, name, instantiate)
     }
@@ -3238,7 +3238,7 @@ impl Checker {
         }
         let lm = self.get_ready_lazy_member_table(t);
         let Some(lm) = lm.filter(|_| !is_reserved_member_name(name)) else {
-            return self.resolve_structured_type_members(t).members().and_then(|m| m.lookup(name));
+            return self.resolve_structured_type_members(t).members()?.lookup(name);
         };
         self.lazy_member_stats.member_lookups += 1;
         // The declared member, else the first base type's property (see addInheritedMembers).

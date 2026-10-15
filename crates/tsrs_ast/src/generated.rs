@@ -1058,7 +1058,7 @@ impl VariableDeclaration {
     }
     #[inline]
     pub fn exclamation_token(&self) -> Option<P<Node>> {
-        rare_tail(self).and_then(|r| r.exclamation_token)
+        rare_tail(self)?.exclamation_token
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -1137,7 +1137,7 @@ impl NodeRareTail for ParameterDeclaration {
 impl ParameterDeclaration {
     #[inline]
     pub fn dot_dot_dot_token(&self) -> Option<P<Node>> {
-        rare_tail(self).and_then(|r| r.dot_dot_dot_token)
+        rare_tail(self)?.dot_dot_dot_token
     }
     #[inline]
     pub fn name(&self) -> P<Node> {
@@ -1161,7 +1161,7 @@ impl ParameterDeclaration {
     }
     #[inline]
     pub fn initializer(&self) -> Option<P<Node>> {
-        rare_tail(self).and_then(|r| r.initializer)
+        rare_tail(self)?.initializer
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -1202,11 +1202,11 @@ impl NodeRareTail for BindingElement {
 impl BindingElement {
     #[inline]
     pub fn dot_dot_dot_token(&self) -> Option<P<Node>> {
-        rare_tail(self).and_then(|r| r.dot_dot_dot_token)
+        rare_tail(self)?.dot_dot_dot_token
     }
     #[inline]
     pub fn property_name(&self) -> Option<P<Node>> {
-        rare_tail(self).and_then(|r| r.property_name)
+        rare_tail(self)?.property_name
     }
     #[inline]
     pub fn name(&self) -> Option<P<Node>> {
@@ -1214,7 +1214,7 @@ impl BindingElement {
     }
     #[inline]
     pub fn initializer(&self) -> Option<P<Node>> {
-        rare_tail(self).and_then(|r| r.initializer)
+        rare_tail(self)?.initializer
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -1881,7 +1881,7 @@ impl ImportDeclaration {
     }
     #[inline]
     pub fn attributes(&self) -> Option<P<Node>> {
-        rare_tail(self).and_then(|r| r.attributes)
+        rare_tail(self)?.attributes
     }
     #[inline]
     pub fn flow_node(&self) -> Option<P<FlowNode>> {
@@ -2852,7 +2852,7 @@ impl PropertySignatureDeclaration {
     }
     #[inline]
     pub fn initializer(&self) -> Option<P<Node>> {
-        rare_tail(self).and_then(|r| r.initializer)
+        rare_tail(self)?.initializer
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -3531,7 +3531,7 @@ impl PropertyAccessExpression {
     }
     #[inline]
     pub fn question_dot_token(&self) -> Option<P<Node>> {
-        rare_tail(self).and_then(|r| r.question_dot_token)
+        rare_tail(self)?.question_dot_token
     }
     #[inline]
     pub fn name(&self) -> P<Node> {
@@ -3569,7 +3569,7 @@ impl ElementAccessExpression {
     }
     #[inline]
     pub fn question_dot_token(&self) -> Option<P<Node>> {
-        rare_tail(self).and_then(|r| r.question_dot_token)
+        rare_tail(self)?.question_dot_token
     }
     #[inline]
     pub fn argument_expression(&self) -> P<Node> {
@@ -3608,11 +3608,11 @@ impl CallExpression {
     }
     #[inline]
     pub fn question_dot_token(&self) -> Option<P<Node>> {
-        rare_tail(self).and_then(|r| r.question_dot_token)
+        rare_tail(self)?.question_dot_token
     }
     #[inline]
     pub fn type_arguments(&self) -> Option<P<NodeList>> {
-        rare_tail(self).and_then(|r| r.type_arguments)
+        rare_tail(self)?.type_arguments
     }
     #[inline]
     pub fn arguments(&self) -> P<NodeList> {
@@ -3649,7 +3649,7 @@ impl NewExpression {
     }
     #[inline]
     pub fn type_arguments(&self) -> Option<P<NodeList>> {
-        rare_tail(self).and_then(|r| r.type_arguments)
+        rare_tail(self)?.type_arguments
     }
     #[inline]
     pub fn arguments(&self) -> Option<P<NodeList>> {
@@ -5766,7 +5766,7 @@ impl ImportSpecifier {
     }
     #[inline]
     pub fn property_name(&self) -> Option<P<Node>> {
-        rare_tail(self).and_then(|r| r.property_name)
+        rare_tail(self)?.property_name
     }
     #[inline]
     pub fn name(&self) -> P<Node> {

@@ -615,7 +615,7 @@ impl EmitContext {
 
     pub fn snippet_element(&self, node: P<Node>) -> Option<SnippetElement> {
         if let Some(emit_node) = self.emit_nodes.borrow().get(&node) {
-            return emit_node.rare().and_then(|r| r.snippet_element);
+            return emit_node.rare()?.snippet_element;
         }
         None
     }
@@ -758,7 +758,7 @@ impl EmitContext {
     pub fn get_external_helpers_module_name(&self, node: P<SourceFile>) -> Option<P<Node>> {
         if let Some(parse_node) = self.parse_node(Some(node.as_node())) {
             if let Some(emit_node) = self.emit_nodes.borrow().get(&parse_node) {
-                return emit_node.rare().and_then(|r| r.external_helpers_module_name);
+                return emit_node.rare()?.external_helpers_module_name;
             }
         }
         None
@@ -1069,7 +1069,7 @@ impl EmitContext {
     // GetTypeNode gets the type node stored on a name node by the type eraser.
     pub fn get_type_node(&self, node: P<Node>) -> Option<P<Node>> {
         if let Some(emit_node) = self.emit_nodes.borrow().get(&node) {
-            return emit_node.rare().and_then(|r| r.type_node);
+            return emit_node.rare()?.type_node;
         }
         None
     }

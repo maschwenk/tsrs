@@ -1205,7 +1205,7 @@ impl Checker {
                         break;
                     }
                     let cur_parent = cur.parent();
-                    let parent_parent = |n: Option<P<Node>>| n.and_then(|n| n.parent());
+                    let parent_parent = |n: Option<P<Node>>| n?.parent();
                     if ast::is_computed_property_name(cur) && parent_parent(cur_parent) == Some(declaration)
                         || !self.legacy_decorators
                             && ast::is_decorator(cur)

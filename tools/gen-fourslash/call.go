@@ -373,7 +373,7 @@ func (g *gen) closureBody(fl *ast.FuncLit, sig *types.Signature) string {
 	}
 	g.inResultFunc = sig.Results().Len() > 0
 	g.indent = savedIndent + 1
-	g.stmts(fl.Body.List)
+	g.stmtsWithTailReturn(fl.Body.List, true)
 	g.indent = savedIndent
 	g.buf, g.resultTypes, g.inResultFunc = savedBuf, savedRes, savedInRes
 	g.restoreScope(scope)
@@ -445,10 +445,10 @@ func (g *gen) builtin(name string, e *ast.CallExpr) string {
 		return "go::append(" + base + ", &[" + strings.Join(parts, ", ") + "])"
 	case "make":
 		t := g.info.Types[e.Args[0]].Type
-		switch types.Unalias(t).Underlying().(type) {
+		switch u := types.Unalias(t).Underlying().(type) {
 		case *types.Slice:
 			if len(e.Args) >= 2 {
-				return "vec![Default::default(); " + g.index(e.Args[1]) + "]"
+				return "vec![" + rustDefault(elemType(u.Elem())) + "; " + g.index(e.Args[1]) + "]"
 			}
 			return "Vec::new()"
 		case *types.Map:

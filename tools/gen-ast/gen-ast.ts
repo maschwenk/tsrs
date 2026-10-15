@@ -395,7 +395,7 @@ function genGetters(l: Layout) {
         const fnName = f.rust;
         w(`    #[inline]`);
         w(`    pub fn ${fnName}(&self) -> ${f.ty} {`);
-        if (f.rare) w(`        rare_tail(self).and_then(|r| r.${f.rust})`);
+        if (f.rare) w(`        rare_tail(self)?.${f.rust}`);
         else w(`        self.${f.path}${f.cell ? ".get()" : isPackedStr(f) ? ".as_str()" : ""}`);
         w(`    }`);
         if (f.cell) {

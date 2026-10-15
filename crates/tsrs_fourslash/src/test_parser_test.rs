@@ -56,14 +56,13 @@ fn check_case(expected: &Value) -> Result<(), String> {
     let t = T::new(&test, "");
     let r = panic::catch_unwind(AssertUnwindSafe(|| parse_test_data(&t, &content, &file_name)));
     let want_error = matches!(field(expected, "error"), Value::Bool(true));
-    let td: TestData = match r {
-        Ok(td) => td,
-        Err(_) => {
-            if want_error && t.failed() {
-                return Ok(());
-            }
-            return Err(format!("{test}: Rust failed ({:?}), Go did not", t.logs()));
+    let td: TestData = if let Ok(td) = r {
+        td
+    } else {
+        if want_error && t.failed() {
+            return Ok(());
         }
+        return Err(format!("{test}: Rust failed ({:?}), Go did not", t.logs()));
     };
     if want_error {
         return Err(format!("{test}: Go failed, Rust did not"));

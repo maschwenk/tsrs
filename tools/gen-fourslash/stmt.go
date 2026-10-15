@@ -12,6 +12,12 @@ import (
 var fixtureFormat = regexp.MustCompile(`\{[a-zA-Z_][a-zA-Z0-9_]*:[0-9]+\}`)
 
 func (g *gen) stmts(list []ast.Stmt) {
+	g.stmtsWithTailReturn(list, false)
+}
+
+// Only a function or closure's final return can become a Rust tail expression.
+// Returns at the end of loop bodies and ordinary nested blocks still exit the function.
+func (g *gen) stmtsWithTailReturn(list []ast.Stmt, tail bool) {
 	for i, s := range list {
 		if decl, ok := s.(*ast.DeclStmt); ok {
 			gd := decl.Decl.(*ast.GenDecl)
@@ -53,7 +59,11 @@ func (g *gen) stmts(list []ast.Stmt) {
 		if g.literalFormattingFixture(s) {
 			g.line("#[expect(clippy::literal_string_with_formatting_args, reason = \"These braces are TypeScript fixture syntax, not Rust format placeholders.\")]")
 		}
-		g.stmt(s)
+		if ret, ok := s.(*ast.ReturnStmt); ok && tail && i == len(list)-1 {
+			g.returnStmt(ret, true)
+		} else {
+			g.stmt(s)
+		}
 	}
 }
 
@@ -158,7 +168,7 @@ func (g *gen) stmt(s ast.Stmt) {
 					if len(vs.Values) > 0 {
 						val = g.expr(vs.Values[i], obj.Type(), mOwned)
 					} else {
-						val = "Default::default()"
+						val = rustDefault(g.localType(obj.Type()))
 					}
 					g.declare(obj, name)
 					if g.uninitialized[obj] {
@@ -187,23 +197,7 @@ func (g *gen) stmt(s ast.Stmt) {
 		g.block(s.List)
 		g.line("}")
 	case *ast.ReturnStmt:
-		switch len(s.Results) {
-		case 0:
-			g.line("return;")
-		case 1:
-			if len(g.resultTypes) == 1 {
-				g.line("return %s;", g.expr(s.Results[0], g.resultTypes[0], mOwned))
-			} else {
-				// return f() where f returns several values
-				g.line("return %s;", g.expr(s.Results[0], nil, mOwned))
-			}
-		default:
-			var parts []string
-			for i, r := range s.Results {
-				parts = append(parts, g.expr(r, g.resultTypes[i], mOwned))
-			}
-			g.line("return (%s);", strings.Join(parts, ", "))
-		}
+		g.returnStmt(s, false)
 	case *ast.SwitchStmt:
 		g.switchStmt(s)
 	case *ast.BranchStmt:
@@ -477,6 +471,34 @@ func (g *gen) appendInPlace(l ast.Expr, call *ast.CallExpr) string {
 	return strings.Join(parts, " ")
 }
 
+func (g *gen) returnStmt(s *ast.ReturnStmt, tail bool) {
+	var value string
+	switch len(s.Results) {
+	case 0:
+		if !tail {
+			g.line("return;")
+		}
+		return
+	case 1:
+		var want types.Type
+		if len(g.resultTypes) == 1 {
+			want = g.resultTypes[0]
+		}
+		value = g.expr(s.Results[0], want, mOwned)
+	default:
+		var parts []string
+		for i, r := range s.Results {
+			parts = append(parts, g.expr(r, g.resultTypes[i], mOwned))
+		}
+		value = "(" + strings.Join(parts, ", ") + ")"
+	}
+	if tail {
+		g.line("%s", value)
+	} else {
+		g.line("return %s;", value)
+	}
+}
+
 func (g *gen) ifStmt(s *ast.IfStmt, isElse bool) {
 	if s.Init != nil {
 		if isElse {
@@ -486,13 +508,15 @@ func (g *gen) ifStmt(s *ast.IfStmt, isElse bool) {
 		g.indent++
 		g.stmt(s.Init)
 	}
-	cond := g.expr(s.Cond, types.Typ[types.Bool], mOwned)
+	bindings := len(g.nonNil)
+	cond := g.ifCondition(s)
 	if isElse {
 		g.buf.WriteString("if " + cond + " {\n")
 	} else {
 		g.line("if %s {", cond)
 	}
 	g.block(s.Body.List)
+	g.nonNil = g.nonNil[:bindings]
 	switch e := s.Else.(type) {
 	case nil:
 		g.line("}")
@@ -508,6 +532,81 @@ func (g *gen) ifStmt(s *ast.IfStmt, isElse bool) {
 		g.indent--
 		g.line("}")
 	}
+}
+
+// Borrow a read-only local pointer after its nil guard. Keep the original condition for mutable places and
+// expressions with side effects: evaluating those once or keeping a borrow could change their meaning.
+func (g *gen) ifCondition(s *ast.IfStmt) string {
+	guard := s.Cond
+	var rest ast.Expr
+	if and, ok := guard.(*ast.BinaryExpr); ok && and.Op == token.LAND {
+		guard, rest = and.X, and.Y
+	}
+	if cmp, ok := guard.(*ast.BinaryExpr); ok && cmp.Op == token.NEQ {
+		place := cmp.X
+		if g.isNil(cmp.X) {
+			place = cmp.Y
+		}
+		if (g.isNil(cmp.X) || g.isNil(cmp.Y)) && isOptionPtr(g.typeOf(place)) && g.readOnlyPlace(place) && g.borrowedPointer(place) == "" {
+			used := false
+			check := func(n ast.Node) bool {
+				switch n := n.(type) {
+				case *ast.SelectorExpr:
+					used = used || g.samePlace(place, n.X)
+				case *ast.StarExpr:
+					used = used || g.samePlace(place, n.X)
+				}
+				return true
+			}
+			ast.Inspect(s.Body, check)
+			if rest != nil {
+				ast.Inspect(rest, check)
+			}
+			if used {
+				value := g.expr(place, nil, mPlace)
+				name := g.newTmp("present")
+				g.nonNil = append(g.nonNil, nonNilBinding{place, name})
+				cond := "let Some(" + name + ") = " + parenIfNeeded(value) + ".as_ref()"
+				if rest != nil {
+					cond += " && " + g.expr(rest, types.Typ[types.Bool], mOwned)
+				}
+				return cond
+			}
+		}
+	}
+	return g.expr(s.Cond, types.Typ[types.Bool], mOwned)
+}
+
+func (g *gen) readOnlyPlace(e ast.Expr) bool {
+	switch e := e.(type) {
+	case *ast.Ident:
+		obj := g.info.Uses[e]
+		return g.vars[obj] != nil && !g.assigned[obj]
+	case *ast.SelectorExpr:
+		return g.info.Selections[e] != nil && g.info.Selections[e].Kind() == types.FieldVal && g.readOnlyPlace(e.X)
+	}
+	return false
+}
+
+func (g *gen) samePlace(a, b ast.Expr) bool {
+	switch a := a.(type) {
+	case *ast.Ident:
+		b, ok := b.(*ast.Ident)
+		return ok && g.info.Uses[a] != nil && g.info.Uses[a] == g.info.Uses[b]
+	case *ast.SelectorExpr:
+		b, ok := b.(*ast.SelectorExpr)
+		return ok && a.Sel.Name == b.Sel.Name && g.samePlace(a.X, b.X)
+	}
+	return false
+}
+
+func (g *gen) borrowedPointer(e ast.Expr) string {
+	for i := len(g.nonNil) - 1; i >= 0; i-- {
+		if g.samePlace(e, g.nonNil[i].expr) {
+			return g.nonNil[i].name
+		}
+	}
+	return ""
 }
 
 func (g *gen) rangeStmt(s *ast.RangeStmt) {

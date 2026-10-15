@@ -21,7 +21,10 @@ func checkedGen(t *testing.T, body string) (*gen, *ast.FuncDecl) {
 		t.Fatal(err)
 	}
 	d := file.Decls[len(file.Decls)-1].(*ast.FuncDecl)
-	g := &gen{info: info, vars: map[types.Object]*varInfo{}, assigned: map[types.Object]bool{}}
+	g := &gen{info: info, fset: fset, vars: map[types.Object]*varInfo{}, assigned: map[types.Object]bool{}, used: map[types.Object]bool{}}
+	for _, obj := range info.Uses {
+		g.used[obj] = true
+	}
 	for id, obj := range info.Defs {
 		if _, ok := obj.(*types.Var); ok {
 			g.vars[obj] = &varInfo{name: id.Name, kind: kPlace}
@@ -138,7 +141,7 @@ func TestRustCompressedString(t *testing.T) {
 		t.Fatalf("short newline run compressed as %s", got)
 	}
 	input := "head" + strings.Repeat("\n", 1024) + "tail"
-	want := `{ let mut s = String::with_capacity(1032); s.push_str("head"); for _ in 0..1024 { s.push('\n'); } s.push_str("tail"); s }`
+	want := `{ let mut s = String::with_capacity(1_032); s.push_str("head"); for _ in 0..1_024 { s.push('\n'); } s.push_str("tail"); s }`
 	if got, ok := rustCompressedString(input); !ok || got != want {
 		t.Fatalf("rustCompressedString() = %s, %v; want %s", got, ok, want)
 	}
@@ -157,5 +160,61 @@ func TestNegatedBoolKeepsNilGuardFirst(t *testing.T) {
 	got := g.negatedBool(e.X)
 	if want := "value.is_nil() || (!value.assert_bool())"; got != want {
 		t.Fatalf("got %s, want %s", got, want)
+	}
+}
+
+func TestTailReturnKeepsEarlyExits(t *testing.T) {
+	g, d := checkedGen(t, `func f(n int) int {
+        for n > 0 { return n }
+        if n < 0 { return -n }
+        return 0
+    }`)
+	code, _, _, err := g.genFunc(d, false)
+	if err != "" {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"return n;", "return -n;", "\n    0\n}"} {
+		if !strings.Contains(code, want) {
+			t.Fatalf("missing %q in:\n%s", want, code)
+		}
+	}
+}
+
+func TestNilGuardBindings(t *testing.T) {
+	for _, test := range []struct {
+		name, body, want string
+	}{
+		{"local pointer", `func f(p *struct { Value int }) int { if p != nil { return p.Value }; return 0 }`, "if let Some(__present1) = p.as_ref()"},
+		{"field and condition", `func f(p struct { Child *struct { Value int } }) int { if p.Child != nil && p.Child.Value > 0 { return p.Child.Value }; return 0 }`, "if let Some(__present1) = p.child.as_ref() && __present1.value > 0"},
+		{"mutable pointer", `func f(p *struct { Value int }) int { if p != nil { p.Value = 1; return p.Value }; return 0 }`, "if p.is_some()"},
+		{"call evaluated repeatedly", `func f(next func() *struct { Value int }) int { if next() != nil { return next().Value }; return 0 }`, "if next().is_some()"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			g, d := checkedGen(t, test.body)
+			g.collectAssigned(d.Body)
+			var buf strings.Builder
+			g.buf = &buf
+			g.resultTypes = []types.Type{types.Typ[types.Int]}
+			g.ifStmt(d.Body.List[0].(*ast.IfStmt), false)
+			if !strings.Contains(buf.String(), test.want) {
+				t.Fatalf("missing %q in:\n%s", test.want, buf.String())
+			}
+			if len(g.nonNil) != 0 {
+				t.Fatal("a nil-guard binding escaped its branch")
+			}
+		})
+	}
+}
+
+func TestNilGuardElseKeepsOriginalOption(t *testing.T) {
+	g, d := checkedGen(t, `func f(p *struct { Value int }, ok bool) int {
+        if p != nil && ok { return p.Value } else { return p.Value }
+    }`)
+	code, _, _, err := g.genFunc(d, false)
+	if err != "" {
+		t.Fatal(err)
+	}
+	if !strings.Contains(code, "return __present1.value;") || !strings.Contains(code, "return p.as_ref().unwrap().value;") {
+		t.Fatalf("only the guarded branch may use the borrowed pointee:\n%s", code)
 	}
 }

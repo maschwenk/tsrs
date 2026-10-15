@@ -134,7 +134,7 @@ impl Symbol {
             // `set_declarations_static`).
             return Some(unsafe { *declarations.get_unchecked(0) });
         }
-        self.tables().and_then(|t| t.value_declaration.get())
+        self.tables()?.value_declaration.get()
     }
     pub fn set_value_declaration(&self, value_declaration: Option<P<Node>>) {
         let tags = self.name.tags();
@@ -192,7 +192,7 @@ impl Symbol {
     /// The pending lazy member list of one of this symbol's declarations (`lazylist`), if any (forced or not).
     #[inline]
     pub fn lazy_list(&self) -> Option<P<crate::lazylist::LazyNodeList>> {
-        self.tables().and_then(|t| t.lazy.get())
+        self.tables()?.lazy.get()
     }
 
     /// Binder: `list` (a member list of a declaration of this symbol) is bound on first use.
@@ -224,7 +224,7 @@ impl Symbol {
     }
     #[inline]
     pub fn export_symbol(&self) -> Option<P<Symbol>> {
-        self.tables().and_then(|t| t.export_symbol.get())
+        self.tables()?.export_symbol.get()
     }
     #[inline]
     pub fn set_export_symbol(&self, export_symbol: Option<P<Symbol>>) {
@@ -677,7 +677,7 @@ impl SymbolMap {
 
     #[inline]
     fn index(&self) -> Option<&HashTable<u32>> {
-        self.extra.get().and_then(|e| e.index.as_ref())
+        self.extra.get()?.index.as_ref()
     }
 
     /// The stored key of entry `i`.

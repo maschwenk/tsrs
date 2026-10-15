@@ -2771,7 +2771,7 @@ var y = new [|DefaultExportedClass|];"#;
         let f = &mut f;
         let __defer2 = go::run(|| {
             let ranges = f.get_ranges_by_text().get(&"DefaultExportedClass".to_string()).to_vec();
-            let mut marker_or_ranges: Vec<Any> = Default::default();
+            let mut marker_or_ranges: Vec<Any> = Vec::<Any>::default();
             for r in ranges {
                 if (r.marker.is_none() || r.marker.as_ref().unwrap().data.is_empty()) || (r.marker.as_ref().unwrap().data.get("inComment").cloned().unwrap_or_default() != Any::Bool(true)) {
                     marker_or_ranges.push(Any::RangeMarker(r));
@@ -2808,7 +2808,7 @@ var y = /*4*/[|DefaultExportedFunction|]();"#;
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &util::to_any(&go::filter(f.get_ranges_by_text().get(&"DefaultExportedFunction".to_string()), |r: &Arc<fourslash::RangeMarker>| -> bool {
-                return r.marker.is_none() || r.marker.as_ref().unwrap().data.get("inComment").cloned().unwrap_or_default().is_nil();
+                r.marker.is_none() || r.marker.as_ref().unwrap().data.get("inComment").cloned().unwrap_or_default().is_nil()
             })[..]));
         });
         done(&mut *f, t);
@@ -2846,7 +2846,7 @@ var y = /*4*/[|f|]();
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &util::to_any(&go::filter(f.get_ranges_by_text().get(&"f".to_string()), |r: &Arc<fourslash::RangeMarker>| -> bool {
-                return r.marker.is_none() || r.marker.as_ref().unwrap().data.get("inComment").cloned().unwrap_or_default().is_nil();
+                r.marker.is_none() || r.marker.as_ref().unwrap().data.get("inComment").cloned().unwrap_or_default().is_nil()
             })[..]));
         });
         done(&mut *f, t);

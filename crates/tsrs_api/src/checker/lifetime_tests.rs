@@ -251,7 +251,7 @@ fn run_stress(rounds: usize, fanout: usize) -> Counts {
         }
     }
     drop(c.w);
-    assert!(c.run.join().unwrap().is_ok());
+    c.run.join().unwrap().unwrap();
     counts
 }
 

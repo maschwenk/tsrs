@@ -322,7 +322,7 @@ jobs:
             target/wasm-diff/*/*/fail/**
           if-no-files-found: ignore
 
-  # docs/RUST.md: every enabled Clippy lint is denied across the hand-written workspace.
+  # docs/RUST.md: every enabled Clippy lint is denied across the full workspace, including generated Fourslash fixtures.
   lint-ratchet:
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 30
@@ -336,7 +336,7 @@ jobs:
 
       - parallel:
           - name: Clippy
-            run: cargo clippy --workspace --locked --exclude tsrs_fourslash --all-targets --config 'build.warnings="deny"' -- -D dead-code
+            run: cargo clippy --workspace --locked --all-targets --config 'build.warnings="deny"' -- -D dead-code
 
           # Unsafe Send/Sync inventory and comments on weakened atomic orderings (docs/RUST.md, "Source checks").
           - name: Source checks

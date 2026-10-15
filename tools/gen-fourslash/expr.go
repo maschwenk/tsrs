@@ -379,6 +379,9 @@ func parenIfNeeded(code string) string {
 
 // natural translates e into its natural Rust form.
 func (g *gen) natural(e ast.Expr) (string, kind) {
+	if name := g.borrowedPointer(e); name != "" {
+		return name, kDeref
+	}
 	switch e := e.(type) {
 	case *ast.ParenExpr:
 		c, k := g.natural(e.X)
@@ -429,6 +432,9 @@ func (g *gen) natural(e ast.Expr) (string, kind) {
 	case *ast.StarExpr:
 		t := g.typeOf(e.X)
 		if isOptionPtr(t) {
+			if name := g.borrowedPointer(e.X); name != "" {
+				return name, kRef
+			}
 			c, _ := g.natural(e.X)
 			return parenIfNeeded(c) + ".as_ref().unwrap()", kRef
 		}

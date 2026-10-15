@@ -208,9 +208,8 @@ pub(crate) fn source_file_for_supplemental_file_index(file: P<SourceFile>, index
         return Some(file);
     };
     let supplemental = file.supplemental_source_files();
-    usize::try_from(index)
-        .ok()
-        .and_then(|index| supplemental.get(index).copied())
+    let index = usize::try_from(index).ok()?;
+    supplemental.get(index).copied()
 }
 
 // *completionDataData | *completionDataKeyword | *completionDataJSDocTagName | *completionDataJSDocTag | *completionDataJSDocParameterName

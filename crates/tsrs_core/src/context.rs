@@ -232,7 +232,7 @@ impl Context {
 
     // Go `ctx.Err()`: None while the context is live.
     pub fn err(&self) -> Option<ContextError> {
-        nearest_cancel(self).and_then(|s| s.err())
+        nearest_cancel(self)?.err()
     }
 
     pub fn is_canceled(&self) -> bool {
@@ -253,7 +253,7 @@ impl Context {
 
     // Go `ctx.Deadline()`.
     pub fn deadline(&self) -> Option<Instant> {
-        nearest_cancel(self).and_then(|s| s.deadline)
+        nearest_cancel(self)?.deadline
     }
 
     // Go `<-ctx.Done()`: blocks until the context is canceled (forever when `done_is_nil()`).

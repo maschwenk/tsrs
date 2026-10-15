@@ -1447,7 +1447,7 @@ impl LanguageService {
         decl_names.extend(
             entries
                 .iter()
-                .filter_map(|entry| entry.definition.as_ref().and_then(|d| d.symbol))
+                .filter_map(|entry| entry.definition.as_ref()?.symbol)
                 .flat_map(|symbol| symbol.declarations().iter().filter_map(|decl| decl.name())),
         );
 

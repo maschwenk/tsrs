@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -118,17 +119,17 @@ func rustCompressedString(s string) (string, bool) {
 			continue
 		}
 		if !found {
-			fmt.Fprintf(&b, "{ let mut s = String::with_capacity(%d); ", len(s))
+			fmt.Fprintf(&b, "{ let mut s = String::with_capacity(%s); ", rustCount(len(s)))
 			found = true
 		}
 		if start < i {
-			lit, ok := rustStr(s[start:i])
+			push, ok := rustStringPush(s[start:i])
 			if !ok {
 				return "", false
 			}
-			fmt.Fprintf(&b, "s.push_str(%s); ", lit)
+			b.WriteString(push)
 		}
-		fmt.Fprintf(&b, "for _ in 0..%d { s.push('\\n'); } ", end-i)
+		fmt.Fprintf(&b, "for _ in 0..%s { s.push('\\n'); } ", rustCount(end-i))
 		start = end
 		i = end
 	}
@@ -136,12 +137,36 @@ func rustCompressedString(s string) (string, bool) {
 		return "", false
 	}
 	if start < len(s) {
-		lit, ok := rustStr(s[start:])
+		push, ok := rustStringPush(s[start:])
 		if !ok {
 			return "", false
 		}
-		fmt.Fprintf(&b, "s.push_str(%s); ", lit)
+		b.WriteString(push)
 	}
 	b.WriteString("s }")
 	return b.String(), true
+}
+
+func rustCount(n int) string {
+	digits := strconv.Itoa(n)
+	for i := len(digits) - 3; i > 0; i -= 3 {
+		digits = digits[:i] + "_" + digits[i:]
+	}
+	return digits
+}
+
+func rustStringPush(s string) (string, bool) {
+	lit, ok := rustStr(s)
+	if !ok {
+		return "", false
+	}
+	if utf8.RuneCountInString(s) == 1 {
+		r, _ := utf8.DecodeRuneInString(s)
+		lit = fmt.Sprintf("'\\u{%x}'", r)
+		if r >= 0x20 && r <= 0x7e {
+			lit = strconv.QuoteRune(r)
+		}
+		return "s.push(" + lit + "); ", true
+	}
+	return "s.push_str(" + lit + "); ", true
 }

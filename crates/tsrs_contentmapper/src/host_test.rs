@@ -416,7 +416,7 @@ fn test_runner_transform_response_validation() {
         fake_spawner(Some(Arc::new(response_mapper(|_| json::unmarshal(r#"{"text":1}"#).unwrap())))),
         Locale::DEFAULT,
     );
-    assert!(host.transform(mapper, request("/a.vue", "a")).is_err());
+    host.transform(mapper, request("/a.vue", "a")).unwrap_err();
     host.close().unwrap();
 }
 
@@ -483,7 +483,7 @@ fn test_host_closes_process_when_read_loop_fails() {
     }));
     let host = new_host(spawner, Locale::DEFAULT);
     let mapper = leak(new_mapper("", &[], "mapper", "", &["mapper"]));
-    assert!(host.transform(mapper, request("/a.vue", "")).is_err());
+    host.transform(mapper, request("/a.vue", "")).unwrap_err();
     let process_closed = closed.recv_timeout(Duration::from_secs(1)).is_ok();
     assert!(process_closed, "mapper process was not closed after its read loop failed");
     host.close().unwrap();

@@ -216,6 +216,11 @@ func pkgRef(obj types.Object, name string) string {
 	return name
 }
 
+// Type arguments use Rust's expression-path separator when calling Default.
+func rustDefault(t string) string {
+	return strings.Replace(t, "<", "::<", 1) + "::default()"
+}
+
 // rtype maps a Go type to its Rust type. param: function parameter position (string -> &str, slices -> &[_]).
 func rtype(t types.Type, param bool) string {
 	if isAny(t) {

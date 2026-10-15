@@ -83,7 +83,7 @@ fn deep_nesting_is_bounded() {
     let err = tsrs_api_transport::strictjson::validate(deep.as_bytes()).unwrap_err();
     assert!(err.contains("exceeded max depth"), "{err}");
     let ok = format!("{}{}", "[".repeat(5000), "]".repeat(5000));
-    assert!(tsrs_api_transport::strictjson::validate(ok.as_bytes()).is_ok());
+    tsrs_api_transport::strictjson::validate(ok.as_bytes()).unwrap();
 }
 
 /// Grammar errors: every input of `go_syntax_oracle.json` (decoded by the pinned Go binary into `any`) is

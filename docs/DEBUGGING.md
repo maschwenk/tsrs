@@ -26,7 +26,7 @@ Land small, often — every coherent fix, not one big drop at the end:
 git add -A . && git commit -m "<area>: <what and why>"
 git fetch -q origin main && git rebase origin/main        # resolve conflicts if any, keep both sides' intent
 CARGO_TARGET_DIR=$PWD/target cargo check --workspace      # must be 0 errors, 0 warnings after the rebase
-cargo clippy --workspace --locked --exclude tsrs_fourslash --config 'build.warnings="deny"' -- -D dead-code
+cargo clippy --workspace --locked --all-targets --config 'build.warnings="deny"' -- -D dead-code
 # re-run the tests you touched, and before every push a full-suite run to check for regressions (see below)
 git push -q origin HEAD:main                              # if rejected: fetch, rebase, check, push again
 ```
