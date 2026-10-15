@@ -5,18 +5,19 @@
 open-source applications and libraries (see "Application projects") with tsrs, with tsgo 7.0.2 (npm `typescript@7.0.2`) and, where a
 Bun binary is given, with `bun check`, and reports wall time, peak memory and the error count of each.
 The Depot CI workflow `.depot/workflows/bench.yml` runs it after pushes to `main` that change the Rust source or build
-inputs. It measures every project on the fixed-spec 8-vCPU machine in four modes and on a 16-vCPU machine in two
+inputs. It measures every project on the fixed-spec 8-vCPU machine in four modes and on 16-vCPU machines in four
 (with bun check); `bench/results/<date>-<commit>.md` has every table. [The latest results](RESULTS.md) show the
-16-vCPU machine's tables, in the default mode (each compiler at its own thread count) and with `--checkers 16`, with
-tsgo, tsrs and bun check side by side, and the 8-vCPU machine's `--checkers 4` and `--checkers 8` tables (both
-compilers at tsgo's default and at tsrs's 8-vCPU default).
+16-vCPU machines' tables, with tsgo, tsrs and bun check side by side: the default mode (each compiler at its own
+thread count) and both compilers at `--checkers` 4 (tsgo's default), 8 and 16 (tsrs's default there).
 
-The [README chart](large-projects.svg) compares TypeScript 7 and tsrs on VS Code, T3 Code and MUI docs using the
-16-vCPU `checkers16` measurements (both compilers at 16 checker threads; at their defaults tsrs would run 16 there and
-tsgo 4) and the PGO-optimized `dist` build. The chart names the setting under its title. The results commit step runs `bench/publish.py` to generate
-the tables and a light and a dark SVG together ([`large-projects-dark.svg`](large-projects-dark.svg)); README.md
-shows the one matching the reader's GitHub theme, links to stable paths and is not rewritten by CI. The cards share the same
-time and memory scales; shorter bars are better. Error comparisons, all modes and raw measurements are in the report.
+The [README chart](large-projects.svg) plots TypeScript 7 against tsrs on VS Code, T3 Code and MUI docs from the
+16-vCPU equal-thread measurements (`wide-checkers4`, `wide-checkers8`, `checkers16`) of the PGO-optimized `dist`
+build: one line per project through a point per thread count, up is how many times faster tsrs is (TypeScript 7's
+wall time over tsrs's), right is how many times less peak memory it uses. Both axes start at 1x, the same as
+TypeScript 7. The results commit step runs `bench/publish.py` to generate the tables and a light and a dark SVG
+together ([`large-projects-dark.svg`](large-projects-dark.svg)); README.md shows the one matching the reader's GitHub
+theme, links to stable paths and is not rewritten by CI. The absolute times and memory are in the SVG's description
+and the report, with the error comparisons, all modes and raw measurements.
 
 ```sh
 cargo build --release -p tsrs_cli
@@ -136,10 +137,11 @@ tsrs's errors (the table's errors paragraph names such projects).
   from 4 to 32, lowered toward 4 for programs with fewer than 32 type-checked files per checker, so 8 on the 8-vCPU
   machine and 16 on the 16-vCPU one, but fewer on small or mid-size projects (Compiler and Compiler-Unions get 4, xstate-main fewer than 8); tsrs additionally resolves members lazily, its default), with `--singleThreaded`, with
   `--checkers 4` (the `checkers4` mode: both compilers at tsgo's default of 4 checker threads), with `--checkers 8`
-  (the `checkers8` mode: both compilers at 8 checker threads, tsrs's default on the 8-vCPU machine), and on a 16-vCPU machine (see "CI") in the default mode again (the `wide` mode: the same flags as
-  `default`, kept apart so that one result can hold both machines) and with `--checkers 16` (the `checkers16` mode: how
-  each scales on a wide machine; for tsrs the same count as `wide` there, except on the projects the file-count rule
-  gives fewer). Select modes with `--modes` (default `default,single,checkers4,checkers8`; flags in `MODE_FLAGS`
+  (the `checkers8` mode: both compilers at 8 checker threads, tsrs's default on the 8-vCPU machine), and on a 16-vCPU
+  machine (see "CI") in the default mode again (the `wide` mode: the same flags as `default`, kept apart so that one
+  result can hold both machines) and with `--checkers` 4, 8 and 16 (the `wide-checkers4`, `wide-checkers8` and
+  `checkers16` modes: how each scales on a wide machine, the README chart's points; 16 is tsrs's count in `wide` there,
+  except on the projects the file-count rule gives fewer). Select modes with `--modes` (default `default,single,checkers4,checkers8`; flags in `MODE_FLAGS`
   in `run.py`). `--checkers` sets only the checker threads; parsing and binding still use every core, so `checkers4`
   is 4 checker threads on the 8-vCPU machine, not a 4-vCPU machine.
 - `bun check` (`--bun <binary>`, Bun 1.4.3 canary or later) is a third column in every mode it is measured in: `bun check
@@ -269,7 +271,7 @@ Runner vCPUs and checker threads are separate: `cpus=16` with `threads=64` runs 
 `checkers=1,16,32,64`), but does not provide 64 cores of compute.
 The 8-vCPU instruction regression jobs retain their existing hardware. Historical 64-vCPU results keep their original
 labels; history starts a new baseline when a cell's hardware or build setup changes. Backfills of commits whose
-`run.py` predates `checkers16` measure only `wide` on the 16-vCPU runner.
+`run.py` predates a 16-vCPU mode measure the others on the 16-vCPU runners.
 
 **History**: `bench/history.py` prints one table per metric over `bench/results/*.json` in `main`'s first-parent
 order, a column per project, each cell with its change against the previous benchmarked commit (with one run per
@@ -288,12 +290,14 @@ once the four application projects were in; `measure-watch` since 2026-10-13):
    cache, downloads the binary and runs `bench/run.py --projects <name> --out-dir <dir>`. The result is the
    `bench-partial-<name>` artifact, the compiler output `bench-logs-<name>`. The jobs run at the same time but never
    share a machine, so a measurement is what it was in the sequential run: one project on an idle 8-vCPU machine.
-3. `measure-wide`, one job on `depot-ubuntu-24.04-16` (16 vCPU): every project in the default mode (`wide`: each
-   compiler at its own thread count, tsrs 16 checkers there, fewer on small projects) and in `--checkers 16` mode (`bench/run.py --modes
-   wide,checkers16`), each with `bun check` from Bun canary as a third column (`--bun`). 16 checker threads would
-   oversubscribe the fixed-spec machine. The job runs while the `measure` jobs do; it is the run's only 16-vCPU job. It
-   restores the caches the `measure` jobs save (a project added to `projects.json` needs a restore step in it too). If
-   it fails, the results file is published without the 16-vCPU sections and the tables and chart stay unchanged.
+3. `measure-wide`, two jobs on `depot-ubuntu-24.04-16` (16 vCPU), each with every other project of
+   `bench/projects.json`, so each project's four 16-vCPU modes come from one machine: the default mode (`wide`: each
+   compiler at its own thread count, tsrs 16 checkers there, fewer on small projects) and both compilers at
+   `--checkers` 4, 8 and 16 (`bench/run.py --modes wide,wide-checkers4,wide-checkers8,checkers16`), each with `bun
+   check` from Bun canary as a third column (`--bun`). 16 checker threads would oversubscribe the fixed-spec machine.
+   The jobs run while the `measure` jobs do. They restore the caches the `measure` jobs save (a project added to
+   `projects.json` needs a restore step in them too). If either fails, the results file has only the other's 16-vCPU
+   cells and the tables and chart stay unchanged (`bench/publish.py` needs every project's).
 4. `measure-watch`, one job on a machine of the fixed spec: `bench/watch.py` on vscode ("Watch mode" below). It restores
    the vscode cache the `measure` job saves and raises the inotify watch limit. If it fails, the results have no
    watch table.
@@ -302,15 +306,15 @@ once the four application projects were in; `measure-watch` since 2026-10-13):
    `measure` jobs' 5 and `measure-wide`'s 10 do; the result records every mode's in `mode_reps`) and that no
    (project, mode) is measured twice; then the regression flag and the results commit. The `Commit results` step
    runs `bench/publish.py` after fetching main on every push retry to keep the tables and chart current together.
-   The machine that measured the most cells is the run's; a cell measured on another records its own `machine`. All `--checkers 16`
-   cells do, and the table names their machine. A fixed-spec project measured on a different CPU model or C library
+   Of the fixed-spec partials' machines, the one that measured the most cells is the run's; a cell measured on another
+   records its own `machine`. All 16-vCPU cells do, and the table names their machine. A fixed-spec project measured on a different CPU model or C library
    (so far every `depot-ubuntu-24.04-8` has been the same model) is noted under the table, and the regression flag
    compares that project only with runs on the same model. A run started from a branch
    (`depot ci run --workflow .depot/workflows/bench.yml`) ends with the `bench-result` artifact: nothing is committed
    or commented.
 
 **Fixed machine spec**: `depot-ubuntu-24.04-8`, 8 vCPU, 32 GB RAM, Linux x86_64, for every run, so numbers are
-comparable over time (the `--checkers 16` section: `depot-ubuntu-24.04-16`, 16 vCPU, checked by its own job). Sizing: the largest peak measured is tsgo's default mode on vscode and mui-docs (7.5 GiB on an
+comparable over time (the 16-vCPU sections: `depot-ubuntu-24.04-16`, 16 vCPU, checked by their own jobs). Sizing: the largest peak measured is tsgo's default mode on vscode and mui-docs (7.5 GiB on an
 18-core Mac, 6.9 GiB on Linux); 32 GB leaves 4x headroom, and 8 vCPUs cover tsrs's default 8 checker threads (tsgo's 4)
 plus parallel parsing. The first step fails the job if `nproc`/`MemTotal`/arch differ; there is no fallback runner. (On GitHub's
 standard 2 vCPU / 7 GB runner tsgo swapped on vscode: 146 s wall for a 50 s check.)

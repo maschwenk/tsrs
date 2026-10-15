@@ -9,7 +9,8 @@
 # without ever sharing a CPU (one job measuring them one after the other took 18-20 min; the longest project, vscode,
 # takes about 5), in the default mode, with --singleThreaded and with --checkers 4 and 8 (both compilers at the same
 # checker count); `measure-wide` measures every project in the default mode (`wide`, the summary table) and with
-# `--checkers 16` on one 16-vCPU machine, with `bun check` as a third column; `measure-watch` measures --watch on vscode
+# `--checkers` 4, 8 and 16 (the README chart's points) on 16-vCPU machines, two jobs with half the projects each, with
+# `bun check` as a third column; `measure-watch` measures --watch on vscode
 # (bench/watch.py); `merge` joins the partial results into one result file (bench/run.py --merge), flags regressions and
 # commits.
 #
@@ -359,18 +360,25 @@ jobs:
           path: bench/.work/logs
           if-no-files-found: ignore
 
-  # The 16-vCPU machine's tables: every project in one job, in default mode (`wide`: each compiler at its own thread
-  # count, which is the summary table) and at `--checkers 16` (16 checker threads would oversubscribe the fixed-spec
-  # machine), each with `bun check` from Bun canary as a third column. It runs while the fixed-spec jobs do; it is the
-  # run's only 16-vCPU job. Its cells record their machine (bench/run.py --merge). The regression flag never reads them:
-  # it compares the single-threaded counts of the fixed-spec jobs.
+  # The 16-vCPU machine's tables: in default mode (`wide`: each compiler at its own thread count, which is the summary
+  # table) and with both compilers at `--checkers` 4, 8 and 16 (the README chart's points; 16 checker threads would
+  # oversubscribe the fixed-spec machine), each with `bun check` from Bun canary as a third column. Two jobs, each with
+  # every other project of bench/projects.json, so every project's points come from one machine and the four modes take
+  # no longer than the two did in one job. They run while the fixed-spec jobs do. Their cells record their machine
+  # (bench/run.py --merge). The regression flag never reads them: it compares the single-threaded counts of the
+  # fixed-spec jobs.
   measure-wide:
     needs: build
     runs-on: depot-ubuntu-24.04-16
     timeout-minutes: 60
+    strategy:
+      fail-fast: false # one shard's failure must not cancel the other
+      matrix:
+        shard: [0, 1]
     env:
       BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-16`
-      PROJECTS: ${{ join(fromJSON(needs.build.outputs.projects), ',') }}
+      ALL_PROJECTS: ${{ needs.build.outputs.projects }}
+      SHARD: ${{ matrix.shard }}
       BUN_VERSION: canary
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -388,9 +396,15 @@ jobs:
 
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
 
+      - name: Projects of this shard
+        id: shard
+        run: |
+          projects=$(python3 -c 'import json, os; print(",".join(json.loads(os.environ["ALL_PROJECTS"])[int(os.environ["SHARD"])::2]))')
+          echo "projects=$projects" | tee -a "$GITHUB_OUTPUT"
+
       - name: Cache keys
         id: keys
-        run: python3 bench/run.py --print-cache-keys --projects "$PROJECTS" | tee -a "$GITHUB_OUTPUT"
+        run: python3 bench/run.py --print-cache-keys --projects "${{ steps.shard.outputs.projects }}" | tee -a "$GITHUB_OUTPUT"
 
       # Restore only: the fixed-spec jobs save these. A project added to bench/projects.json needs a step here too;
       # without one it is cloned and installed by every run of this job.
@@ -508,7 +522,7 @@ jobs:
           key: bench-drizzle-orm-${{ runner.os }}-${{ steps.keys.outputs['drizzle-orm'] }}
 
       - name: Set up the projects
-        run: python3 bench/run.py --setup-only --projects "$PROJECTS"
+        run: python3 bench/run.py --setup-only --projects "${{ steps.shard.outputs.projects }}"
 
       # `bun check` needs Bun 1.4.3 or later; canary until that is a release (as in bench-compare.yml).
       - name: Install Bun (${{ env.BUN_VERSION }})
@@ -536,19 +550,19 @@ jobs:
           /tmp/tsrs-pgo/dist/tsrs --version
           cat /tmp/tsrs-pgo/dist/rustc.txt
 
-      - name: Benchmark (default mode and --checkers 16, with bun check)
+      - name: Benchmark (default mode and --checkers 4, 8 and 16, with bun check)
         run: |
-          # Old backfilled commits lack checkers16; measure their default mode on the actual 16-vCPU runner.
-          modes=$(python3 -c 'import sys; sys.path.insert(0, "bench"); import run; print("wide,checkers16" if "checkers16" in run.MODE_FLAGS else "wide")')
-          python3 bench/run.py --projects "$PROJECTS" --modes "$modes" --tsrs /tmp/tsrs-pgo/dist/tsrs \
+          # Old backfilled commits lack some of the modes; measure the ones their run.py has on the 16-vCPU runner.
+          modes=$(python3 -c 'import sys; sys.path.insert(0, "bench"); import run; print(",".join(m for m in ("wide", "wide-checkers4", "wide-checkers8", "checkers16") if m in run.MODE_FLAGS))')
+          python3 bench/run.py --projects "${{ steps.shard.outputs.projects }}" --modes "$modes" --tsrs /tmp/tsrs-pgo/dist/tsrs \
             --tsrs-build pgo-dist --rustc "$(cat /tmp/tsrs-pgo/dist/rustc.txt)" --bun /tmp/bun/bun-linux-x64/bun \
-            --out-dir /tmp/bench-partial/wide --reps 10 --tsgo-reps 3
+            --out-dir /tmp/bench-partial/wide-${{ matrix.shard }} --reps 10 --tsgo-reps 3
 
       - name: Upload the result
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: bench-partial-wide
-          path: /tmp/bench-partial/wide
+          name: bench-partial-wide-${{ matrix.shard }}
+          path: /tmp/bench-partial/wide-${{ matrix.shard }}
           if-no-files-found: error
           retention-days: 3
 
@@ -556,13 +570,13 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: bench-logs-wide
+          name: bench-logs-wide-${{ matrix.shard }}
           path: bench/.work/logs
           if-no-files-found: ignore
 
   # Watch mode (bench/watch.py, bench/README.md "Watch mode"): tsrs --watch against tsgo --watch on vscode, on its own
   # machine of the fixed spec while the other jobs run. The result becomes the merged result's `watch` section, a table
-  # in the reports (never in the chart). Optional like the wide job: if it fails, the results have no watch table.
+  # in the reports (never in the chart). Optional like the wide jobs: if it fails, the results have no watch table.
   measure-watch:
     needs: build
     runs-on: depot-ubuntu-24.04-8
@@ -650,9 +664,10 @@ jobs:
 
   # Joins the per-project results into bench/results/<date>-<commit>.{json,md} and the summary table, flags
   # regressions, and commits. Runs only when every fixed-spec measuring job succeeded: the regression flag reads them.
-  # bench/RESULTS.md shows one mode, the 16-vCPU machine's default mode (`wide`, with bun check); bench/results/<...>.md has
-  # every mode. The results commit also draws bench/large-projects.svg and its dark-theme twin. If the wide job failed or was cancelled,
-  # the results file has no 16-vCPU sections and the summary tables and chart are left as they were.
+  # bench/RESULTS.md shows the 16-vCPU machine's modes (`wide` and `--checkers` 4, 8 and 16, with bun check);
+  # bench/results/<...>.md has every mode. The results commit also draws bench/large-projects.svg and its dark-theme
+  # twin. If either wide job failed or was cancelled, the results file has the 16-vCPU sections of the other one only,
+  # and the summary tables and chart are left as they were (bench/publish.py needs every project's 16-vCPU cells).
   merge:
     needs: [build, measure, measure-wide, measure-watch]
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.measure.result == 'success' }}

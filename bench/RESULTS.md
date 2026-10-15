@@ -1,8 +1,8 @@
 # Benchmark results
 
 The tables below compare tsrs, TypeScript 7 (tsgo) and `bun check` on seventeen projects. CI updates them on each
-benchmark publish. The default-settings tables run each compiler at its own checker count (tsgo 4, tsrs up to one per
-core); the `--checkers 4` and `--checkers 8` tables run both at the same count. See [the methodology](README.md) for
+benchmark publish. The default-settings table runs each compiler at its own checker count (tsgo 4, tsrs up to one per
+core); the `--checkers` 4, 8 and 16 tables run both at the same count. See [the methodology](README.md) for
 the commands, pinned projects, hardware and measurement details, and [all recorded runs](results/) for other thread
 counts and instruction counts.
 
@@ -11,7 +11,7 @@ counts and instruction counts.
 
 ## Benchmark: tsrs vs tsgo 7.0.2 vs bun check
 
-Time and peak memory to type-check each project (`-p <project> --noEmit`) on Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor); the `--checkers 16` and default mode on the wider machine tables on Depot CI `depot-ubuntu-24.04-16` (16 vCPU, 63 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor). Median of 10 interleaved runs (3 for tsgo) in the default mode on the wider machine and `--checkers 16` tables; median of 5 interleaved runs (3 for tsgo) in the `--checkers 8` table.
+Time and peak memory to type-check each project (`-p <project> --noEmit`) on Depot CI `depot-ubuntu-24.04-16` (16 vCPU, 63 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor). Median of 10 interleaved runs (3 for tsgo).
 
 - **tsrs**: commit `2d9cdf042fdf`, PGO-optimized `dist` build, built like the npm release binaries.
 - **tsgo**: npm `typescript@7.0.2`, the official Go compiler. tsrs ports a later 7.1-dev commit (`b85298b6`).
@@ -19,7 +19,7 @@ Time and peak memory to type-check each project (`-p <project> --noEmit`) on Dep
 
 Projects: vscode, xstate-main, webpack, mui-docs, Compiler, Compiler-Unions are from [microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), the suite the TypeScript team benchmarks tsgo on; the other 11 are large open-source applications.
 
-### Default settings on 16 vCPUs, on Depot CI `depot-ubuntu-24.04-16` (16 vCPU, 63 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor)
+### Default settings on 16 vCPUs
 
 No thread flags: tsgo runs 4 checker threads; tsrs runs 16 (its default: all cores up to 16, then half the cores, at most 32; fewer on small projects); bun check runs one thread per core.
 
@@ -69,9 +69,9 @@ No thread flags: tsgo runs 4 checker threads; tsrs runs 16 (its default: all cor
 
 **Errors.** tsgo and tsrs report the same errors on 9 of 17 projects. The other 8 differ only because TypeScript changed between 7.0.2 and the 7.1-dev commit tsrs ports: `typescript@7.1.0-dev.20260930.4`, built from that commit, reports exactly tsrs's errors (tsgo / tsrs): vscode 359 / 371, webpack 848 / 840, supabase-studio 0 / 9, t3code-server 5 / 6, next-packages-next 6 / 5, next-root 441 / 438, nuxt 3 / 4, drizzle-orm 10845 / 10846. bun check, which follows TypeScript 7.0 like tsgo, differs from tsgo on webpack (837 errors, tsgo 848).
 
-### `--checkers 16`, on Depot CI `depot-ubuntu-24.04-16` (16 vCPU, 63 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor)
+### `--checkers 16`
 
-16 checker threads each; bun check gets `--threads 16`.
+16 checker threads each (tsrs's default on 16 vCPUs); bun check gets `--threads 16`.
 
 **Wall time**
 
@@ -119,56 +119,6 @@ No thread flags: tsgo runs 4 checker threads; tsrs runs 16 (its default: all cor
 
 **Errors.** tsgo and tsrs report the same errors on 10 of 17 projects. 6 others differ only because TypeScript changed between 7.0.2 and the 7.1-dev commit tsrs ports: `typescript@7.1.0-dev.20260930.4`, built from that commit, reports exactly tsrs's errors (tsgo / tsrs): vscode 359 / 371, webpack 848 / 840, supabase-studio 0 / 9, t3code-server 5 / 6, next-packages-next 6 / 5, next-root 441 / 438. **Same count, different locations (a tsrs bug):** drizzle-orm (10846). bun check, which follows TypeScript 7.0 like tsgo, differs from tsgo on webpack (837 errors, tsgo 848), nuxt (3 errors, tsgo 4), drizzle-orm (10845 errors, tsgo 10846).
 
-### `--checkers 8`
-
-8 checker threads each (tsrs's default on 8 vCPUs).
-
-**Wall time**
-
-| project | tsgo | tsrs | tsrs vs tsgo |
-| --- | ---: | ---: | ---: |
-| mui-docs | 15.56 s | 0.98 s | **15.89x faster** |
-| next-packages-next | 3.45 s | 0.33 s | **10.59x faster** |
-| t3code-server | 15.16 s | 1.59 s | **9.56x faster** |
-| mikro-orm | 10.76 s | 1.17 s | **9.24x faster** |
-| storybook | 1.84 s | 0.20 s | **9.14x faster** |
-| drizzle-orm | 2.16 s | 0.24 s | **8.85x faster** |
-| supabase-studio | 7.72 s | 0.88 s | **8.83x faster** |
-| formbricks-web | 7.56 s | 0.89 s | **8.50x faster** |
-| cal-diy | 6.93 s | 0.82 s | **8.46x faster** |
-| playwright | 1.25 s | 0.17 s | **7.48x faster** |
-| xstate-main | 0.90 s | 0.12 s | **7.46x faster** |
-| next-root | 1.56 s | 0.22 s | **7.08x faster** |
-| webpack | 1.43 s | 0.21 s | **6.86x faster** |
-| nuxt | 1.54 s | 0.23 s | **6.81x faster** |
-| vscode | 8.91 s | 1.44 s | **6.17x faster** |
-| Compiler-Unions | 0.41 s | 0.10 s | 4.29x faster |
-| Compiler | 0.28 s | 0.07 s | 4.13x faster |
-
-**Peak memory**
-
-| project | tsgo | tsrs | tsrs vs tsgo |
-| --- | ---: | ---: | ---: |
-| mui-docs | 13.75 GiB | 1.32 GiB | **10.43x less** |
-| next-packages-next | 2.03 GiB | 598 MiB | 3.48x less |
-| t3code-server | 8.49 GiB | 1.52 GiB | **5.58x less** |
-| mikro-orm | 9.02 GiB | 1.61 GiB | **5.59x less** |
-| storybook | 1.86 GiB | 440 MiB | **4.33x less** |
-| drizzle-orm | 2.21 GiB | 572 MiB | 3.96x less |
-| supabase-studio | 6.79 GiB | 1.38 GiB | **4.92x less** |
-| formbricks-web | 7.39 GiB | 1.67 GiB | **4.42x less** |
-| cal-diy | 6.19 GiB | 1.42 GiB | **4.37x less** |
-| playwright | 1.42 GiB | 391 MiB | 3.71x less |
-| xstate-main | 965 MiB | 271 MiB | 3.57x less |
-| next-root | 1.47 GiB | 420 MiB | 3.59x less |
-| webpack | 1.41 GiB | 441 MiB | 3.28x less |
-| nuxt | 1.54 GiB | 420 MiB | 3.75x less |
-| vscode | 8.31 GiB | 1.92 GiB | **4.33x less** |
-| Compiler-Unions | 269 MiB | 102 MiB | 2.63x less |
-| Compiler | 255 MiB | 100 MiB | 2.56x less |
-
-**Errors.** tsgo and tsrs report the same errors on 9 of 17 projects. The other 8 differ only because TypeScript changed between 7.0.2 and the 7.1-dev commit tsrs ports: `typescript@7.1.0-dev.20260930.4`, built from that commit, reports exactly tsrs's errors (tsgo / tsrs): vscode 359 / 371, webpack 848 / 840, supabase-studio 0 / 9, t3code-server 5 / 6, next-packages-next 6 / 5, next-root 441 / 438, nuxt 3 / 4, drizzle-orm 10846 / 10846.
-
 Rows are sorted by speedup over tsgo. Wall time is the process's wall clock; peak memory is its maximum resident set size. Bold marks a win over tsgo of at least 5x in time or 4x in memory.
 
 ### Watch mode (vscode)
@@ -192,10 +142,12 @@ Shared CI machines vary by a few percent between runs of the same code; the sing
 
 ## README chart
 
-The [chart](large-projects.svg) compares TypeScript 7 and tsrs on VS Code, T3 Code and MUI docs using the latest
-`--checkers 16` results above: both compilers at 16 checker threads on the 16-vCPU machine. CI redraws it with the summary tables. File counts come from tsrs and include libraries and
-dependencies. All three cards share a time scale and a memory scale; shorter bars are better. Ratios use unrounded
-medians. The SVG metadata records the measured commit, date, hardware and repetition counts.
+The [chart](large-projects.svg) plots TypeScript 7 against tsrs on VS Code, T3 Code and MUI docs from the latest
+`--checkers` 4, 8 and 16 results above, both compilers at the same count on the 16-vCPU machine. Each project is a line
+through a point per thread count: up is TypeScript 7's wall time over tsrs's, right is its peak memory over tsrs's,
+and both axes start at 1x, the same as TypeScript 7. CI redraws it with the summary tables. Ratios use unrounded
+medians. The SVG description lists the times and memory behind every point; its metadata records the measured commit,
+date and modes.
 
 ## Historical comparison on 64 vCPUs
 
