@@ -24,31 +24,19 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
-      - uses: voidzero-dev/setup-vp@6a60d12bdb8382f7ce636a9a846dc61e69855b2b
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
         with:
-          version-file: playground/package.json
-          node-version-file: .node-version
-          cache: true
-          run-install: |
-            args: ['--frozen-lockfile']
+          registry-url: ""
 
-      - name: Read Rust version
-        id: rust
-        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
-
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
         with:
-          toolchain: ${{ steps.rust.outputs.toolchain }}
-          targets: wasm32-wasip1
+          save-cache: ${{ github.ref_name == 'main' }}
+          cache-key: playground
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          key: playground
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install wasm32-wasip1 target
+        run: rustup target add wasm32-wasip1
 
       - name: Install Binaryen 133
         run: |
@@ -65,20 +53,20 @@ jobs:
       - name: Check and build playground
         working-directory: playground
         run: |
-          vp run prepare-assets
-          vp check
-          vp test run
-          vp build
+          pnpm run prepare-assets
+          pnpm exec vp check
+          pnpm exec vp test run
+          pnpm exec vp build
 
       - name: Verify production build in Chromium
         working-directory: playground
         run: |
-          vp exec playwright install --with-deps chromium
-          vp run test:browser
+          pnpm exec playwright install --with-deps chromium
+          pnpm run test:browser
 
       - name: Save validated site
         if: github.event_name == 'push' && github.repository == 'maschwenk/tsrs'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playground-${{ github.sha }}
           path: playground/dist/
@@ -97,19 +85,13 @@ jobs:
       group: playground-production
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
-      - uses: voidzero-dev/setup-vp@6a60d12bdb8382f7ce636a9a846dc61e69855b2b
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
         with:
-          version-file: playground/package.json
-          node-version-file: .node-version
-          cache: true
-          run-install: |
-            args: ['--frozen-lockfile']
+          registry-url: ""
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: playground-${{ github.sha }}
           path: playground/dist/
@@ -130,8 +112,8 @@ jobs:
       - name: Deploy to Void using OIDC
         if: steps.current.outputs.deploy == 'true'
         run: |
-          vp dlx "void@$VOID_VERSION" connect "$VOID_API_URL" --no-login
-          vp dlx "void@$VOID_VERSION" deploy --platform void --project "$VOID_PROJECT" --dir playground/dist
+          pnpm dlx "void@$VOID_VERSION" connect "$VOID_API_URL" --no-login
+          pnpm dlx "void@$VOID_VERSION" deploy --platform void --project "$VOID_PROJECT" --dir playground/dist
 
       - name: Verify hosted playground
         if: steps.current.outputs.deploy == 'true'
@@ -139,6 +121,6 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: https://tsrs-playground.void.app
         run: |
-          vp exec playwright install --with-deps chromium
-          vp run test:browser
+          pnpm exec playwright install --with-deps chromium
+          pnpm run test:browser
           echo "Playground: $PLAYWRIGHT_BASE_URL (commit $GITHUB_SHA)" >> "$GITHUB_STEP_SUMMARY"
