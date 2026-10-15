@@ -1,5 +1,11 @@
 # perf-order-independence: output that does not depend on which checker checks what
 
+**Current status (2026-10-15):** issue #373 made Go's history-dependent caches the default without changing the
+locality/work-stealing scheduler or machine/program-scaled checker count. Exact pinned-tsgo behavior also requires
+`--checkerAssignment go --checkers 4`. The canonical cache behavior developed and measured in this note remains
+available with `TSRS_HISTORY=canonical`, which does not change scheduling. References below to “default” describe the
+pre-#373 canonical-history default.
+
 With several checkers, tsrs (like tsgo) printed different text depending on how files were split over checkers. On
 the 40k-error corpus (the 38k-file codebase in a Linux sandbox, workspace packages unbuilt), `--checkers 1, 2, 4, 8, 12,
 16` gave four different outputs. Since 2026-10-04 the default checker count depends on the machine, so two machines
@@ -38,12 +44,12 @@ in another file, or in an earlier statement of the same file. A two-file repro (
 one-line fix are in `upstream/determinism-undefined-property.md`: tsgo prints `{ user?: undefined; status: string; }`
 for `b.ts` when `a.ts` is in the program and `{ status: string; user?: undefined; }` when it is not.
 
-## The fix and the compatibility mode
+## The canonical fix and the Go-compatible default
 
-- **Default (canonical):** the cache is keyed by the sibling property the filled-in property stands for
+- **Canonical opt-in:** the cache is keyed by the sibling property the filled-in property stands for
   (`undefined_properties_by_prop`). The property then always sorts by the declaration it represents, so output is a
   function of the program alone.
-- **`--checkerAssignment go` / `TSRS_CHECKER_ASSIGNMENT=go`:** Go's per-name cache, bug for bug. Every such
+- **Default, `--checkerAssignment go` / `TSRS_CHECKER_ASSIGNMENT=go`:** Go's per-name cache, bug for bug. Every such
   two-behaviour place asks `tsrs_core::compat::go_compatible_history()`; this cache was the only one when this was
   written. Status (2026-10-10): there are now 10 call sites outside compat.rs (checker_02/03/09/13, unioncache.rs,
   infermemo.rs, checkerpool.rs, execute.rs); among them the TS2590 deferral, the union front cache, the inference memo
@@ -56,7 +62,7 @@ for `b.ts` when `a.ts` is in the program and `{ status: string; user?: undefined
 
 ## How far default output now differs from tsgo
 
-| what | default (canonical) vs tsgo / Go mode |
+| what | canonical mode vs tsgo / Go mode |
 | --- | --- |
 | conformance suite, Go mode (the harness default) | identical: 13,458 / 12,779 / 12,779; `.js` 13,392, `.js.map` 149, `.sourcemap.txt` 156 |
 | conformance suite, canonical (`TSRS_CHECKER_ASSIGNMENT=locality tsrs-test ...`) | 1 test differs by design: `conformance/objectLiteralNormalization` `.types`, `.symbols` and `.js` (its `.d.ts`); error baselines and maps unchanged |
@@ -162,7 +168,7 @@ TSGO=tsgo-ref TSRS_CHECKER_ASSIGNMENT=locality tools/oracle/emit/monorepo.sh <mo
 ## Gate
 
 `tools/ci/determinism.sh` (CI's `check-and-test` job, on every pull request and push to main) is the standing check of
-this note's claim: on xstate-main, webpack, nuxt and drizzle-orm and on every `testdata/regressions` case, the default
+this note's claim: on xstate-main, webpack, nuxt and drizzle-orm and on every `testdata/regressions` case, canonical
 mode at 2 and 4 checkers (three runs each; stealing moves files between checkers) and `random:1..6` at 2 and 4 checkers
 must print the single-threaded run's bytes and exit status (504 runs, about a minute on 8 vCPUs). Its `--self-test`
 checks that an assignment-dependent binary fails it. Positive control, 2026-10-07: a tsrs 0.4.0 build from 2026-10-06

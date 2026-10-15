@@ -1,6 +1,6 @@
 // Port of microsoft/TypeScript#64475 (lazy member tables of instantiated class/interface references) and #64526
-// (lazy members of `{ [P in keyof T]: X }` mapped types). On by default; `--noLazyMembers` or `TSRS_LAZY_MEMBERS=0`
-// turns it off, which restores the reference (tsgo) behavior exactly. See notes/lazy-members.md.
+// (lazy members of `{ [P in keyof T]: X }` mapped types). Off by default for reference parity; `--lazyMembers` or
+// `TSRS_LAZY_MEMBERS=1` turns it on. See notes/lazy-members.md.
 //
 // Follow-up candidates (notes/mem-lazy.md) each have their own switch below. A candidate only takes effect when the
 // master switch is on too, so `TSRS_LAZY_MEMBERS=0` stays reference-identical whatever the candidate switches say.
@@ -20,7 +20,7 @@ pub fn enabled() -> bool {
     match CLI.load(Ordering::Relaxed) {
         1 => true,
         2 => false,
-        _ => *ENV.get_or_init(|| std::env::var("TSRS_LAZY_MEMBERS").map_or(true, |v| v != "0")),
+        _ => *ENV.get_or_init(|| std::env::var("TSRS_LAZY_MEMBERS").is_ok_and(|v| v != "0")),
     }
 }
 

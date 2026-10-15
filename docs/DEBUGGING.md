@@ -49,35 +49,27 @@ understand, read both versions and the Go source; do not blindly take one side.
   as the port). Oracle tools for scanner/parser/binder/module resolution/printer live in `tools/oracle/` with binaries in
   `$TSRS_WORK/bin/`.
 
-## Lazy member resolution (default on) and the opt-out mode
+## Lazy member resolution (opt-in)
 
 tsrs ports microsoft/TypeScript#64475 + #64526 (lazy member tables, `tsrs_core::lazymembers`, notes/lazy-members.md)
-and runs them **by default**. `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0` turns them off and restores the reference
-behavior exactly (same counters, same baselines). The no-regression check above is therefore run twice before a push:
-`TSRS_LAZY_MEMBERS=0 tsrs-test run --suite all --baselines types,symbols` must match the previous opt-out pass lists
-exactly (that is the reference-equivalence gate), and the default run must not lose passes either. Comparisons
-against `tsgo-ref` counters (symbols/types/instantiations) use the opt-out mode; with the default mode tsrs creates
-fewer symbols, types and instantiations than `tsgo-ref` (it equals tsgo with both PRs applied).
+but leaves them off by default for reference parity. `--lazyMembers` / `TSRS_LAZY_MEMBERS=1` enables them;
+`--noLazyMembers` / `TSRS_LAZY_MEMBERS=0` explicitly keeps the eager reference behavior. The opt-in mode must not
+lose conformance passes. With it, tsrs creates fewer symbols, types and instantiations than `tsgo-ref` (it equals
+tsgo with both PRs applied).
 
 ## Checker assignment (multi-checker counters)
 
-With more than one checker, tsrs assigns files to checkers by directory locality by default
-(`--checkerAssignment locality`, notes/mem-assignment.md); Go uses FENNEL over single files. Diagnostics and emitted
-files do not depend on the assignment (notes/perf-order-independence.md), but multi-checker
-symbol/type/instantiation counters and peak memory do: compare them against `tsgo-ref` with `--checkerAssignment go`
-(or `TSRS_CHECKER_ASSIGNMENT=go`). `go` also preserves Go's checker history (`tsrs_core::compat`), so it is the mode
-for byte-identity with tsgo (with `--noLazyMembers`
-where an instantiation depth limit is reached: lazy members change which instantiations a checker has cached,
-notes/open-history-dependence.md section 6). The conformance, fourslash and tsc harnesses run in it; set
-`TSRS_CHECKER_ASSIGNMENT=locality` to run them in the default mode.
+With more than one checker, tsrs keeps its directory-locality assignment and dynamic work stealing
+(notes/mem-assignment.md, notes/perf-checker-stealing.md). Checker cache history independently defaults to Go's
+behavior (`tsrs_core::compat`). For byte-identity with tsgo, also select Go's static assignment and count with
+`--checkerAssignment go --checkers 4`; multi-checker symbol/type/instantiation counters and peak memory otherwise
+differ from `tsgo-ref`.
 `TSRS_CHECKER_ASSIGNMENT=random:<seed>` puts each file on a random checker with a random visit order in each checker:
-the default mode must print the same text for every seed and checker count. Single-threaded runs have no assignment.
-Without a named assignment the type-check pass also steals work: a checker that has run out of files takes unstarted
-files from the back of the busiest checker (notes/perf-checker-stealing.md). Output is unchanged by it, but the
-counters vary from run to run; naming an assignment (`--checkerAssignment locality`) turns stealing off for fully
-reproducible counters. `TSRS_HISTORY=canonical` runs the tsgo-baseline harnesses in the default mode, stealing
-included, without naming an assignment.
-Each checker begins the type-check pass with the files of its queue whose static weight exceeds 1/200 of an average
+canonical mode should print the same text for every seed and checker count apart from the documented open cases.
+Single-threaded runs have no assignment. `TSRS_HISTORY=canonical` changes only cache history, retaining the default
+locality assignment, work stealing and declaration-file splitting. A checker that runs out of files takes unstarted
+files from the back of the busiest checker. Naming an assignment turns stealing off for reproducible counters.
+In the unnamed default scheduling mode, each checker begins the type-check pass with files whose static weight exceeds 1/200 of an average
 checker's share, heaviest first, then the rest in program order (notes/perf-checker-64.md,
 notes/perf-heavy-first-threshold.md); `TSRS_HEAVY_SHARE_DIVISOR=<n>` changes the divisor for experiments.
 `--checkerCostCache <file>` (opt-in, locality only) balances the checkers on the previous run's per-file CPU times
@@ -91,9 +83,13 @@ half the busiest one's work left; `TSRS_STEAL_STICKY=0` picks the busiest checke
 checkers at most a quarter of the checkers take files from any one checker at a time (notes/perf-icount-assign.md);
 `TSRS_STEAL_MAX_THIEVES=<m>` sets that limit at every checker count, `0` for none.
 
+`--traceResolution` buffers each file's trace and emits those buffers in program order. In a parallel run, cache-hit
+wording records whichever resolution worker reached the shared cache first and can vary between runs, as it does in
+tsgo. Add `--singleThreaded` for the deterministic LIFO work-group order.
+
 ## Why a TS2590 comes and goes: `TSRS_TRACE_UNION_REDUCTION`
 
-By default a TS2590 no longer depends on the checker assignment: a result computed while one was reported is not
+In canonical history a TS2590 no longer depends on the checker assignment: a result computed while one was reported is not
 cached, so every file that evaluates the type reports it, once per too-complex type at the first site that evaluated
 it (`Checker::too_complex_since`, `flush_too_complex_reports`, notes/open-history-dependence.md section 4). The trace below is for `--checkerAssignment go`, which keeps Go's caches and so Go's first-evaluation-only
 reports, and for finding which union a TS2590 is about.
@@ -408,7 +404,7 @@ testdata/regressions/lazy-dts-members holds the cases where a lazy list could di
 
 ## Checking a heavy declaration file on several checkers: `TSRS_SPLIT_FILES`
 
-In the type-check pass with stealing (the default mode with more than one checker), a checked declaration file that
+In the type-check pass with stealing (the unnamed default mode with more than one checker), a checked declaration file that
 weighs at least 40% of an average checker's share is cut into contiguous statement ranges of about 1/8 of a share
 (`crates/tsrs_compiler/src/splitcheck.rs`, notes/perf-next-heavy-files.md). The checker that owns the file checks the
 first range; each other range is a queue item at the front of another checker's queue, which checks only those

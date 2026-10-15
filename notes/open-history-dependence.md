@@ -1,5 +1,10 @@
 # open-history-dependence: four cases whose output still depends on the checker assignment (not fixed), and two fixed
 
+**Current status (2026-10-15):** issue #373 made Go history and eager members the default without changing tsrs's
+machine/program-scaled checker count or locality/work-stealing scheduler. Exact comparison with tsgo also selects
+Go's assignment with `--checkerAssignment go --checkers 4`. This note predates that switch; its unqualified “default
+mode” means canonical history, now selected by `TSRS_HISTORY=canonical` without changing scheduling.
+
 notes/perf-order-independence.md made diagnostics a function of the program on the corpora it tested, and the README
 says output does not depend on the checker count. Three bench candidates show that this does not hold in general:
 TanStack/router and sequelize (from the bun-check project scouts) and rxjs (found by the excalidraw work, PR #212). All
@@ -382,7 +387,7 @@ From the same run (`packages/contracts/tsconfig.json` at dify `7b69dea2c802`, pn
 --ignore-scripts`, 752 files): tsgo at 4 checkers prints `app-model-config.test.ts(154,11): error TS2578: Unused
 '@ts-expect-error' directive.` and tsrs did not. tsgo prints no TS2578 at 1, 2, 3, 5, 7, 8 and 12 checkers, `(154,11)` at 4 and
 `(93,9)` at 6 and 16; tsrs prints exactly that single-threaded and under `--checkerAssignment go` with
-`TSRS_LAZY_MEMBERS=0` at every one of those counts. With lazy members on (the default), Go mode prints `(93,9)` at 5, 7, 8
+`TSRS_LAZY_MEMBERS=0` at every one of those counts. With lazy members on (the pre-#373 default), Go mode prints `(93,9)` at 5, 7, 8
 and 12, where tsgo prints nothing: lazy member tables instantiate fewer members, so a checker has cached
 less when it reaches the chain below.
 

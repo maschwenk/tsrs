@@ -1,7 +1,7 @@
 // `--traceResolution` says whether a package.json lookup was served "according to earlier cached lookups", so its
-// text depends on the order in which files resolve. tsrs loads traced programs in the order of Go's single-threaded
-// work group (last queued first, core/workgroup.go), at any checker count. Here `index.ts` imports `./a` then `./b`,
-// which both import `pkg`: Go resolves `b.ts` first, so the lookup in `a.ts`'s (earlier) trace is the cached one.
+// text depends on the order in which files resolve. In `--singleThreaded` mode tsrs loads traced programs in the
+// order of Go's single-threaded work group (last queued first, core/workgroup.go). Here `index.ts` imports `./a` then
+// `./b`, which both import `pkg`: Go resolves `b.ts` first, so the lookup in `a.ts`'s (earlier) trace is the cached one.
 // Expected output from tsgo 7.1.0-dev.20260930.4 (the pinned commit) with `--singleThreaded`.
 
 use std::path::PathBuf;
@@ -55,7 +55,7 @@ Resolving real path for '<DIR>/node_modules/pkg/index.d.ts', result '<DIR>/node_
 ======== Module name 'pkg' was successfully resolved to '<DIR>/node_modules/pkg/index.d.ts' with Package ID 'pkg/index.d.ts@1.0.0'. ========
 ";
 
-fn scratch(name: &str) -> PathBuf {
+fn scratch(name: &str, slow_b: bool) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("tsrs-trace-order-{}-{}", name, std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("node_modules/pkg")).unwrap();
@@ -72,23 +72,45 @@ fn scratch(name: &str) -> PathBuf {
     for (name, text) in files {
         std::fs::write(dir.join(name), text).unwrap();
     }
+    if slow_b {
+        let text = format!("/*{}*/\nimport {{ p }} from \"pkg\"; export const b = p;\n", "x".repeat(16 << 20));
+        std::fs::write(dir.join("b.ts"), text).unwrap();
+    }
     dir
 }
 
 #[test]
-fn traces_follow_go_single_threaded_order_at_any_checker_count() {
-    for (i, extra) in [&["--singleThreaded"][..], &["--checkers", "4"][..]].into_iter().enumerate() {
-        let dir = scratch(&i.to_string());
-        let out = Command::new(env!("CARGO_BIN_EXE_tsrs"))
-            .args(["-p", ".", "--traceResolution"])
-            .args(extra)
-            .current_dir(&dir)
-            .output()
-            .unwrap();
-        assert!(out.status.success(), "{extra:?}: exit {:?}", out.status.code());
-        let canonical = std::fs::canonicalize(&dir).unwrap();
-        let stdout = String::from_utf8(out.stdout).unwrap().replace(canonical.to_str().unwrap(), "<DIR>").replace(dir.to_str().unwrap(), "<DIR>");
-        assert_eq!(stdout, EXPECTED, "{extra:?}");
-        let _ = std::fs::remove_dir_all(&dir);
-    }
+fn traces_follow_go_single_threaded_order() {
+    let dir = scratch("single", false);
+    let out = Command::new(env!("CARGO_BIN_EXE_tsrs"))
+        .args(["-p", ".", "--traceResolution", "--singleThreaded"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "exit {:?}", out.status.code());
+    let canonical = std::fs::canonicalize(&dir).unwrap();
+    let stdout = String::from_utf8(out.stdout).unwrap().replace(canonical.to_str().unwrap(), "<DIR>").replace(dir.to_str().unwrap(), "<DIR>");
+    assert_eq!(stdout, EXPECTED);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn traced_resolutions_use_parallel_prefetch() {
+    let dir = scratch("parallel", true);
+    let out = Command::new(env!("CARGO_BIN_EXE_tsrs"))
+        .args(["-p", ".", "--traceResolution"])
+        .env("RAYON_NUM_THREADS", "2")
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "exit {:?}", out.status.code());
+    let canonical = std::fs::canonicalize(&dir).unwrap();
+    let stdout = String::from_utf8(out.stdout).unwrap().replace(canonical.to_str().unwrap(), "<DIR>").replace(dir.to_str().unwrap(), "<DIR>");
+    let a_start = stdout.find("Resolving module 'pkg' from '<DIR>/a.ts'").unwrap();
+    let b_start = stdout.find("Resolving module 'pkg' from '<DIR>/b.ts'").unwrap();
+    assert!(a_start < b_start, "trace buffers were not emitted in program order");
+    let a_trace = &stdout[a_start..b_start];
+    assert!(a_trace.contains("Found 'package.json' at '<DIR>/node_modules/pkg/package.json'."), "a.ts did not resolve before the deliberately slow b.ts:\n{a_trace}");
+    assert!(stdout[b_start..].contains("File '<DIR>/node_modules/pkg/package.json' exists according to earlier cached lookups."));
+    let _ = std::fs::remove_dir_all(&dir);
 }

@@ -1077,13 +1077,14 @@ impl poolState {
 
 // tsrs-only: dynamic scheduling (notes/perf-checker-stealing.md, after tsrslint's scheduler). Each checker runs the files
 // assigned to it from the front of its queue; a checker that runs out takes not-yet-started files from the back of the
-// queue with the most work left. Diagnostics and emit do not depend on which checker runs a file
+// queue with the most work left. Diagnostics and emit do not depend on which checker runs a file in canonical mode
 // (notes/perf-order-independence.md); the --extendedDiagnostics counters do, so they vary from run to run. Off when an
 // assignment is named (`--checkerAssignment` / TSRS_CHECKER_ASSIGNMENT: the fully deterministic static modes, also
-// for the oracles and harnesses) and under Go's check history.
+// for the oracles and harnesses). Default checker-history compatibility does not change scheduling; an explicit
+// harness selection keeps the harness's existing static scheduling.
 fn stealing_enabled() -> bool {
     let named = CLI_CHECKER_ASSIGNMENT.get().is_some() || std::env::var("TSRS_CHECKER_ASSIGNMENT").is_ok_and(|v| !v.is_empty());
-    !named && !tsrs_core::compat::go_compatible_history()
+    !named && !tsrs_core::compat::explicit_go_compatible_history()
 }
 
 // A file heavier than 1/HEAVY_SHARE_DIVISOR of an average checker's share of a pass is "heavy": a single such file
@@ -1630,8 +1631,8 @@ pub(crate) fn write_cost_cache(program: &'static Program) {
 }
 
 // tsrs-only: how files are assigned to checkers. `--checkerAssignment <name>` (CLI) or
-// TSRS_CHECKER_ASSIGNMENT=<name> (any binary). The assignment never changes what a file's diagnostics are, only
-// which checker computes them (and so how much checker state is duplicated across checkers).
+// TSRS_CHECKER_ASSIGNMENT=<name> (any binary). The assignment selects scheduling; checker history defaults to Go
+// independently and can be changed with TSRS_HISTORY=canonical.
 //   locality (default): directory-subtree groups packed onto checkers with Go's FENNEL (below)
 //   go:                 Go's createCheckers association (FENNEL over single files in program order)
 //   file:<path>:        one checker index per line by program file index (experiments)
@@ -1652,7 +1653,7 @@ pub fn set_checker_assignment_from_cli(name: &str) -> bool {
         return false;
     }
     let _ = CLI_CHECKER_ASSIGNMENT.set(name.to_string());
-    // `go` also means Go's check history in the caches that have two behaviours (tsrs_core::compat).
+    // An explicitly named non-Go assignment also opts into canonical history.
     tsrs_core::compat::set_go_compatible_history(name == "go");
     true
 }

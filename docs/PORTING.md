@@ -105,10 +105,11 @@ programs and file versions ([LSP.md](LSP.md#memory-management)). The rules are:
 Parsing and binding run per file (in parallel) and finish before checking. Checking runs on N checkers
 (`--checkers N`, `--singleThreaded` = 1; Go's default is 4, tsrs's default is max(cores/2, min(cores, 16)), clamped to
 4..32, then capped at one checker per 32 type-checked files (but not below 4), then at most the file count; 4 in build
-mode: `default_checker_count`), each on its own OS thread with a 512 MB stack (`tsrs_compiler::checkerpool`). Files are assigned to checkers by directory
-locality; in the type-check pass a checker that runs out steals unstarted files from the busiest one
-(notes/perf-checker-stealing.md), which is safe because output does not depend on which checker checks a file
-(notes/perf-order-independence.md; `--checkerAssignment go` keeps Go's assignment and history). Each thread allocates in its own leak arena;
+mode: `default_checker_count`), each on its own OS thread with a 512 MB stack (`tsrs_compiler::checkerpool`). Files are
+assigned by directory locality; in the type-check pass a checker that runs out steals unstarted files from the busiest
+one (notes/perf-checker-stealing.md). Checker caches default to Go-compatible history without changing that scheduling;
+`TSRS_HISTORY=canonical` changes only cache history, while `--checkerAssignment go` selects Go's static assignment
+(notes/perf-order-independence.md). Each thread allocates in its own leak arena;
 `P<T>` is `Send + Sync` by decree, so the compiler does not police sharing. The rules:
 
 - **Shared, frozen after binding**: AST nodes and node lists, `SourceFile`, binder symbols and symbol tables,

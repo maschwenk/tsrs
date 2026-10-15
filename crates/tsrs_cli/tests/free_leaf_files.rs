@@ -1,5 +1,6 @@
-// The CLI's `--noEmit` check frees the tree of each leaf file once it is checked (TSRS_FREE_LEAVES, tsrs_compiler
-// fileregions.rs, notes/mem-free-leaf-files.md). In testdata/regressions/leaf-alternative-containers, leaf.test.ts is
+// With canonical history under the default locality scheduler, the CLI's `--noEmit` check frees the tree of each
+// leaf file once it is checked (TSRS_FREE_LEAVES, tsrs_compiler fileregions.rs, notes/mem-free-leaf-files.md). In
+// testdata/regressions/leaf-alternative-containers, leaf.test.ts is
 // a leaf (predicted by its name) that is checked and freed before a.ts (one checker, program order: q.ts, m.ts,
 // leaf.test.ts, a.ts). a.ts's error prints `{ a: Q; }` with the object literal as the enclosing declaration; `Q` is
 // not imported there, so the node builder searches every module of the program for one that re-exports it
@@ -16,7 +17,10 @@ fn case_dir(case: &str) -> std::path::PathBuf {
 
 fn run(case: &str, free_leaves: &str, poison: bool) -> (String, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_tsrs"));
-    cmd.current_dir(case_dir(case)).args(["-p", ".", "--pretty", "false", "--singleThreaded"]).env("TSRS_FREE_LEAVES", free_leaves);
+    cmd.current_dir(case_dir(case))
+        .args(["-p", ".", "--pretty", "false", "--singleThreaded"])
+        .env("TSRS_HISTORY", "canonical")
+        .env("TSRS_FREE_LEAVES", free_leaves);
     for var in ["TSRS_CHECKER_ASSIGNMENT", "TSRS_FILE_TIMES", "TSRS_ASSIGNMENT_STATS", "TSRS_HEAP_CENSUS", "TSRS_CENSUS"] {
         cmd.env_remove(var);
     }

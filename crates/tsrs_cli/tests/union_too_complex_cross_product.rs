@@ -4,9 +4,9 @@
 // `// @ts-ignore`; x/zz.ts evaluates it again without one. Go reports TS2590 only the first time a checker evaluates
 // the type, because the error type it returns is cached one level up (the intersection split, the relation), so
 // tsgo-ref reports x/zz.ts at 3 checkers and nothing at 1 or 2, and tsrs with work stealing reported it in about half
-// of the runs. By default tsrs no longer caches a result computed while a TS2590 was reported, so every file that
-// evaluates the type reports it, once per type at the first site, whatever the assignment; `--checkerAssignment go`
-// keeps Go's behaviour (notes/open-history-dependence.md section 4).
+// of the runs. The default keeps Go's cache history. Explicit locality and random assignments use canonical history,
+// which does not cache a result computed while a TS2590 was reported, so every file that evaluates the type reports
+// it once per type at the first site (notes/open-history-dependence.md section 4).
 
 use std::path::Path;
 use std::process::Command;
@@ -26,20 +26,27 @@ fn run(args: &[&str]) -> (bool, String) {
 }
 
 #[test]
-fn too_complex_union_reports_at_every_site_whatever_the_assignment() {
+fn too_complex_union_defaults_to_go_history() {
     let expected = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/regressions/union-too-complex-cross-product/expected.txt"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/regressions/union-too-complex-cross-product/expected-canonical.txt"),
     )
     .unwrap();
-    assert_eq!(run(&["--singleThreaded"]), (false, expected.clone()), "--singleThreaded");
+    assert_eq!(run(&["--singleThreaded"]), (true, String::new()), "default --singleThreaded");
+    assert_eq!(run(&["--singleThreaded", "--checkerAssignment", "locality"]), (false, expected.clone()), "canonical --singleThreaded");
     for checkers in ["1", "2", "3", "4"] {
-        assert_eq!(run(&["--checkers", checkers]), (false, expected.clone()), "--checkers {checkers}");
+        assert_eq!(
+            run(&["--checkers", checkers, "--checkerAssignment", "locality"]),
+            (false, expected.clone()),
+            "canonical --checkers {checkers}"
+        );
         for seed in 1..=8 {
             let assignment = format!("random:{seed}");
             assert_eq!(run(&["--checkers", checkers, "--checkerAssignment", &assignment]), (false, expected.clone()), "--checkers {checkers} {assignment}");
         }
     }
-    // Go's history: the checker that evaluated the type under x/a.ts's `@ts-ignore` reports nothing at x/zz.ts, as
-    // tsgo-ref does with one checker.
-    assert_eq!(run(&["--checkers", "1", "--checkerAssignment", "go"]), (true, String::new()), "--checkerAssignment go");
+    assert_eq!(run(&["--checkers", "1", "--checkerAssignment", "go"]), (true, String::new()), "Go assignment one checker");
+    assert_eq!(run(&["--checkers", "2", "--checkerAssignment", "go"]), (true, String::new()), "Go assignment two checkers");
+    assert_eq!(run(&["--checkers", "3", "--checkerAssignment", "go"]), (false, expected), "Go assignment three checkers");
+    // Scheduling is irrelevant with one checker, so the unchanged default scheduler and Go assignment agree.
+    assert_eq!(run(&["--checkers", "1"]), (true, String::new()), "default one checker");
 }

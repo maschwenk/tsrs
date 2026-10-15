@@ -37,12 +37,12 @@ and ten configs in all; 180 seconds for setup (60 for cloning); 120 seconds for 
 compiler per config. tsrs is not run when tsgo fails or times out. Timeouts kill child processes too.
 
 Each project is compared in two modes. Default mode runs both compilers as users do, with no extra flags, so the
-project's own options (including `checkers`) apply to both. Strict mode runs tsgo again with `--checkers 4`, its
-default count (`internal/compiler/checkerpool.go`: one checker under `singleThreaded`, never more than the file count),
-and `tsrs --checkerAssignment go --checkers 4 --noLazyMembers`, which reproduces Go's checker assignment, history and
-caches; lazy members change which instantiations a checker has cached, and so where depth limits are hit
-(`docs/DEBUGGING.md`). Strict mode has its own tsgo run because no tsgo output says how many checkers the default run
-used. It runs only for projects where default-mode tsgo completed, after all default comparisons, splitting the time
+project's own options (including `checkers`) apply to both; tsrs keeps its locality/work-stealing scheduler and scaled
+checker count while defaulting to Go's history and eager members. Strict mode is a second parity cell that pins both
+compilers to Go's assignment and four checkers with `--checkerAssignment go --checkers 4 --noLazyMembers`. It has its
+own tsgo run because no tsgo output
+says how many checkers the default run used. It runs only for projects where default-mode tsgo completed, after all
+default comparisons, splitting the time
 they leave (half to tsgo, the rest to tsrs, at most 60 seconds each), so it never shortens them. tsrs is not run when
 strict tsgo fails. A strict-mode timeout with less time than the default run's limit counts as not compared rather than
 as a failure. Each mode keeps its own logs (`tsgo.log`/`tsrs.log`, `tsgo-strict.log`/`tsrs-strict.log`) and diffs

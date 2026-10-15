@@ -18,6 +18,7 @@ fn run(case: &Path, mode: &str, stats: &Path) -> String {
         .args(["-p", ".", "--pretty", "false", "--checkers", "4"])
         .current_dir(case)
         .env("TSRS_SPLIT_FILES", format!("{mode},stats:{}", stats.display()))
+        .env("TSRS_HISTORY", "canonical")
         .env_remove("TSRS_CHECKER_ASSIGNMENT")
         .output()
         .unwrap();

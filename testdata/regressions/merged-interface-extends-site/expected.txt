@@ -3,11 +3,6 @@ a.ts(1,11): error TS2430: Interface 'Merged' incorrectly extends interface 'Base
     Type '(ev: number) => void' is not assignable to type '(ev: string) => void'.
       Types of parameters 'ev' and 'ev' are incompatible.
         Type 'string' is not assignable to type 'number'.
-b.ts(1,11): error TS2430: Interface 'Merged' incorrectly extends interface 'Base'.
-  Types of property 'onerror' are incompatible.
-    Type '(ev: number) => void' is not assignable to type '(ev: string) => void'.
-      Types of parameters 'ev' and 'ev' are incompatible.
-        Type 'string' is not assignable to type 'number'.
 b.ts(43,5): error TS2411: Property 'bBad' of type 'string' is not assignable to 'string' index type 'number | ((ev: number) => void)'.
 c.ts(43,5): error TS2411: Property 'cBad' of type 'string' is not assignable to 'string' index type 'number | ((ev: number) => void)'.
 d.ts(43,5): error TS2411: Property 'dBad' of type 'string' is not assignable to 'string' index type 'number | ((ev: number) => void)'.

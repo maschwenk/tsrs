@@ -151,7 +151,7 @@ pub(crate) struct jsxRuntimeImportSpecifier {
 
 // fileloader.go:337 (Go runs it on the loader before creating the resolver; it only needs the options and the host,
 // and returns the builder the loader keeps)
-fn add_project_reference_tasks(opts: &ProgramConfig, host: &Arc<dyn CompilerHost>, _single_threaded: bool) -> projectReferenceFileMapperBuilder {
+fn add_project_reference_tasks(opts: &ProgramConfig, host: &Arc<dyn CompilerHost>, single_threaded: bool) -> projectReferenceFileMapperBuilder {
     let mut mapper = projectReferenceFileMapper::new(opts.config, opts.can_use_project_reference_source());
     let resolution_host = resolution_host_for(Arc::clone(host));
     mapper.loader_host = Some(resolution_host);
@@ -160,8 +160,8 @@ fn add_project_reference_tasks(opts: &ProgramConfig, host: &Arc<dyn CompilerHost
         return projectReferenceFileMapperBuilder { mapper: Box::leak(Box::new(mapper)), host: resolution_host };
     }
 
-    let mut parser = projectReferenceParser::new(&**host);
-    let mut root_tasks = parser.create_project_reference_parse_tasks(project_references);
+    let parser = projectReferenceParser::new(&**host, single_threaded);
+    let mut root_tasks = projectReferenceParser::create_project_reference_parse_tasks(project_references);
     parser.parse(&mut root_tasks, &mut mapper);
     let mapper: &'static projectReferenceFileMapper = Box::leak(Box::new(mapper));
     projectReferenceFileMapperBuilder { mapper, host: mapper.resolution_host(resolution_host) }

@@ -22,6 +22,10 @@ We aim to release a stable version against TypeScript 7.1 with 100% conformance.
 
 We take conformance really seriously and are fixing the remaining 0.01% of issues we discover in existing projects.
 
+The default CLI keeps tsrs's machine/program-scaled checker count and locality/work-stealing scheduler. Checker cache
+history and eager member tables follow the pinned `tsgo`; exact history-sensitive comparisons also pass
+`--checkerAssignment go --checkers 4`. See [CLI usage](https://github.com/maschwenk/tsrs/blob/main/docs/USAGE.md#performance-options).
+
 `--init` and `--showConfig` are not supported. See [compatibility and evidence](https://github.com/maschwenk/tsrs/blob/main/docs/COMPATIBILITY.md)
 for supported features and known gaps.
 

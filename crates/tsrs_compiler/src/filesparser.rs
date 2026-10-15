@@ -563,11 +563,11 @@ impl filesParser {
         // for them the load runs Go's order:
         // - which files a failing content mapper reports before the failure budget disables it (fileloader.go:681,
         //   the tsc contentMapperFailures scenarios), single-threaded;
-        // - `--traceResolution`, at any checker count: a lookup traces as served "according to earlier cached
-        //   lookups" when an earlier resolution made it. Go's parallel order is a race; its single-threaded order is
-        //   the one deterministic reference. Traced resolutions run sequentially anyway (`prefetch`).
+        // - `--traceResolution`, when single-threaded: a lookup traces as served "according to earlier cached
+        //   lookups" when an earlier resolution made it. Parallel traced programs take the ordinary prefetch path,
+        //   as Go does, so their traces observe the shared cache history made by concurrent resolutions.
         let trace_resolution = loader.opts.config.compiler_options().unwrap().trace_resolution.is_true();
-        if trace_resolution || (loader.files_parser.single_threaded && !loader.content_mapper_extensions.is_empty()) {
+        if loader.files_parser.single_threaded && (trace_resolution || !loader.content_mapper_extensions.is_empty()) {
             while let Some(item) = loader.files_parser.queue.pop() {
                 Self::run_queued(loader, item);
             }
@@ -692,7 +692,7 @@ impl filesParser {
     // two files remain and not --singleThreaded, in parallel computes the metadata of every remaining file (lib files
     // get the default), parses and binds it and (unless --traceResolution) resolves its references, type reference
     // directives and imports. The first parallel round also walks ahead, parsing, binding and resolving the files those
-    // certainly load (not with --traceResolution, project references or libReplacement). `load` falls back to doing
+    // certainly load (not with project references or libReplacement). `load` falls back to doing
     // the work on the spot for anything not prefetched.
     fn prefetch(loader: &mut fileLoader, round: &[queuedTask]) {
         let mut planned: FxHashSet<(DataId, std::sync::Arc<str>)> = FxHashSet::default();
@@ -746,17 +746,16 @@ impl filesParser {
             loader.tasks.reserve(sub_tasks);
             return;
         }
-        // Each job computes the file's metadata, parses it and, unless resolution traces are requested, resolves
-        // its imports and type reference directives (Go does all of this per task in parallel). Traces stay
-        // sequential: they say whether a lookup was served from a cache, which depends on the resolution order.
-        let resolve_ahead = !loader.opts.config.compiler_options().unwrap().trace_resolution.is_true();
+        // Each job computes the file's metadata, parses it and resolves its imports and type reference directives
+        // (Go does all of this per task in parallel). Each file retains its own buffered trace for program-order emit;
+        // cache-hit wording reflects the parallel resolution history, as in Go.
+        let resolve_ahead = true;
         // The first parallel round also walks ahead: each parsed file's sub tasks that will certainly be loaded are
         // parsed and resolved on the spot, recursively, instead of one dependency level per round (Go has no
         // rounds; it queues each sub task as soon as it is found). Only files the program loads are touched, so the
         // resolver and package.json caches end up with the same entries. Not with project references (their
         // redirect lookups record symlink state) or lib replacement (a lib file can live in node_modules).
-        let speculate = resolve_ahead
-            && !loader.files_parser.speculated
+        let speculate = !loader.files_parser.speculated
             && loader.opts.config.resolved_project_reference_paths().is_empty()
             && !loader.opts.config.compiler_options().unwrap().lib_replacement.is_true();
         loader.files_parser.speculated = true;

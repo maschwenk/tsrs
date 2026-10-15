@@ -2,7 +2,8 @@
 // the `--noEmit` type-check pass retires its largest checker and checks the rest of that checker's files with a fresh
 // one. With a 1 MiB target and no minimum checker size (TSRS_RETIRE_MIN=0) checkers are retired after nearly every
 // file. Each case of
-// testdata/regressions must still print tsgo-ref's output (expected.txt), also in poison mode (TSRS_ARENA_POISON=1:
+// testdata/regressions must still print canonical output (expected-canonical.txt when a case has one, else
+// expected.txt), also in poison mode (TSRS_ARENA_POISON=1:
 // a retired checker's region is filled with 0xA5 and kept, so any later read of it crashes), and with the relation
 // caches emptied after every file.
 
@@ -17,7 +18,9 @@ fn run(dir: &Path, checkers: &str, poison: bool, extended: bool) -> String {
 // `relation_limit`: TSRS_RELATION_CACHE_LIMIT (Some(0): the relation caches are emptied after every file).
 fn run_with(dir: &Path, checkers: &str, poison: bool, extended: bool, relation_limit: Option<&str>) -> String {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_tsrs"));
-    cmd.current_dir(dir).args(["-p", ".", "--pretty", "false", "--checkers", checkers, "--maxMemory", "1M"]);
+    cmd.current_dir(dir)
+        .args(["-p", ".", "--pretty", "false", "--checkers", checkers, "--maxMemory", "1M"])
+        .env("TSRS_HISTORY", "canonical");
     cmd.env("TSRS_RETIRE_MIN", "0");
     if extended {
         cmd.arg("--extendedDiagnostics");
@@ -44,7 +47,14 @@ fn run_with(dir: &Path, checkers: &str, poison: bool, extended: bool, relation_l
 #[test]
 fn retired_checkers_report_what_one_checker_reports() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/regressions");
-    let mut cases: Vec<_> = std::fs::read_dir(&root).unwrap().map(|e| e.unwrap().path()).filter(|p| p.join("expected.txt").is_file()).collect();
+    let mut cases: Vec<_> = std::fs::read_dir(&root)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.join("expected.txt").is_file())
+        // Parallel traceResolution output intentionally reflects concurrent cache history; expected.txt is tsgo's
+        // deterministic single-threaded trace and is covered by tools/regressions.sh instead.
+        .filter(|p| p.file_name().is_none_or(|name| name != "trace-package-json-first-read"))
+        .collect();
     cases.sort();
     // The cases are independent processes; run them on all cores (serially this test was most of `cargo test`).
     let next = AtomicUsize::new(0);
@@ -66,7 +76,8 @@ fn retired_checkers_report_what_one_checker_reports() {
 
 // Checks one case and returns how many checkers its `--extendedDiagnostics` run retired.
 fn check_case(dir: &Path) -> usize {
-    let expected = std::fs::read_to_string(dir.join("expected.txt")).unwrap();
+    let canonical = dir.join("expected-canonical.txt");
+    let expected = std::fs::read_to_string(if canonical.is_file() { canonical } else { dir.join("expected.txt") }).unwrap();
     for (checkers, poison) in [("2", true), ("3", false)] {
         assert_eq!(run(dir, checkers, poison, false), expected, "{} --checkers {checkers} poison={poison}", dir.display());
     }

@@ -31,17 +31,23 @@ Alongside the supported `tsc` flags, tsrs offers options to control performance:
 
 - `--checkers N` sets the number of checker threads. By default tsrs uses one per core up to 16 cores, then half the
   cores, from 4 to 32; a program with fewer than 32 type-checked files per checker gets fewer, down to 4, and never
-  more checkers than files. `--build` uses 4 per project. More threads are faster but use more memory. The thread
-  count doesn't change the diagnostics, apart from the known exceptions in the
-  [compatibility table](COMPATIBILITY.md#what-it-does-and-doesnt-do).
+  more checkers than files. `--build` uses 4 per project. More threads can be faster but use more memory. In the
+  default Go-history mode the thread count can change output in the same history-sensitive cases as tsgo; exact
+  comparisons normally pass `--checkers 4` to both compilers.
 - `--singleThreaded` uses one thread, for the lowest memory use.
 - `--checkerCostCache <file>` remembers how long each file took to check and uses that to balance threads on the next
-  run (up to ~15% faster on repeated runs).
+  locality-mode run (up to ~15% faster on repeated runs).
 - `--maxMemory <size>` (for example `12G`; `--noEmit` checks only) keeps the process near that much memory: above it,
   tsrs replaces its largest checker with a fresh one, trading CPU for memory. The diagnostics are the same.
-- `--checkerAssignment go` splits files across threads the way tsgo does, for byte-identical output with tsgo.
-- `--noLazyMembers` turns off a set of checker optimizations that are not yet merged upstream. They never change
-  diagnostics; the patches are in [`upstream/`](../upstream/).
+- The default scheduler uses directory-local assignment, work stealing and declaration-file splitting. Checker cache
+  history independently follows tsgo. `TSRS_HISTORY=canonical` changes only cache history. Naming an assignment
+  disables work stealing; `--checkerAssignment go` selects tsgo's static FENNEL assignment.
+- Lazy member tables from two not-yet-merged upstream changes are off by default. `--lazyMembers` or
+  `TSRS_LAZY_MEMBERS=1` enables them; the patches are in [`upstream/`](../upstream/).
+
+For canonical caches and lazy members, use `TSRS_HISTORY=canonical TSRS_LAZY_MEMBERS=1`. This does not change checker
+scheduling; known output exceptions are listed in the
+[compatibility table](COMPATIBILITY.md#what-it-does-and-doesnt-do).
 
 ## Native packages
 

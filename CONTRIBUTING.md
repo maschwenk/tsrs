@@ -66,13 +66,13 @@ tools/regressions.sh target/fast/tsrs                            # testdata/regr
 cargo test -p tsrs_core -p tsrs_scanner -p tsrs_cli              # unit and CLI tests (see .depot/workflows/ci.yml)
 ```
 
-CI runs the gate twice: in tsgo's check history, which the baselines need, and in the default mode
+CI runs the gate twice: in the default tsgo check history, which the baselines need, and in canonical mode
 (`TS_TEST_PROGRAM_SINGLE_THREADED=false TSRS_HISTORY=canonical`, where `conformance/objectLiteralNormalization`'s
 `.types` / `.symbols` differ by design).
 
 A change must not lose passing tests: compare `target/test-results/pass.txt` before and after
 (`comm -23 <(sort before.txt) <(sort target/test-results/pass.txt)` must print nothing). `docs/DEBUGGING.md`
-describes the full workflow, the opt-out mode (`TSRS_LAZY_MEMBERS=0`) that must stay reference-identical, and the
+describes the full workflow, the lazy-member opt-in mode (`TSRS_LAZY_MEMBERS=1`), and the
 Go oracle programs in `tools/oracle/`.
 
 For a bug outside the suite, add a reproduction under `testdata/regressions/<name>/` (`a.ts`, `tsconfig.json`, and

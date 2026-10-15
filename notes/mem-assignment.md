@@ -1,5 +1,10 @@
 # mem-assignment: assigning files to checkers by locality
 
+**Current status (2026-10-15):** issue #373 did not change the scheduler measured here: locality assignment, work
+stealing, the machine/program-scaled checker count and the four-checker build-mode override remain the defaults.
+Checker cache history changed independently. Exact history-sensitive parity selects Go's static assignment with
+`--checkerAssignment go --checkers 4`.
+
 With 4 checkers every checker re-creates the types, symbols and instantiations that its files need from shared
 declarations (libs, `node_modules`, workspace packages, shared project modules). This note quantifies that
 duplication on the private monorepo and replaces the file-to-checker assignment to reduce it. Checker code is unchanged; only
@@ -35,7 +40,7 @@ declaration-heavy projects with >= 4 checkers, a 101% load cap) in program order
   offline partition experiments; `TSRS_CHECKER_ASSIGNMENT=file:<path>` runs with an assignment from a file (one
   checker index per program file).
 
-## Where the duplication is (the private monorepo, default mode, Go assignment, 4 checkers vs 1)
+## Where the duplication is (the private monorepo, Go assignment, 4 checkers vs 1)
 
 Totals: symbols 22.81M vs 15.33M (binder symbols 3.78M are shared, so checker-created 19.03M vs 11.55M = 1.65x),
 types 16.19M vs 9.63M (1.68x), instantiations 89.9M vs 44.8M (2.0x).
@@ -101,10 +106,8 @@ groups of <= 1, 1/2, 1/4, 1/8 checker loads and penalty 1 or 16 (1/4 with penalt
    order, affinity = file-level import edges between groups, penalty multiplier 1.
 
 Deterministic (sorted paths, groups numbered in path order, index tie-breaks; hash maps only for lookups).
-`--checkerAssignment go` keeps Go's scheme. The checker count default stays Go's 4.
-(Status 2026-10-10: no longer true. The default checker count now scales with the machine: every core up to 8,
-half the cores above that, at least Go's 4 and at most 32, and no more than one checker per fixed number of checked
-files; `default_checker_count` in crates/tsrs_compiler/src/checkerpool.rs.)
+`--checkerAssignment go` keeps Go's static scheme. The default remains locality scheduling, with a checker count
+scaled independently with the machine and program up to 32.
 
 Diagnostics do not depend on the assignment: each file's diagnostics are computed by the checker that owns the
 file and stored by file index; output is concatenated in file order and then sorted/deduplicated. Verified:

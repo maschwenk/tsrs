@@ -5,6 +5,14 @@ change are identified separately from measurements of the packaged release. For 
 see the [compatibility table](COMPATIBILITY.md); detailed investigations are indexed in the
 [engineering notes](../notes/README.md). The early development log follows the release entries.
 
+## Unreleased
+
+The default CLI retains tsrs's machine/program-scaled checker count and locality/work-stealing scheduler while
+adopting the pinned tsgo's history-dependent caches, eager member tables, concurrent project-reference parsing, and
+parallel resolution even with `--traceResolution`. Exact history-sensitive parity also selects Go's assignment with
+`--checkerAssignment go --checkers 4`. `TSRS_HISTORY=canonical` changes cache history without changing scheduling;
+`TSRS_LAZY_MEMBERS=1` enables lazy member tables (#373).
+
 ## 2026-10-14: 0.15.0 release
 
 All seven packages use `0.15.0-ts7.1.0-dev.20260929`. The TypeScript pin is unchanged (`b85298b6`, 7.1.0-dev.20260929).

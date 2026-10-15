@@ -123,10 +123,12 @@ conformance runner still skips the `runExternalCode` cases.
 ### Checker history
 
 Go's inferred declaration types can depend on checker assignment and cache history.
-tsrs's default mode removes several of those dependencies, with known exceptions recorded in the
-[compatibility table](COMPATIBILITY.md#what-it-does-and-doesnt-do). For a strict reference comparison, use
-`--checkerAssignment go --checkers 4 --noLazyMembers` against tsgo with `--checkers 4`; see
-[the remaining history dependencies](../notes/open-history-dependence.md).
+tsrs defaults to the same eager members and cache history as tsgo while retaining its scaled checker count and
+locality/work-stealing scheduler. Exact history-sensitive comparisons also select Go's assignment with
+`--checkerAssignment go --checkers 4`. Canonical history removes several of those dependencies without changing
+scheduling, with known exceptions recorded in the
+[compatibility table](COMPATIBILITY.md#what-it-does-and-doesnt-do); select it with `TSRS_HISTORY=canonical` or an
+explicit non-Go assignment. See [the remaining history dependencies](../notes/open-history-dependence.md).
 
 ### Incremental programs
 
@@ -149,8 +151,8 @@ variants in `incremental.NewProgram` like Go's `createProgram` (with `testBuildI
 order with Go's `omitzero` rules (nil vs empty kept where Go distinguishes them, e.g. `fileInfos: []`) and the
 tuple encodings of the custom `MarshalJSON`s; unmarshaling follows the `UnmarshalJSON` fallbacks.
 
-The default CLI can add an optional canonical-check signature to build info for safe warm reuse. Go-history
-and API formats retain their reference behavior; see
+Canonical CLI mode can add an optional canonical-check signature to build info for safe warm reuse. Default
+Go-history and API formats retain their reference behavior; see
 [the incremental diagnostic rules](../notes/fix-history-dependent-diagnostics.md).
 
 ### Version

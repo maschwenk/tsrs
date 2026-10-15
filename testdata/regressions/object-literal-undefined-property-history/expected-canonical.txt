@@ -1,0 +1,4 @@
+a.ts(16,7): error TS2322: Type '{ selectedNode: { type: number; }; selectionRayOrigin: { type: number; }; selectionPoint: { type: number; }; controllerIndex: { type: number; }; event: { type: number; }; hoveredNode?: undefined; } | ...' is not assignable to type '{ [id: string]: { type: number; }; }'.
+  Type '{ selectedNode: { type: number; }; selectionRayOrigin: { type: number; }; selectionPoint: { type: number; }; controllerIndex: { type: number; }; event: { type: number; }; hoveredNode?: undefined; }' is not assignable to type '{ [id: string]: { type: number; }; }'.
+    Property 'hoveredNode' is incompatible with index signature.
+      Type 'undefined' is not assignable to type '{ type: number; }'.

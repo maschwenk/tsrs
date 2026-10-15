@@ -413,9 +413,8 @@ class CompilerControls(unittest.TestCase):
             self.assertEqual([c["status"] for c in result["configs"][3:]], ["no_inputs", "no_inputs"])
             self.assertEqual(result["status"], "partial")
 
-    def test_strict_mode_is_reported_separately_and_does_not_clear_a_default_difference(self):
-        """Reduced from the property-order configs (langfuse, qwen-code, OmniRoute, ...): tsrs's default mode prints
-        `user?: undefined` where the declaration puts it, tsgo where a.ts's checker first created it."""
+    def test_default_and_strict_modes_both_follow_tsgo_history(self):
+        """Reduced from the property-order configs (langfuse, qwen-code, OmniRoute, ...)."""
         tsrs = Path(os.environ["TSRS_CONFORMANCE_TSRS"]).resolve()
         tsgo = Path(os.environ["TSRS_CONFORMANCE_TSGO"]).resolve()
         with tempfile.TemporaryDirectory() as temp:
@@ -426,27 +425,26 @@ class CompilerControls(unittest.TestCase):
                                        "b.missing;\n")
             result = check_projects(root, ["tsconfig.json"], context(tsgo, tsrs, root), root / "logs", 60, 5)
             [config] = result["configs"]
-            self.assertEqual((config["status"], config["difference"]), ("mismatch", ["diagnostics"]))
+            self.assertEqual(config["status"], "match")
             self.assertEqual(config["strict"]["status"], "match")
-            self.assertEqual((result["status"], result["strict_status"]), ("mismatch", "match"))
+            self.assertEqual((result["status"], result["strict_status"]), ("match", "match"))
             logs = root / "logs" / "0"
-            self.assertIn("{ status: string; user?: undefined; }", (logs / "tsrs.log").read_text())
+            self.assertIn("{ user?: undefined; status: string; }", (logs / "tsrs.log").read_text())
             self.assertIn("{ user?: undefined; status: string; }", (logs / "tsrs-strict.log").read_text())
-            self.assertTrue((logs / "diagnostics.diff").exists())
+            self.assertFalse((logs / "diagnostics.diff").exists())
             self.assertFalse((logs / "diagnostics-strict.diff").exists())
             manifest = {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shards": 1,
                         "repositories": [{"repository": "a/one"}]}
             write_json(root / "results" / "shard-0.json", {
                 "tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shard": 0, "modes": MODES,
                 "results": [dict(result, repository="a/one", available_configs=1)]})
-            self.assertFalse(summarize(manifest, root / "results", root / "report.md"))
+            self.assertTrue(summarize(manifest, root / "results", root / "report.md"))
             report = (root / "report.md").read_text()
-            self.assertIn("0 identical (0 without errors, 0 with the same errors) and 1 different", report)
+            self.assertIn("1 identical (0 without errors, 1 with the same errors) and 0 different", report)
             self.assertIn("tsrs `--checkerAssignment go --checkers 4 --noLazyMembers`", report)
             self.assertIn("1 identical, 0 different, 0 tsrs failures in strict mode", report)
-            self.assertIn("1 projects that differ or fail in default mode are identical in strict mode", report)
-            self.assertIn("tsconfig.json: mismatch (diagnostics); strict match", report)
-            self.assertIn("| mismatch | match | 0 / 1 | 1 |", report)
+            self.assertIn("0 projects that differ or fail in default mode are identical in strict mode", report)
+            self.assertIn("| match | match | 1 / 1 | 1 |", report)
 
     def test_default_mode_keeps_the_projects_checkers_and_strict_mode_has_its_own_reference(self):
         """make(...) costs just over the 5M instantiation limit. tsgo with the project's 8 checkers checks b.ts's

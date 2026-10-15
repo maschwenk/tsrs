@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Determinism gate: diagnostics must not depend on which checker checks a file or in what order
 # (notes/perf-order-independence.md). The single-threaded run of each project and regression case is the reference;
-# the default mode at 2 and 4 checkers (locality assignment and work stealing, so a different split every run) and
+# canonical mode at 2 and 4 checkers (locality assignment and work stealing, so a different split every run) and
 # random static assignments with random visit orders (`--checkerAssignment random:<seed>`) at 2 and 4 checkers must
 # print the same bytes and exit with the same status. Both history-dependent diagnostics of
 # notes/fix-history-dependent-diagnostics.md (nuxt's TS2320, drizzle-orm's TS2769) appeared under such assignments at
@@ -52,7 +52,7 @@ fail=0; runs=0
 # reference run of `sweep` ($out/<name>-single.txt, exit status $ref_status).
 variant() {
   local name=$1 dir=$2 label=$3 status; shift 3
-  (cd "$dir" && "$tsrs" "${flags[@]}" "$@" > "$out/$name-$label.txt" 2>&1); status=$?
+  (cd "$dir" && TSRS_HISTORY=canonical "$tsrs" "${flags[@]}" "$@" > "$out/$name-$label.txt" 2>&1); status=$?
   runs=$((runs + 1))
   if [ "$status" != "$ref_status" ] || ! cmp -s "$out/$name-single.txt" "$out/$name-$label.txt"; then
     echo "FAIL $name $label: exit $status, output differs from --singleThreaded (exit $ref_status):"
@@ -65,7 +65,7 @@ variant() {
 sweep() {
   local name=$1 dir=$2 n rep seed; shift 2
   flags=("$@")
-  (cd "$dir" && "$tsrs" "${flags[@]}" --singleThreaded > "$out/$name-single.txt" 2>&1); ref_status=$?
+  (cd "$dir" && TSRS_HISTORY=canonical "$tsrs" "${flags[@]}" --singleThreaded > "$out/$name-single.txt" 2>&1); ref_status=$?
   for n in 2 4; do
     for rep in $(seq 1 "$default_reps"); do variant "$name" "$dir" "default-$n-$rep" --checkers "$n"; done
     for seed in $(seq 1 "$seeds"); do variant "$name" "$dir" "random-$n-$seed" --checkers "$n" --checkerAssignment "random:$seed"; done

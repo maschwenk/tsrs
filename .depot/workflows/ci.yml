@@ -103,15 +103,15 @@ jobs:
       - name: Build correctness binaries
         run: cargo build --profile ci --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash
 
-      # Errors, .types and .symbols baselines, in tsgo's check history (`--checkerAssignment go`, tsrs_core::compat),
-      # which the reference baselines need for byte-identity.
+      # Errors, .types and .symbols baselines in the default tsgo check history, which the reference baselines need
+      # for byte-identity.
       - name: Conformance suite
         run: .github/scripts/conformance-gate.sh
 
-      # The same suite in the mode tsrs ships by default: canonical check history, 4 checkers per test, work stealing
+      # The same suite in canonical opt-in mode: canonical check history, 4 checkers per test, work stealing
       # (notes/perf-order-independence.md, notes/perf-checker-stealing.md). By design one test,
       # conformance/objectLiteralNormalization, differs from tsgo there in its .types / .symbols.
-      - name: Conformance suite (default checker mode)
+      - name: Conformance suite (canonical checker mode)
         env:
           TS_TEST_PROGRAM_SINGLE_THREADED: "false"
           TSRS_HISTORY: canonical

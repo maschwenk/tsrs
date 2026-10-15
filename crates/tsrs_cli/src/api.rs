@@ -338,7 +338,13 @@ mod tests {
         std::fs::write(dir.join("tsconfig.json"), json::marshal(&config).unwrap()).unwrap();
         let exe = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("tsrs");
         let cli = || {
-            let output = std::process::Command::new(&exe).args(["-p", ".", "--pretty", "false"]).current_dir(&dir).output().unwrap();
+            let output = std::process::Command::new(&exe)
+                .args(["-p", ".", "--pretty", "false"])
+                .env("TSRS_HISTORY", "canonical")
+                .env_remove("TSRS_CHECKER_ASSIGNMENT")
+                .current_dir(&dir)
+                .output()
+                .unwrap();
             assert_eq!(output.status.code(), Some(2));
             assert_eq!(output.stderr, [] as [u8; 0]);
             String::from_utf8(output.stdout).unwrap()
@@ -364,7 +370,7 @@ mod tests {
         let migrated = build();
         assert_eq!(get(&migrated, "status"), &Value::Number(2.0));
         let Value::Array(diagnostics) = get(&migrated, "diagnostics") else { panic!("{migrated:?}") };
-        assert_eq!(diagnostics.iter().filter(|d| get(d, "code") == &Value::Number(2320.0)).count(), 4);
+        assert_eq!(diagnostics.iter().filter(|d| get(d, "code") == &Value::Number(2320.0)).count(), 1);
         let api_info = std::fs::read_to_string(&info).unwrap();
         assert!(!api_info.contains("tsrsCanonicalCheckSignature"));
         for _ in 0..2 {
