@@ -83,6 +83,11 @@ strip = "symbols"
 debug = false
 panic = "unwind"
 
+# The checker is the clean dev build's critical-path crate. Level 2 avoids the most expensive LLVM work while
+# retaining enough optimization for the conformance suite's checker-heavy cases.
+[profile.dev.package.tsrs_checker]
+opt-level = 2
+
 # Generated fourslash test bodies are glue around the real language-server crates. Optimizing all 4,546 bodies
 # dominates their build but does not make the server under test faster; the hand-written harness is a separate crate.
 [profile.dev.package.tsrs_fourslash]

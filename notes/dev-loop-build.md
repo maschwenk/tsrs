@@ -40,6 +40,20 @@ The suite's wall time does not depend on the profile: one test, `compiler/inters
 takes 13.2 s of the 15 s, and all 15,197 variants together take 51 s of CPU. Making that test faster is a checker
 performance change, under the bar in AGENTS.md.
 
+### Checker optimization level
+
+The checker is also the critical path of a clean `dev` build. On arm64 macOS with rustc 1.99.0, at base
+1cdee413, lowering only `tsrs_checker` from optimization level 3 to 2 reduced an isolated checker build's median
+from 15.061 s to 14.381 s (-4.5%); the LLVM portion fell from 9.93 s to 9.30 s (-6.3%). A clean
+`cargo build --profile dev -p tsrs_cli -p tsrs_testrunner` fell from 37.12 s to 34.55 s (-6.9%). Equivalent
+incremental checker body edits were unchanged: 3.27-3.35 s before and 3.26-3.29 s after.
+
+The conformance results were identical (15,197 total, 13,458 passed, 2 codes, 2 known failures and 1,735 skipped,
+with no crashes or timeouts). Suite wall was 17.23 s before and 17.88 s after. A single-threaded run on the
+MikroORM benchmark retired 87,169,774,178 instructions before and 86,938,280,613 after (-0.27%); peak RSS was
+1,189,183,488 and 1,189,167,104 bytes respectively. Optimization level 1 was not used because the known slow
+checker-heavy conformance case exceeded its 20 s timeout.
+
 ## Same results
 
 - `conformance-gate.sh` (errors, `.types`, `.symbols`): `pass`, `fail`, `types-pass`, `types-fail`, `symbols-pass`,
