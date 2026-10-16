@@ -1,4 +1,5 @@
-# Builds the tsrs binaries and the WebAssembly module and publishes the npm packages (npm/README.md), all at the
+# Builds the tsrs binaries and the WebAssembly module, publishes the npm packages, then creates the GitHub release,
+# using docs/releases/<workspace version>.md for its notes. All packages use the
 # version npm/build.mjs derives from Cargo.toml. The conformance and fourslash gates run here on the BOLT-optimized
 # GNU binaries (.github/scripts/bolt.sh). The macOS binary gets only the smoke tests below; nothing runs the suites
 # on macOS (.github/workflows/ci.yml, Linux only, gates the source). The broader WebAssembly differential gate
@@ -43,6 +44,15 @@ jobs:
       ts_nightly: ${{ steps.v.outputs.ts_nightly }}
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+      - name: Set up Node
+        # The helpers use Node 24, including import.meta.main.
+        uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+        with:
+          registry-url: ""
+      - name: Validate release tag and notes
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: node .github/scripts/github-release.mjs preflight
       - id: v
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then node npm/build.mjs --check-tag "$GITHUB_REF_NAME"; fi
@@ -367,3 +377,24 @@ jobs:
             fi
             pnpm publish "$tarball" "${flags[@]}"
           done < "$RUNNER_TEMP/publish.txt"
+      - name: Verify every published package and latest tag
+        if: github.event_name != 'workflow_dispatch' || !inputs.dry_run
+        run: node .github/scripts/wait-for-npm-packages.mjs --release npm/dist/packages.json wasm-dist/packages.json
+
+  github-release:
+    needs: publish
+    if: github.ref_type == 'tag' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+        with:
+          registry-url: ""
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: "false"
+        run: node .github/scripts/github-release.mjs publish

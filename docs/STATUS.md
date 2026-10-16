@@ -5,7 +5,7 @@ change are identified separately from measurements of the packaged release. For 
 see the [compatibility table](COMPATIBILITY.md); detailed investigations are indexed in the
 [engineering notes](../notes/README.md). The early development log follows the release entries.
 
-## 0.16.0 release preparation
+## 2026-10-16: 0.16.0 release
 
 All seven packages use `0.16.0-ts7.1.0-dev.20260929`. The TypeScript pin remains `b85298b6a81f`; release binaries
 report the matching nightly `7.1.0-dev.20260930.4`.
@@ -29,7 +29,8 @@ the pinned upstream sources. The watch checks require FSEvents access outside th
 release dry run on `d5682df5` (before the version bump)
 [passed](https://github.com/oxc-project/tsrs/actions/runs/38918398638): all five native targets, WebAssembly and the
 packaging/publish dry run. The local 0.16.0 binary was rebuilt with the nightly stamp; both conformance gates and
-the packed CLI/API smoke pass with no lost passing baselines. Nothing has been published for 0.16.0 yet.
+the packed CLI/API smoke pass with no lost passing baselines. The release workflow publishes the
+[GitHub release notes](releases/0.16.0.md) after all npm packages are available.
 
 ## 2026-10-14: 0.15.0 release
 

@@ -6,7 +6,7 @@
 //   node npm/build.mjs --binary aarch64-apple-darwin=target/release/tsrs --pack
 //   node npm/build.mjs --artifacts dir/ --pack      # dir/<target triple>/tsrs[.exe], as the release workflow lays out
 //   node npm/build.mjs --wasm npm/tsrs-wasm/tsrs.wasm --pack   # the WebAssembly package (tools/wasm/build.sh)
-//   node npm/build.mjs --print-version          # also --print-typescript-commit, --print-typescript-nightly, --check-tag <tag>
+//   node npm/build.mjs --print-version          # also --print-crate-version, --print-typescript-commit, --print-typescript-nightly, --check-tag <tag>
 //   node npm/build.mjs --sdk-only               # just compile the JS API (npm/tsrs/src -> npm/tsrs/dist)
 //
 // The main package also carries TypeScript 7's unstable JS API (`tsrs/unstable/sync`, `/async`, `/ast`, ...),
@@ -43,7 +43,7 @@ function usage(message) {
     console.error(
         "usage: node npm/build.mjs [--binary <triple>=<path>]... [--artifacts <dir>] [--out <dir>] [--pack] [--tsc <path>]\n" +
             "                          [--wasm <tsrs.wasm>] [--sdk-only]\n" +
-            "                          [--check-tag <git tag>] [--print-version | --print-typescript-commit | --print-typescript-nightly]\n" +
+            "                          [--check-tag <git tag>] [--print-version | --print-crate-version | --print-typescript-commit | --print-typescript-nightly]\n" +
             `triples: ${Object.keys(TARGETS).join(", ")}`,
     );
     process.exit(message ? 2 : 0);
@@ -92,6 +92,9 @@ function parseArgs(argv) {
                 break;
             case "--print-version":
                 opts.print = "version";
+                break;
+            case "--print-crate-version":
+                opts.print = "crateVersion";
                 break;
             case "--print-typescript-commit":
                 opts.print = "typescriptCommit";
