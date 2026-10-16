@@ -39,6 +39,8 @@ Use the `dev` profile (release optimization, no LTO, incremental) while editing 
 same results in the same time (notes/dev-loop-build.md). Build `--release` for performance measurements: its fat LTO
 and single codegen unit are what ships.
 
+Ad hoc maintenance and generation commands live in [`tasks/`](tasks/README.md).
+
 The language-server test runner and WebAssembly module have separate builds:
 
 ```sh

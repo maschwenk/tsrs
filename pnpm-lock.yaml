@@ -164,7 +164,11 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    devDependencies:
+      '@unicode/unicode-15.1.0':
+        specifier: 1.6.17
+        version: 1.6.17
 
   npm:
     devDependencies:
@@ -762,6 +766,9 @@ packages:
     resolution: {integrity: sha512-PJFXFS4ZJKiJ9Qiuix6Dz/OwEIqHD7Dme1UwZhTK11vR+5dqW2ACbdndWQexBzCx+CPuMe5WBYQWCsFyGlQLlQ==}
     peerDependencies:
       typescript: '*'
+
+  '@unicode/unicode-15.1.0@1.6.17':
+    resolution: {integrity: sha512-vhIA4YCwefqQomvbsdkMXVjlTr3OPg99UlRlz04yK6pr2VCrbIA4+4HEbmwx2b92zMwprNGh8Zb6gqf4hE3YXQ==}
 
   '@vitest/browser-preview@5.0.3':
     resolution: {integrity: sha512-jfnEBv5yDRPR1MeiTlTW5bcZoPsiI7MBhpZR8IJiSxVhdK6Pa4gPk3tLHTRxVHy24kkWxY2TnUbnszU3J1bQJw==}
@@ -1907,6 +1914,8 @@ snapshots:
       typescript: 6.0.2
     transitivePeerDependencies:
       - supports-color
+
+  '@unicode/unicode-15.1.0@1.6.17': {}
 
   '@vitest/browser-preview@5.0.3(@voidzero-dev/vite-plus-core@1.1.0(@types/node@22.20.1)(sass@1.97.3)(typescript@6.0.2))(vitest@5.0.3)':
     dependencies:
