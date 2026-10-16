@@ -1,5 +1,8 @@
 # mem-checker-gc: could a tracing collector replace checker retirement? (2026-10-09)
 
+> The allocation profiler and reachability census have been removed. Measurements using them describe the
+> recorded revision; use the [current memory debugging guide](../docs/DEBUGGING.md#arena-recycling-checks) for new work.
+
 Question (owner): `--maxMemory` (notes/mem-recycle-checkers.md) gets the 38k-file codebase under 9 GB at 8 checkers
 (`8G`: 8.7 GB) by retiring whole checkers, for +35% instructions. Most of what a retired checker held was dead; could a
 collector free that in place, without the rebuild?
@@ -13,7 +16,7 @@ data model, several weeks. Its gain over retirement would be CPU, not memory: th
 that `--maxMemory` 8G/9G already reaches.
 
 Tools: branch `exp/checker-gc-census` (the use census of mem/use-census-apps merged onto `mem-notion`, plus the two
-experiments below). Alloc-profile build with plain pointers (8-byte handles: absolute sizes ~25% above a release
+experiments below). Former profiling build with plain pointers (8-byte handles: absolute sizes ~25% above a release
 build), the 38k-file codebase, 8 checkers, Mac.
 
 ## 1. How much is dead (epoch census)
@@ -35,7 +38,7 @@ read", so these are upper bounds.)
 ## 2. How much a collector could free (reachability census at a mid-run barrier)
 
 `TSRS_GC_SIM_AT=0.5`: every checker stops after half its queue, and the conservative reachability census
-(`TSRS_CENSUS=1`) runs from the program with some tables weak (reached, not followed): heap blocks allocated inside
+used in that experiment ran from the program with some tables weak (reached, not followed): heap blocks allocated inside
 `usebits::weak_scope` (the `PackedMap`/`GoPackedMap` identity caches, string literal tables, reference instantiation
 tables) with `TSRS_GC_WEAK_CACHES=1`, and checker-thread arena blocks whose site or type matches
 `TSRS_GC_WEAK_ARENA`.

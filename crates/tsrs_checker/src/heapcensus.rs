@@ -6,9 +6,7 @@
 //! `-p tsrs_checker --features tsrs_checker/assignment-stats` builds, the containers owned by the checker's created types (resolved
 //! member tables, union and intersection property caches, reference instantiation tables,
 //! conditional-root instantiation maps) are reported too (`heap_census_objects`). Other arena-owned
-//! containers (e.g. symbols' tables) are not reported; the alloc profile's heap sampler attributes them
-//! by call site (`TSRS_HEAP_PROFILE=1`, `TSRS_HEAP_PROFILE_TSV`). Reporting only: nothing runs unless the
-//! variable is set.
+//! containers (e.g. symbols' tables) are not reported. Reporting only: nothing runs unless the variable is set.
 
 use crate::*;
 

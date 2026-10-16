@@ -1028,9 +1028,6 @@ impl Checker {
             // SAFETY: made by this call's `getTailRecursionRoot` with its list; escaped mappers keep theirs.
             unsafe { recycle_mapper_with_targets(m, targets) };
         }
-        tsrs_core::census_scrub_slack(&mut self.scratch_contexts);
-        tsrs_core::census_scrub_slack(&mut self.scratch_mappers);
-        tsrs_core::census_scrub_slack(&mut self.scratch_mapper_lists);
         result
     }
 

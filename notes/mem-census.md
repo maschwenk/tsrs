@@ -1,20 +1,22 @@
 # mem-census: how much of tsrs's memory is garbage at the end of a check
 
+> The allocation profiler and reachability census have been removed. Measurements using them describe the
+> recorded revision; use the [current memory debugging guide](../docs/DEBUGGING.md#arena-recycling-checks) for new work.
+
 Go frees inference contexts, temporary mappers, key lists, scratch tables and discarded parse results with its GC;
 the tsrs leak arena (`tsrs_core::P<T>`) keeps every arena object, and the Rust heap keeps every block whose owner
 is an arena object (destructors never run). This pass measures that share: memory still held at exit that nothing
 reachable points to, by arena type, by arena call site, by allocating function (sampled stacks) and by heap
 allocating function. No recycling is implemented here; the ranked list at the end is the input for the next pass.
 
-## Method
+## Historical method
 
-Build the alloc-profile binary (`CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features
-alloc-profile`) and run with `TSRS_CENSUS=1` (code: `crates/tsrs_core/src/alloc_profile/census.rs`, hook in
-`crates/tsrs_cli/src/census.rs`; compiled out of normal builds).
+The instrumented binary recorded arena allocations and live heap blocks, then walked their references at exit.
+This implementation and its CLI hook have been removed.
 
 - **Recording.** `record` (every `P::new` / `alloc*`) now also gets the block address and, with the census on,
   appends (address, size, site + type) to a per-thread list; every 16th arena allocation
-  (`TSRS_CENSUS_ARENA_SAMPLE`) also records its raw stack, because `#[track_caller]` sites are one level deep and
+  also records its raw stack, because `#[track_caller]` sites are one level deep and
   stop at wrappers (`new_node`, `Type::alloc`, `Symbol::new`, link stores). The counting allocator keeps every live
   heap block (address, size, interned raw stack, 16 frames) in a sharded map; arena chunks are not blocks. Census
   bookkeeping allocates with tracking suspended.
@@ -40,7 +42,7 @@ alloc-profile`) and run with `TSRS_CENSUS=1` (code: `crates/tsrs_core/src/alloc_
   are not scanned.
 - **Conservative.** Any word that looks like a pointer keeps its target alive, so every unreachable number is a
   lower bound. Run-to-run variation is about +-3 MB, except the dropped parse results (below), which vary more.
-- **Check** (`TSRS_CENSUS_VERIFY=1`): walks every source file's AST (`for_each_child`), every node's symbol, local
+- **Verification**: walks every source file's AST (`for_each_child`), every node's symbol, local
   symbol and locals, every member / export table and every declaration, and asks whether the census found each
   reachable. On the private monorepo: 25,279,722 nodes and 3,906,182 binder symbols checked, 0 unreachable, 0 not
   recorded, in both modes. Same on a 5-line file and on `compiler/inferFromGenericFunctionReturnTypes3.ts`.
@@ -49,9 +51,8 @@ alloc-profile`) and run with `TSRS_CENSUS=1` (code: `crates/tsrs_core/src/alloc_
   are converted to `TypeReferenceNode`s and the parsed node is dropped. `Identifier`s from
   `parse_type_or_type_predicate` (99%): `parseTypePredicatePrefix` runs under `tryParse` and is rolled back.
 - **Cost.** The private monorepo with one checker: 73 s instead of 22 s, peak 13.4 GB instead of 6.8 GB. The mark
-  takes 18 s (default mode) / 29 s (opt-out). `TSRS_CENSUS_TOP=N` sets the table length.
-  `TSRS_CENSUS_TSV=<path>` writes every row of every table for offline grouping. With the census on, the
-  alloc-profile's "heap" totals include census bookkeeping; the census's own heap numbers do not.
+  takes 18 s (default mode) / 29 s (opt-out). The profiler exported tables for offline grouping. Its
+  "heap" totals included census bookkeeping; the census's own heap numbers did not.
 
 ## Totals (the private monorepo, `--checkers 1`, main at d8d636e + this change)
 
@@ -70,7 +71,7 @@ arena's chunks now come from its own reservation, crates/tsrs_core/src/reserve.r
 
 ## Garbage by cause (default mode; from the sampled stacks, scaled x16)
 
-Rows grouped by type and the first allocating frames (rules applied to the `TSRS_CENSUS_TSV` rows: inference types and
+Rows grouped by type and the first allocating frames (rules applied to the exported census rows: inference types and
 inference mappers by the function that made the context; everything under `Parser::`; binder flow nodes; object
 literal and spread types from expression checking; the remaining mappers and type lists). Sampled totals
 match the exact totals (661 MB). The sampled estimate is noisy for few large blocks, such as source texts.

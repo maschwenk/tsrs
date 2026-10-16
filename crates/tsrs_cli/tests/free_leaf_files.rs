@@ -17,7 +17,7 @@ fn case_dir(case: &str) -> std::path::PathBuf {
 fn run(case: &str, free_leaves: &str, poison: bool) -> (String, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_tsrs"));
     cmd.current_dir(case_dir(case)).args(["-p", ".", "--pretty", "false", "--singleThreaded"]).env("TSRS_FREE_LEAVES", free_leaves);
-    for var in ["TSRS_CHECKER_ASSIGNMENT", "TSRS_FILE_TIMES", "TSRS_ASSIGNMENT_STATS", "TSRS_HEAP_CENSUS", "TSRS_CENSUS"] {
+    for var in ["TSRS_CHECKER_ASSIGNMENT", "TSRS_FILE_TIMES", "TSRS_ASSIGNMENT_STATS", "TSRS_HEAP_CENSUS"] {
         cmd.env_remove(var);
     }
     if poison {

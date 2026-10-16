@@ -48,8 +48,6 @@ pub fn run_lsp(args: &[String]) -> i32 {
         Err(err) => panic!("{}", err),
     };
 
-    #[cfg(feature = "alloc-profile")]
-    crate::census::prepare_lsp();
     let s = tsrs_lsp::new_server(tsrs_lsp::ServerOptions {
         in_: tsrs_lsp::to_reader(std::io::stdin()),
         out: tsrs_lsp::to_writer(std::io::stdout()),
@@ -72,8 +70,6 @@ pub fn run_lsp(args: &[String]) -> i32 {
     });
 
     let result = s.run(&ctx);
-    #[cfg(feature = "alloc-profile")]
-    crate::census::run_lsp(&s);
     if let Err(err) = result {
         eprintln!("{err}");
         return 1;

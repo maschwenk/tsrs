@@ -3,12 +3,12 @@
 Experiment 5 of the checker-memory round (branch `mem/frontend`, base de3beaf). The private monorepo with `--noCheck`
 peaked at 2.26 GiB (Go `tsc`: 4.65 GiB for the same phase), 40% of the one-checker peak. Gates: AST oracle and binder
 oracle unchanged, suite trees identical in four modes, fourslash pass list identical, private-monorepo output and
-counters identical. Nothing here frees or reuses memory, so the census free-gate does not apply.
+counters identical. Nothing here frees or reuses memory.
 
 ## Where 2.26 GiB went (base)
 
-Measured with the alloc-profile build (`TSRS_ALLOC_PROFILE_TOP=3000`: arena by type and site) and the heap profiler.
-The heap profiler now also prints the live bytes per stack at the heap's high-water mark ("heap live at the heap
+Measured with the now-removed arena allocation profiler and heap sampler.
+The heap sampler also recorded the live bytes per stack at the heap's high-water mark ("heap live at the heap
 peak"): the loader's transient structures are gone at exit but set the peak. Footprint ~= arena requested (1,593 MB)
 + heap at its peak (637 MB counted) + allocator retention.
 
@@ -136,10 +136,9 @@ Not done (each judged against its size):
   (notes/mem-recycle.md).
 - Flow nodes from conditions that end up unreferenced: not provable locally (notes/mem-recycle.md).
 
-## Reproducing
+## Measurement provenance
 
-- `--features alloc-profile` build, `TSRS_ALLOC_PROFILE_TOP=3000` for the arena tables, `TSRS_HEAP_PROFILE=1
-  TSRS_HEAP_PROFILE_TOP=5000` for the heap; the new "heap live at the heap peak" section is the one to read for
-  transient structures. Inlined frames: `dsymutil` the binary and `atos -i` (the profiler prints one frame per site).
+- The removed profiler supplied arena tables and heap stacks, including live bytes at the heap peak for
+  transient structures. Inlined frames were resolved with `dsymutil` and `atos -i`.
 - Field occupancy (the rare-field percentages above) came from a throwaway walk over the bound program (every node of
   the listed kinds, counting non-nil fields); not committed.

@@ -54,9 +54,6 @@ const _: () = assert!(std::mem::size_of::<FlowNode>() == if tsrs_core::COMPRESSE
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<FlowNode>() == 16);
 
-/// Census builds: the link word is a plain pointer (`crate::census_layouts`).
-pub(crate) fn census_layout() {}
-
 impl FlowNode {
     pub fn new(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>, text_index: u32) -> FlowNode {
         assert!(antecedent.is_none() || !flags.intersects(FlowFlags::Label), "flow label created with an antecedent");

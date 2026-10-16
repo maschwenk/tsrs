@@ -73,8 +73,8 @@ preserves their hit-path cost.
 
 ## Allocation check
 
-On macOS arm64, build both main and cleanup in the same directory with `--release --locked -p tsrs_cli
---features alloc-profile`. Run the pinned public Compiler and Compiler-Unions configurations with
+The historical comparison built main and cleanup in the same directory on macOS arm64 with allocation
+instrumentation. It ran the pinned public Compiler and Compiler-Unions configurations with
 `RAYON_NUM_THREADS=1 --singleThreaded --noEmit --incremental false --pretty false`. Diagnostics are byte-identical.
 The allocation counters and rounded arena/heap sizes are unchanged:
 

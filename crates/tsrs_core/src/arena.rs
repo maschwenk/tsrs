@@ -10,9 +10,8 @@
 //!   pointer to that memory: same chunk, and no free or `pin` on this thread in between (`pin` is called by code
 //!   that stores freshly allocated data in a structure that outlives the speculation, e.g. a scanner cache).
 //!
-//! Verification modes (`TSRS_ARENA_POISON=1`, and the census build with `TSRS_CENSUS=1`) never reuse memory: freed
-//! blocks and rewound ranges are filled with `POISON` (any later read of a pointer field crashes) or recorded as
-//! would-free for the census, which asserts at exit that none of them is reachable.
+//! `TSRS_ARENA_POISON=1` never reuses memory: freed blocks and rewound ranges are filled with `POISON`
+//! so later uses of stale pointers can be detected.
 //!
 //! **Regions** (docs/LSP.md "Memory plan for a long-lived server"): a `Region` is an arena of its own that can be
 //! freed as a whole. `Region::enter` makes it the current thread's allocation target until the returned scope is
@@ -21,7 +20,7 @@
 //! vectors and maps inside links and tables), so freeing it (dropping the last `Region` handle) also releases the
 //! heap memory those values own. Freeing is safe only if nothing that outlives the region points into it; the
 //! language server ties regions to the objects Go's GC would free together (a parsed file version, a checker, a
-//! program), and the census build checks it (a freed region is recorded as would-free, never released).
+//! program).
 
 use std::alloc::Layout;
 use std::cell::{Cell, RefCell};
@@ -80,54 +79,6 @@ pub struct Arena {
     registered: bool,
     /// Regions only: chunks are carved from the thread's large slabs (`Region::new_scratch_in_large_slabs`).
     large_slabs: bool,
-    #[cfg(feature = "alloc-profile")]
-    pub(crate) free_stats: FreeStats,
-}
-
-/// Alloc-profile builds: what this arena's free lists hold, per size class (blocks on the list now and at the class's
-/// peak, blocks handed out again, recycling allocations that found the list empty and bumped instead), and the bytes
-/// on all lists now and at their peak.
-#[cfg(feature = "alloc-profile")]
-pub(crate) struct FreeStats {
-    pub(crate) blocks: [Cell<u64>; CLASSES],
-    pub(crate) peak_blocks: [Cell<u64>; CLASSES],
-    pub(crate) reissued: [Cell<u64>; CLASSES],
-    pub(crate) misses: [Cell<u64>; CLASSES],
-    pub(crate) bytes: Cell<u64>,
-    pub(crate) peak_bytes: Cell<u64>,
-}
-
-#[cfg(feature = "alloc-profile")]
-impl FreeStats {
-    const fn new() -> FreeStats {
-        FreeStats {
-            blocks: [const { Cell::new(0) }; CLASSES],
-            peak_blocks: [const { Cell::new(0) }; CLASSES],
-            reissued: [const { Cell::new(0) }; CLASSES],
-            misses: [const { Cell::new(0) }; CLASSES],
-            bytes: Cell::new(0),
-            peak_bytes: Cell::new(0),
-        }
-    }
-
-    fn pushed(&self, class: usize) {
-        let n = self.blocks[class].get() + 1;
-        self.blocks[class].set(n);
-        self.peak_blocks[class].set(self.peak_blocks[class].get().max(n));
-        let b = self.bytes.get() + class as u64 * 8;
-        self.bytes.set(b);
-        self.peak_bytes.set(self.peak_bytes.get().max(b));
-    }
-
-    fn popped(&self, class: usize, hit: bool) {
-        if hit {
-            self.blocks[class].set(self.blocks[class].get() - 1);
-            self.bytes.set(self.bytes.get() - class as u64 * 8);
-            self.reissued[class].set(self.reissued[class].get() + 1);
-        } else {
-            self.misses[class].set(self.misses[class].get() + 1);
-        }
-    }
 }
 
 pub(crate) struct Residency {
@@ -158,8 +109,6 @@ pub struct Checkpoint {
     start: *mut u8,
     epoch: u64,
     drops: usize,
-    #[cfg(feature = "alloc-profile")]
-    census_blocks: usize,
 }
 
 impl Arena {
@@ -182,8 +131,6 @@ impl Arena {
             slabs: RefCell::new(Vec::new()),
             registered,
             large_slabs,
-            #[cfg(feature = "alloc-profile")]
-            free_stats: FreeStats::new(),
         };
         a.new_chunk(first_chunk);
         a
@@ -205,12 +152,6 @@ impl Arena {
 
     #[inline]
     pub(crate) fn alloc_layout(&self, layout: Layout) -> NonNull<u8> {
-        // Profile builds: a zero-sized value (a closure without captures, e.g. a `TypeComparer`) would get the bump
-        // position, which is the start of the previous block, and the census would count that word as a reference.
-        #[cfg(feature = "alloc-profile")]
-        if layout.size() == 0 {
-            return NonNull::new(std::ptr::without_provenance_mut(layout.align())).unwrap();
-        }
         if self.up {
             return self.alloc_layout_up(layout);
         }
@@ -274,7 +215,7 @@ impl Arena {
 
     fn new_chunk(&self, size: usize) {
         if self.up {
-            let size = (size + CENSUS_GAP).next_multiple_of(CHUNK_ALIGN);
+            let size = size.next_multiple_of(CHUNK_ALIGN);
             let (base, slab) = slab_carve(size, self.large_slabs);
             self.slabs.borrow_mut().push(slab);
             self.new_chunk_at(base, size);
@@ -295,8 +236,7 @@ impl Arena {
         self.start.set(base);
         // SAFETY: one past the end of the allocation.
         self.end.set(unsafe { base.add(size) });
-        // (Profile builds: a region's first block does not start at the chunk start, which its arena keeps.)
-        self.ptr.set(if self.up { base.wrapping_add(CENSUS_GAP) } else { self.end.get() });
+        self.ptr.set(if self.up { base } else { self.end.get() });
         self.capacity.set(self.capacity.get() + size);
         if let (Some(region), true) = (&self.region, self.registered) {
             REGISTRY.write().unwrap().insert(reg_key(base.addr()), (reg_key(base.addr() + size), Weak::clone(region)));
@@ -386,17 +326,6 @@ impl Arena {
         self.capacity.get()
     }
 
-    /// The unused part of the current chunk (below the finger of a thread arena, above it in a region); the
-    /// allocation profile reports it per arena.
-    #[cfg(feature = "alloc-profile")]
-    pub(crate) fn current_chunk_unused(&self) -> usize {
-        if self.up {
-            self.end.get().addr() - self.ptr.get().addr()
-        } else {
-            self.ptr.get().addr() - self.start.get().addr()
-        }
-    }
-
     /// A thread arena's chunks for `TSRS_MEM_SPLIT` (`memsplit`): capacity, used bytes, the unused range of the
     /// current chunk and of each retired chunk (start, len), and whether the current chunk is a huge-page chunk.
     pub(crate) fn residency(&self) -> Residency {
@@ -427,8 +356,6 @@ impl Arena {
     #[inline]
     pub(crate) fn pop_free(&self, class: usize) -> Option<NonNull<u8>> {
         let head = self.free[class].get();
-        #[cfg(feature = "alloc-profile")]
-        self.free_stats.popped(class, !head.is_null());
         if head.is_null() {
             return None;
         }
@@ -458,8 +385,6 @@ impl Arena {
         // SAFETY: the block is dead and at least 8 bytes, so its first word holds the free-list link.
         unsafe { *next = self.free[class].get() };
         self.free[class].set(p);
-        #[cfg(feature = "alloc-profile")]
-        self.free_stats.pushed(class);
     }
 
     #[inline]
@@ -474,8 +399,6 @@ impl Arena {
             start: self.start.get(),
             epoch: self.epoch.get(),
             drops: self.drops.borrow().len(),
-            #[cfg(feature = "alloc-profile")]
-            census_blocks: crate::alloc_profile::census_block_count(),
         }
     }
 
@@ -500,33 +423,6 @@ impl Arena {
     }
 }
 
-/// Profile builds map arena chunks far above the heap (from `0x7c00_0000_0000` up). The census decodes every
-/// word as a possible pointer; with the arena next to the malloc heap (around `0x200_0000_0000`), any pair of
-/// 32-bit fields whose second half is 0x200 (a common flag value) "points" into it, which shows up as
-/// spurious would-free violations. Bytes 4-5 = 00 7c (NUL then `|`) are rare in numbers and text.
-#[cfg(all(feature = "alloc-profile", not(compressed_ptrs)))]
-fn census_chunk(size: usize) -> *mut u8 {
-    use std::sync::atomic::AtomicUsize;
-    unsafe extern "C" {
-        fn mmap(addr: *mut std::ffi::c_void, len: usize, prot: i32, flags: i32, fd: i32, offset: i64) -> *mut std::ffi::c_void;
-    }
-    const PROT_READ: i32 = 1;
-    const PROT_WRITE: i32 = 2;
-    const MAP_PRIVATE: i32 = 2;
-    #[cfg(target_os = "linux")]
-    const MAP_ANON: i32 = 0x20;
-    #[cfg(not(target_os = "linux"))]
-    const MAP_ANON: i32 = 0x1000;
-    static NEXT: AtomicUsize = AtomicUsize::new(0x7c00_0000_0000);
-    let hint = NEXT.fetch_add(size.next_multiple_of(1 << 20) + (1 << 20), Ordering::Relaxed);
-    // SAFETY: anonymous private mapping; the hint is only a hint.
-    let p = unsafe { mmap(std::ptr::without_provenance_mut(hint), size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0) };
-    if p.addr() == usize::MAX {
-        return std::ptr::null_mut();
-    }
-    p.cast()
-}
-
 /// A chunk for a thread's arena or a slab. Compressed pointers: from the process-wide reservation (`reserve`), where
 /// `huge` asks for transparent huge pages on Linux.
 fn os_chunk(layout: Layout, huge: bool) -> *mut u8 {
@@ -534,9 +430,7 @@ fn os_chunk(layout: Layout, huge: bool) -> *mut u8 {
     return crate::reserve::alloc_chunk(layout.size(), huge);
     #[cfg(not(compressed_ptrs))]
     let _ = huge;
-    #[cfg(all(feature = "alloc-profile", not(compressed_ptrs)))]
-    let base = census_chunk(layout.size());
-    #[cfg(not(any(feature = "alloc-profile", compressed_ptrs)))]
+    #[cfg(not(compressed_ptrs))]
     // SAFETY: non-zero size.
     let base = unsafe { std::alloc::alloc(layout) };
     #[cfg(not(compressed_ptrs))]
@@ -571,11 +465,6 @@ const SLAB_SIZE: usize = 1 << 20;
 /// in 1 MiB slabs scattered among the other threads' chunks made about 850 calls for vscode's 409 MB of leaves.
 /// Untouched pages of a slab cost address space only.
 const LARGE_SLAB_SIZE: usize = 16 << 20;
-
-/// Profile builds leave a gap after each carved chunk: a chunk's one-past-the-end pointer (in its arena and in the
-/// region registry) would otherwise be the address of the next region's first block, which the census would count
-/// as a reference to it.
-const CENSUS_GAP: usize = if cfg!(feature = "alloc-profile") { CHUNK_ALIGN } else { 0 };
 
 thread_local! {
     /// The thread's current slab and its bump position (upwards).
@@ -640,7 +529,7 @@ fn slab_carve(size: usize, large: bool) -> (*mut u8, *const Slab) {
         return own_slab(size);
     };
     // SAFETY: the current slab is kept alive by the thread's reference.
-    if cur.is_null() || bump + size + CENSUS_GAP > unsafe { (*cur).base.addr() + (*cur).size } {
+    if cur.is_null() || bump + size > unsafe { (*cur).base.addr() + (*cur).size } {
         if !cur.is_null() {
             slab_release(cur);
         }
@@ -651,7 +540,7 @@ fn slab_carve(size: usize, large: bool) -> (*mut u8, *const Slab) {
     // SAFETY: as above.
     let slab = unsafe { &*cur };
     slab.live.fetch_add(1, Ordering::Relaxed);
-    current.with(|s| s.set((cur, bump + size + CENSUS_GAP)));
+    current.with(|s| s.set((cur, bump + size)));
     (slab.base.with_addr(bump), cur)
 }
 
@@ -668,8 +557,8 @@ fn slab_trim(slab: *const Slab, end: usize, new_end: usize) -> bool {
         current
             .try_with(|s| {
                 let (cur, bump) = s.get();
-                if cur == slab && bump == end + CENSUS_GAP {
-                    s.set((cur, new_end + CENSUS_GAP));
+                if cur == slab && bump == end {
+                    s.set((cur, new_end));
                     true
                 } else {
                     false
@@ -704,8 +593,7 @@ fn slab_release_ex(slab: *const Slab, retire: bool) {
         drop(unsafe { Box::from_raw(slab.cast_mut()) });
         return;
     }
-    // Profile builds map slabs with `mmap` (`census_chunk`) and keep them.
-    #[cfg(not(any(feature = "alloc-profile", compressed_ptrs)))]
+    #[cfg(not(compressed_ptrs))]
     // SAFETY: allocated by `new_slab` with this layout; every chunk carved from it was released.
     unsafe {
         std::alloc::dealloc(s.base, Layout::from_size_align(s.size, CHUNK_ALIGN).expect("arena slab layout"));
@@ -725,21 +613,6 @@ fn slab_release_ex(slab: *const Slab, retire: bool) {
     drop(unsafe { Box::from_raw(slab.cast_mut()) });
 }
 
-/// Census only: clears `N` bytes of the stack below the caller. The frames that just used the freed or rewound
-/// memory are dead but their words stay on the stack, and the padding of the next objects built there copies them
-/// into the arena, where the conservative census would count them as references.
-#[cfg(feature = "alloc-profile")]
-#[inline(never)]
-fn scrub_stack<const N: usize>() {
-    let mut buf = [0u8; N];
-    std::hint::black_box(&mut buf);
-}
-
-#[cfg(feature = "alloc-profile")]
-pub(crate) fn scrub_stack_for_census() {
-    scrub_stack::<{ 256 << 10 }>();
-}
-
 /// 0 unknown, 1 normal, 2 poison (`TSRS_ARENA_POISON=1`): freed and rewound memory is filled and never reused.
 static MODE: AtomicU8 = AtomicU8::new(0);
 
@@ -752,19 +625,6 @@ pub(crate) fn poison_mode() -> bool {
             on
         }
         m => m == 2,
-    }
-}
-
-/// Whether freed memory is recorded for the census instead of reused (alloc-profile build, `TSRS_CENSUS=1`).
-#[inline]
-fn census_mode() -> bool {
-    #[cfg(feature = "alloc-profile")]
-    {
-        crate::alloc_profile::census::recording()
-    }
-    #[cfg(not(feature = "alloc-profile"))]
-    {
-        false
     }
 }
 
@@ -800,14 +660,6 @@ pub(crate) unsafe fn free_block(arena: &Arena, addr: usize, size: usize, align: 
     // Write access through the chunk's (exposed) provenance, not through the references the program held.
     let p = std::ptr::with_exposed_provenance_mut::<u8>(addr);
     arena.bump_epoch();
-    if census_mode() {
-        #[cfg(feature = "alloc-profile")]
-        {
-            crate::alloc_profile::census_would_free(addr, size);
-            scrub_stack::<4096>();
-        }
-        return;
-    }
     if poison_mode() {
         // SAFETY: the block is `size` dead bytes (this function's contract), written through the chunk's provenance.
         unsafe { std::ptr::write_bytes(p, POISON, size) };
@@ -828,14 +680,6 @@ pub(crate) fn rewind(arena: &Arena, cp: Checkpoint) {
     }
     // Values discarded by the rewind are not dropped (as in a thread arena); forget their drop entries.
     arena.drops.borrow_mut().truncate(cp.drops);
-    if census_mode() {
-        #[cfg(feature = "alloc-profile")]
-        {
-            crate::alloc_profile::census_would_free_since(cp.census_blocks);
-            scrub_stack::<16384>();
-        }
-        return;
-    }
     if poison_mode() {
         // SAFETY: `now .. now + len` is the range allocated since the checkpoint, in the current chunk.
         unsafe { std::ptr::write_bytes(now, POISON, len) };
@@ -846,8 +690,6 @@ pub(crate) fn rewind(arena: &Arena, cp: Checkpoint) {
     unsafe {
         std::ptr::write_bytes(now, POISON, len);
     };
-    #[cfg(feature = "alloc-profile")]
-    assert!(!crate::alloc_profile::census::active(), "arena rewind while the census records");
     arena.ptr.set(cp.ptr);
 }
 
@@ -856,8 +698,7 @@ pub(crate) fn rewind(arena: &Arena, cp: Checkpoint) {
 // Regions and the allocation target
 // ---------------------------------------------------------------------------------------------------------------
 
-/// Registry keys and ends are addresses + 1 (order is kept): the map's vacated slots keep old values, which must not
-/// look like references to blocks in the census build.
+/// Registry keys and ends are encoded as addresses + 1 (order is kept).
 #[inline]
 fn reg_key(addr: usize) -> usize {
     addr + 1
@@ -1035,7 +876,7 @@ impl Region {
             .collect()
     }
 
-    /// Runs `f` when the region is freed (also in the census and poison modes, which keep the memory): for tables
+    /// Runs `f` when the region is freed (also in poison mode, which keeps the memory): for tables
     /// outside the region that must forget pointers into it.
     pub fn on_free(&self, f: Box<dyn FnOnce() + Send>) {
         self.0.on_free.lock().unwrap().push(f);
@@ -1451,15 +1292,6 @@ impl Drop for RegionInner {
             // SAFETY: `len` values of the entry's type were allocated at `ptr` in this region and never dropped (a
             // freed block of a type that needs drop is not reused, a rewound one has no entry).
             unsafe { (d.drop)(d.ptr, d.len) };
-        }
-        if census_mode() {
-            // The heap memory the values owned is released (above), the region's own memory is recorded as
-            // would-free and kept, never reused: the census checks at exit that nothing reachable points into it.
-            #[cfg(feature = "alloc-profile")]
-            for (start, len) in arena.used_ranges() {
-                crate::alloc_profile::census_would_free_range(start, len);
-            }
-            return;
         }
         if poison_mode() {
             // Kept mapped and filled, so any later use through a stale pointer crashes.

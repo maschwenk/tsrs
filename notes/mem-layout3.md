@@ -1,5 +1,8 @@
 # mem-layout3: what is left in pure layout
 
+> The allocation profiler and reachability census have been removed. Measurements using them describe the
+> recorded revision; use the [current memory debugging guide](../docs/DEBUGGING.md#arena-recycling-checks) for new work.
+
 Follow-up to mem-round2.md, mem-round3.md and mem-small.md. Representation only: no checker
 semantics, no change in creation counts. Question: how much of the private monorepo's peak is still pure layout
 (padding, 16-byte slices, fields that are almost never set), and what is cheap to take.
@@ -85,12 +88,12 @@ Main's front-end pass (278b139) landed both independently: symbol table buffers 
 Go sets `Antecedent` on every flow node except labels and `Antecedents` only on labels, so they share one word: the
 antecedent, or the antecedent list with bit 0 set (`set_antecedents()` asserts the node has no antecedent).
 
-## Census registration
+## Historical census validation
 
-The encodings are registered with `tsrs_core::census_layout` (docs/DEBUGGING.md "census free-gate") through two
-`CensusField` kinds: `Thin { off }` (a `ThinSlice` word: a reference only while the length bits are non-zero, or with
-bit 0 the long list's `&[T]` record) and `LowTag { off, mask }` (an address with low tag bits). Final head: 0
-references to freed blocks and 0 strong-mark violations in all four private-monorepo runs; positive control (escape
+The then-used census decoded thin slices and low-tagged pointers using registered layout descriptions.
+Those descriptions and the census have been removed. The results below record the validation at the time.
+
+Final head: 0 references to freed blocks and 0 strong-mark violations in all four private-monorepo runs; positive control (escape
 barrier removed from `MapperCell::set`) reported 835,737 violations. Conformance corpus (12,758 files through
 `tsrs --strict --target esnext`, final census binary, 10 in parallel): precise walk 0 and strong mark 0 in every
 file. 9 files did not report 0 on the first run under the parallel load (a missing or non-zero line) and reported 0

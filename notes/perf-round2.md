@@ -83,13 +83,14 @@ neither reused nor poisoned in the compressed build. Safe (nothing live is freed
 recycled slices have the same property since #38. Padding slices to 8 would reclaim them at 4 bytes per odd list;
 not done here.
 
-## The poison check under compression
+## Historical poison check under compression
 
-`check_not_freed` (alloc-profile builds with `TSRS_ARENA_POISON=1`: a `P` dereference panics if the target starts with
-eight poison bytes) is in both the plain and the compressed `P::get` / `Deref` (crates/tsrs_core/src/ptr.rs). In the
-plain build its guard is `size_of_val >= 8 && align_of_val >= 8`; a compressed handle always names an 8-aligned block
-(`p_layout` aligns and pads every `P` target to 8), so there the guard is `size >= 8` only, which also covers the
-4-aligned types that most checker structs became once their fields are handles. A positive control (allocate,
+The removed profiling build checked each `P` dereference for eight initial poison bytes, in both the plain and
+compressed `P::get` / `Deref`. `TSRS_ARENA_POISON=1` still fills freed memory, but this per-dereference assertion
+was removed with the profiler. In the plain build its guard was `size_of_val >= 8 && align_of_val >= 8`;
+a compressed handle always names an 8-aligned block (`p_layout` aligns and pads every `P` target to 8), so there
+the guard was `size >= 8` only. This also covered the 4-aligned types that most checker structs became once
+their fields were handles. A positive control (allocate,
 `free!`, dereference) panicked in both builds, and the 38k-file codebase and the conformance corpus ran clean under
 poison in the compressed build.
 

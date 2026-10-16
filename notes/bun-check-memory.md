@@ -71,7 +71,7 @@ My sum of verified items needing weeks or less (leaf, tables, flow, lib, literal
 
 1. **Measure (days).** First action: count-only pass of Bun's leaf test (program.rs:4551-4555, 5314-5323) over arena bytes on vscode and the four large app projects. Also get Bun's "peak of loading" (--timing harness) and the resident share of the 269 MB arena chunk tail.
 2. **Small verified batch (~19-27 MB, layout-only).** First action: route bundled libs through read_embedded_file (embed.rs:51-54) and parse_source_file_static (host.rs:76-79). Then flow compaction, flat symbol tables.
-3. **Leaf freeing for noEmit runs, only if step 1 shows a large share.** First action: per-file Regions in the CLI behind a retains-everything switch; guard printer.rs:571-630 and 827-850. Needs a decision to relax the census gate to "no dereference". Diagnostics unchanged if the audit is complete; not a Bun-determinism change.
+3. **Leaf freeing for noEmit runs, only if step 1 shows a large share.** First action: per-file Regions in the CLI behind a retains-everything switch; guard printer.rs:571-630 and 827-850. Needs an ownership audit and poison checks for stale dereferences; the former reachability census has been removed. Diagnostics unchanged if the audit is complete; not a Bun-determinism change.
 4. **Verify checker-side items first.** First action: run the missing verdicts for dense link tables and shared shapes (shapes change which symbols exist).
 5. **AST redesign (atoms, header-less, lists):** months-long; not before 1-4.
 

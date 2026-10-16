@@ -1211,7 +1211,6 @@ impl Checker {
     // checker.go:31448
     pub(crate) fn pop_inference_context(&mut self) {
         self.inference_context_infos.pop();
-        tsrs_core::census_scrub_slack(&mut self.inference_context_infos);
     }
 
     // checker.go:31454
@@ -2571,10 +2570,6 @@ impl Checker {
             let links = self.symbol_container_links.get(symbol);
             let mut cache = links.accessible_chain_cache.borrow_mut();
             cache.remove(&key);
-            if tsrs_core::census_recording() {
-                // Census builds: a removed entry's words stay in the table's memory, which the census scans.
-                *cache = std::mem::take(&mut *cache).into_iter().collect();
-            }
         }
     }
 

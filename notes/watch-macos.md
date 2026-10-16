@@ -91,7 +91,7 @@ edit/revert pairs, RSS +45 MB (0.2 MB per edit, the id space). Hub-export round 
 heap (VM tag 100, which footprint names "IOAccelerator") at 822 -> 1,926 MB over 6 round trips, then ~30 MB more per
 round trip.
 
-With the per-cycle heap report (docs/DEBUGGING.md), 8-10 cycles of hub round trips on vscode:
+With the now-removed per-cycle heap report, 8-10 cycles of hub round trips on vscode:
 
 - The live Rust heap is flat: 542 MB after the first build, 617 after the first cycle, then +4 MB per cycle, and
   the sampled survivors of each cycle are 2-3 MB. Leaving out the profiler's own bookkeeping (its per-site tables and

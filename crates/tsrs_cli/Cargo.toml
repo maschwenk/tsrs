@@ -11,11 +11,9 @@ workspace = true
 
 [dependencies]
 tsrs_core.workspace = true
-tsrs_ast.workspace = true
 tsrs_vfs.workspace = true
 tsrs_tsoptions.workspace = true
 tsrs_compiler.workspace = true
-rustc-hash.workspace = true
 tsrs_lsp.workspace = true
 tsrs_api.workspace = true
 tsrs_api_transport.workspace = true
@@ -29,8 +27,6 @@ libc = "0.2"
 # The system allocator instead of mimalloc, for sanitizer builds (AddressSanitizer and ThreadSanitizer track only its
 # blocks; mimalloc's memory looks like one long-lived region to them).
 system-alloc = []
-# Allocation profile (tsrs_core/alloc-profile); replaces the mimalloc global allocator with the counting one.
-alloc-profile = ["tsrs_execute/alloc-profile"]
 
 [[bin]]
 name = "tsrs"

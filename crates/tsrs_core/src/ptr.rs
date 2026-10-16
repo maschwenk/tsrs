@@ -47,17 +47,8 @@ fn new_thread_arena() -> &'static Arena {
     let arena: &'static Arena = Box::leak(Box::new(Arena::new()));
     #[cfg(any(debug_assertions, feature = "checked-cells"))]
     shared_check::register(arena);
-    #[cfg(feature = "alloc-profile")]
-    crate::alloc_profile::register_arena(arena);
     crate::memsplit::register_arena(arena);
     arena
-}
-
-macro_rules! profile {
-    ($ty:ty, $bytes:expr_2021, $addr:expr_2021) => {
-        #[cfg(feature = "alloc-profile")]
-        crate::alloc_profile::record(std::panic::Location::caller(), std::any::type_name::<$ty>(), $bytes, $addr);
-    };
 }
 
 /// The current thread's own arena (never freed): on first use, an arena that a thread done allocating gave back
@@ -106,8 +97,6 @@ fn init_current() -> &'static Arena {
 /// `arena`), like the thread arena outlives everything.
 #[inline]
 fn with_arena<R>(f: impl FnOnce(&'static Arena) -> R) -> R {
-    #[cfg(feature = "alloc-profile")]
-    let _chunk = crate::alloc_profile::ArenaScope::enter();
     let p = arena::CURRENT.with(std::cell::Cell::get);
     let a = if p.is_null() {
         init_current()
@@ -126,8 +115,6 @@ fn with_scratch_arena<R>(f: impl FnOnce(&'static Arena) -> R) -> R {
     if s.is_null() {
         return with_arena(f);
     }
-    #[cfg(feature = "alloc-profile")]
-    let _chunk = crate::alloc_profile::ArenaScope::enter();
     // SAFETY: the scratch region is kept alive (and locked by this thread) by its entered `ScratchScope`.
     f(unsafe { &*s })
 }
@@ -183,36 +170,29 @@ pub struct P<T: ?Sized + 'static>(std::num::NonZeroU32, std::marker::PhantomData
 impl<T> P<T> {
     /// Allocates `value` in the current thread's leak arena. Destructors never run.
     #[inline]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new(value: T) -> P<T> {
-        let p = with_arena(|a| {
+        with_arena(|a| {
             let r = a.alloc_with(p_layout::<T>(), value);
             a.track_drop(std::ptr::from_mut::<T>(r), 1);
             // SAFETY: a fresh block of the current arena, laid out by `p_layout`.
             unsafe { P::from_arena(r) }
-        });
-        profile!(T, p_layout::<T>().size(), p.addr());
-        p
+        })
     }
 
     /// `P::new` in the thread's scratch region if one is entered (`arena::Region::enter_scratch`), even while escaped
     /// from it: for values known to die with the scratch region (a node builder call's state, emit's nodes).
     #[inline]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new_scratch(value: T) -> P<T> {
-        let p = with_scratch_arena(|a| {
+        with_scratch_arena(|a| {
             let r = a.alloc_with(p_layout::<T>(), value);
             a.track_drop(std::ptr::from_mut::<T>(r), 1);
             // SAFETY: a fresh block of the arena, laid out by `p_layout`.
             unsafe { P::from_arena(r) }
-        });
-        profile!(T, p_layout::<T>().size(), p.addr());
-        p
+        })
     }
 
     /// `P::new` or `P::new_scratch`.
     #[inline]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new_in(scratch: bool, value: T) -> P<T> {
         if scratch {
             P::new_scratch(value)
@@ -223,7 +203,6 @@ impl<T> P<T> {
 
     /// `P::new` that first takes a block of the right size from the current thread's free list (see `free`).
     #[inline]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new_recycled(value: T) -> P<T> {
         let class = const { arena::free_class(p_layout::<T>().size(), p_layout::<T>().align()) };
         if class != 0 {
@@ -232,7 +211,6 @@ impl<T> P<T> {
                 // SAFETY: a dead block of exactly `p_layout::<T>().size()` bytes, 8-aligned (`free_class`).
                 unsafe { p.as_ptr().write(value) };
                 a.track_drop(p.as_ptr(), 1);
-                profile!(T, p_layout::<T>().size(), p.addr().get());
                 // SAFETY: as above; the block is now owned by the new value.
                 return unsafe { P::from_arena(&*p.as_ptr()) };
             }
@@ -416,10 +394,7 @@ impl<T: ?Sized> P<T> {
     #[inline]
     pub fn get(self) -> &'static T {
         // SAFETY: a `P` points to a live arena value (or a static), never moved and valid for the rest of the process.
-        let r = unsafe { &*self.0.as_ptr() };
-        #[cfg(feature = "alloc-profile")]
-        check_not_freed(r);
-        r
+        unsafe { &*self.0.as_ptr() }
     }
 
     #[inline]
@@ -446,10 +421,7 @@ impl<T: ?Sized> P<T> {
         T: Sized,
     {
         // SAFETY: a handle is the offset of a live arena object from the base of the reservation it lives in.
-        let r = unsafe { &*crate::reserve::base().add((self.0.get() as usize) << crate::reserve::UNIT_SHIFT).cast::<T>() };
-        #[cfg(feature = "alloc-profile")]
-        check_not_freed(r);
-        r
+        unsafe { &*crate::reserve::base().add((self.0.get() as usize) << crate::reserve::UNIT_SHIFT).cast::<T>() }
     }
 
     /// The object's address.
@@ -566,26 +538,6 @@ impl<T> Deref for P<T> {
     #[inline]
     fn deref(&self) -> &T {
         self.get()
-    }
-}
-
-/// Profile builds with `TSRS_ARENA_POISON=1`: freed and rewound arena memory is filled with `POISON` and never reused,
-/// so a `P` whose target starts with eight poison bytes points into memory the arena gave back. Checked on every
-/// dereference, which turns a use after a wrong free into a panic at the use instead of a changed result.
-#[cfg(feature = "alloc-profile")]
-#[inline]
-fn check_not_freed<T: ?Sized>(r: &T) {
-    // A compressed handle always names an 8-aligned block (`p_layout`); a reference only when `T` is 8-aligned.
-    let aligned = cfg!(compressed_ptrs) || std::mem::align_of_val(r) >= 8;
-    if std::mem::size_of_val(r) >= 8 && aligned && crate::arena::poison_mode() {
-        // SAFETY: `r` is at least 8 bytes and 8-aligned.
-        let w = unsafe { std::ptr::read_volatile(std::ptr::from_ref::<T>(r).cast::<u64>()) };
-        assert!(
-            w != u64::from_ne_bytes([crate::arena::POISON; 8]),
-            "arena: dereference of a freed block at {:p} as {}",
-            std::ptr::from_ref::<T>(r).cast::<()>(),
-            std::any::type_name::<T>()
-        );
     }
 }
 
@@ -856,7 +808,6 @@ const PACKED_STR_LONG: usize = u16::MAX as usize;
 #[cfg(target_pointer_width = "64")]
 impl PackedStr {
     #[inline]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new(s: &'static str) -> PackedStr {
         let p = std::ptr::NonNull::from(s).cast::<u8>();
         if s.len() < PACKED_STR_LONG && p.addr().get() >> PACKED_STR_LEN_SHIFT == 0 {
@@ -866,12 +817,10 @@ impl PackedStr {
     }
 
     #[cold]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     fn new_long(s: &str) -> PackedStr {
         let len = u32::try_from(s.len()).expect("string longer than u32::MAX");
         let layout = std::alloc::Layout::from_size_align(4 + s.len(), 4).unwrap();
         let p = with_arena(|a| a.alloc_layout(layout));
-        profile!(PackedStr, layout.size(), p.addr().get());
         // SAFETY: `p` points to `4 + len` fresh bytes, 4-byte aligned.
         unsafe {
             p.cast::<u32>().as_ptr().write(len);
@@ -1001,7 +950,6 @@ impl<T> ThinSlice<T> {
     const ALIGNED: () = assert!(std::mem::align_of::<T>() >= 2, "ThinSlice needs bit 0 of the data pointer");
 
     #[inline]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new(s: &'static [T]) -> Self {
         let () = Self::ALIGNED;
         let p = std::ptr::NonNull::from(s).cast::<()>();
@@ -1012,7 +960,6 @@ impl<T> ThinSlice<T> {
     }
 
     #[cold]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     fn new_long(s: &'static [T]) -> Self {
         let r = P::new(s);
         let p = std::ptr::NonNull::from(r.get()).cast::<()>();
@@ -1076,7 +1023,6 @@ pub struct ThinSliceCell<T: 'static>(std::cell::Cell<ThinSlice<T>>);
 
 impl<T> ThinSliceCell<T> {
     #[inline]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new(s: &'static [T]) -> Self {
         ThinSliceCell(std::cell::Cell::new(ThinSlice::new(s)))
     }
@@ -1085,7 +1031,6 @@ impl<T> ThinSliceCell<T> {
         self.0.get().get()
     }
     #[inline]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn set(&self, s: &'static [T]) {
         self.0.set(ThinSlice::new(s));
     }
@@ -1102,7 +1047,6 @@ pub struct OptionThinSliceCell<T: 'static>(std::cell::Cell<Option<ThinSlice<T>>>
 
 impl<T> OptionThinSliceCell<T> {
     #[inline]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new(s: Option<&'static [T]>) -> Self {
         OptionThinSliceCell(std::cell::Cell::new(s.map(ThinSlice::new)))
     }
@@ -1111,7 +1055,6 @@ impl<T> OptionThinSliceCell<T> {
         self.0.get().map(ThinSlice::get)
     }
     #[inline]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn set(&self, s: Option<&'static [T]>) {
         self.0.set(s.map(ThinSlice::new));
     }
@@ -1257,53 +1200,43 @@ impl Default for StrCell {
 
 /// Copies a slice into the arena. Use for Go slices that are stored in long-lived objects.
 #[inline]
-#[cfg_attr(feature = "alloc-profile", track_caller)]
 pub fn alloc_slice<T: Copy>(items: &[T]) -> &'static [T] {
     if items.is_empty() {
         return &[];
     }
     let s: &'static [T] = with_arena(|a| &*a.alloc_slice_copy(items));
-    profile!([T], std::mem::size_of_val(items), s.as_ptr() as usize);
     s
 }
 
 /// `alloc_slice` in the thread's scratch region if one is entered (see `P::new_scratch`), else like `alloc_slice`.
 #[inline]
-#[cfg_attr(feature = "alloc-profile", track_caller)]
 pub fn alloc_slice_scratch<T: Copy>(items: &[T]) -> &'static [T] {
     if items.is_empty() {
         return &[];
     }
     let s: &'static [T] = with_scratch_arena(|a| &*a.alloc_slice_copy(items));
-    profile!([T], std::mem::size_of_val(items), s.as_ptr() as usize);
     s
 }
 
 /// `alloc_vec` in the thread's scratch region if one is entered (see `P::new_scratch`), else like `alloc_vec`.
 #[inline]
-#[cfg_attr(feature = "alloc-profile", track_caller)]
 pub fn alloc_vec_scratch<T>(items: Vec<T>) -> &'static [T] {
     if items.is_empty() {
         return &[];
     }
-    #[cfg(feature = "alloc-profile")] // read only by profile!, before `items` is moved into the arena
-    let bytes = std::mem::size_of_val(&items[..]);
     let s: &'static [T] = with_scratch_arena(|a| {
         let s = a.alloc_vec(items);
         a.track_drop(s.as_mut_ptr(), s.len());
         &*s
     });
-    profile!([T], bytes, s.as_ptr() as usize);
     s
 }
 
 /// `alloc_slice` of bytes, 4-aligned (for a length prefix read as `u32`).
 #[inline]
-#[cfg_attr(feature = "alloc-profile", track_caller)]
 pub fn alloc_slice_aligned4(items: &[u8]) -> &'static [u8] {
     let layout = std::alloc::Layout::from_size_align(items.len().max(1), 4).expect("arena slice layout");
     let p = with_arena(|a| a.alloc_layout(layout));
-    profile!([u8], layout.size(), p.addr().get());
     // SAFETY: fresh memory for `items.len()` bytes.
     unsafe {
         std::ptr::copy_nonoverlapping(items.as_ptr(), p.as_ptr(), items.len());
@@ -1313,25 +1246,20 @@ pub fn alloc_slice_aligned4(items: &[u8]) -> &'static [u8] {
 
 /// Moves a `Vec` of arbitrary (possibly non-`Copy`) items into the arena.
 #[inline]
-#[cfg_attr(feature = "alloc-profile", track_caller)]
 pub fn alloc_vec<T>(items: Vec<T>) -> &'static [T] {
     if items.is_empty() {
         return &[];
     }
-    #[cfg(feature = "alloc-profile")] // read only by profile!, before `items` is moved into the arena
-    let bytes = std::mem::size_of_val(&items[..]);
     let s: &'static [T] = with_arena(|a| {
         let s = a.alloc_vec(items);
         a.track_drop(s.as_mut_ptr(), s.len());
         &*s
     });
-    profile!([T], bytes, s.as_ptr() as usize);
     s
 }
 
 /// `alloc_slice` that first takes a block of the right size from the current thread's free list (see `free`).
 #[inline]
-#[cfg_attr(feature = "alloc-profile", track_caller)]
 pub fn alloc_slice_recycled<T: Copy>(items: &[T]) -> &'static [T] {
     if items.is_empty() {
         return &[];
@@ -1345,7 +1273,6 @@ pub fn alloc_slice_recycled<T: Copy>(items: &[T]) -> &'static [T] {
                 std::ptr::copy_nonoverlapping(items.as_ptr(), p.as_ptr(), items.len());
                 std::slice::from_raw_parts(p.as_ptr(), items.len())
             };
-            profile!([T], std::mem::size_of_val(items), s.as_ptr() as usize);
             return s;
         }
     }
@@ -1359,8 +1286,7 @@ pub fn alloc_slice_recycled<T: Copy>(items: &[T]) -> &'static [T] {
 /// be a live, protected reference to the memory while it is overwritten. Destructors do not run. The caller
 /// has proved that nothing reachable or live points to the block: the next `new_recycled` /
 /// `alloc_slice_recycled` of that size reuses it. With `TSRS_ARENA_POISON=1` the block is filled with
-/// `arena::POISON` instead, and in the census build (`TSRS_CENSUS=1`) it is recorded, never reused, and the
-/// census checks at exit that it is unreachable.
+/// `arena::POISON` instead and never reused.
 ///
 /// A function that frees a block must not have received it as a reference parameter (`&T`, `&[T]`): a
 /// reference parameter is a protected borrow for the whole call (LLVM `noalias readonly`), so writing the
@@ -1429,163 +1355,6 @@ macro_rules! free_slice {
     }};
 }
 
-/// One field of an arena type that the census's strong mark (alloc-profile builds, `TSRS_CENSUS=1`, the
-/// would-free check) would misread as a plain 48-bit pointer, or miss.
-///
-/// Offsets are from the start of the arena block. The crate that owns the type registers them with
-/// `census_layout`, computed with `offset_of!`, so they follow layout changes.
-#[derive(Clone, Copy, Debug)]
-pub enum CensusField {
-    /// `len` bytes at `off` never hold a pointer: scalar fields, padding, header words, enum payload that some variants
-    /// leave uninitialized (copied from the stack with stale words). No scan step that overlaps them is a reference.
-    NoPointer { off: usize, len: usize },
-    /// The word at `off` keeps an address in its low 48 bits and flag bits above them.
-    Tagged { off: usize },
-    /// The word at `off` keeps an address / 8 in its low 45 bits when bit `word >> 62` is set in `modes`, else none.
-    X8 { off: usize, modes: u8 },
-    /// A slice's pointer word at `ptr`: a reference only while the length word at `len` is non-zero (an empty slice's
-    /// pointer is dangling and may equal the address of the next block).
-    Slice { ptr: usize, len: usize },
-    /// A `ThinSlice` word (also `ThinSliceCell` / `OptionThinSliceCell`): the list's address with its length in the
-    /// top 16 bits (no reference while the length is 0: an empty slice's pointer may be dangling), or with bit 0 set
-    /// the address of the out-of-line `&[T]` record of a long list.
-    Thin { off: usize },
-    /// The word at `off` keeps an address with tag bits `mask` (low bits of an aligned address) set.
-    LowTag { off: usize, mask: u8 },
-}
-
-impl CensusField {
-    /// `NoPointer` for the scalar field at `off` and the padding after it, up to the next field (`offsets`: every field
-    /// offset of the struct) or the struct's end (`size`); `base` is the struct's offset in the arena block.
-    pub fn scalar(base: usize, off: usize, offsets: &[usize], size: usize) -> CensusField {
-        let end = offsets.iter().copied().filter(|&o| o > off).min().unwrap_or(size);
-        CensusField::NoPointer { off: base + off, len: end - off }
-    }
-
-    /// `NoPointer` for every byte of `[0, size)` outside the 8-byte words at `words` (a header whose other words hold
-    /// flags and ids); `base` as in `scalar`.
-    pub fn all_but(base: usize, size: usize, words: &[usize]) -> Vec<CensusField> {
-        let mut words = words.to_vec();
-        words.sort_unstable();
-        let mut out = Vec::new();
-        let mut at = 0;
-        for w in words.into_iter().chain([size]) {
-            if w > at {
-                out.push(CensusField::NoPointer { off: base + at, len: w - at });
-            }
-            at = w + 8;
-        }
-        out
-    }
-
-    /// The (pointer, length) word offsets of `Option<&'static [T]>` (a slice reference with the `None` niche).
-    pub fn slice_words() -> (usize, usize) {
-        static ONE: [u64; 1] = [0];
-        let s: Option<&'static [u64]> = Some(&ONE[..]);
-        // SAFETY: `Option<&[u64]>` is two words: the pointer (non-null, the niche) and the length.
-        let w: [usize; 2] = unsafe { std::mem::transmute(s) };
-        if w[0] == ONE.as_ptr() as usize {
-            (0, 8)
-        } else {
-            (8, 0)
-        }
-    }
-}
-
-/// Whether the census records (alloc-profile build with `TSRS_CENSUS=1`); a constant `false` in other builds, so
-/// census-only work behind it compiles to nothing.
-#[inline]
-pub fn census_recording() -> bool {
-    #[cfg(feature = "alloc-profile")]
-    return crate::alloc_profile::census::recording();
-    #[cfg(not(feature = "alloc-profile"))]
-    false
-}
-
-/// Identifies fields that the census should interpret as stored references.
-///
-/// Census builds: registers the fields of the arena type named `type_name` (`std::any::type_name` of the
-/// allocated value, or a prefix ending in `<` for every instance of a generic, such as `TypeAlloc<`) that the
-/// strong mark must read specially.
-///
-/// Call before the census runs. Compiled to nothing otherwise.
-#[inline]
-pub fn census_layout(type_name: &'static str, fields: &[CensusField]) {
-    #[cfg(feature = "alloc-profile")]
-    crate::alloc_profile::census::register_layout(type_name, fields);
-    #[cfg(not(feature = "alloc-profile"))]
-    let _ = (type_name, fields);
-}
-
-/// Census builds (`TSRS_CENSUS=1`): zeroes the unused capacity of a pooled vector after elements were
-/// removed, so stale pointers there do not count as references in the would-free check.
-///
-/// Compiled to nothing otherwise.
-#[inline]
-#[cfg_attr(not(feature = "alloc-profile"), expect(clippy::needless_pass_by_ref_mut, reason = "The allocation census mutates this storage when alloc-profile is enabled."))]
-pub fn census_scrub_slack<T>(v: &mut Vec<T>) {
-    #[cfg(feature = "alloc-profile")]
-    if crate::alloc_profile::census::recording() {
-        for slot in v.spare_capacity_mut() {
-            *slot = std::mem::MaybeUninit::zeroed();
-        }
-    }
-    #[cfg(not(feature = "alloc-profile"))]
-    let _ = v;
-}
-
-/// Census builds (`TSRS_CENSUS=1`): replaces a cleared pooled table with a new one.
-///
-/// Clearing a hash table resets only its control bytes, so the removed entries stay in its buckets, and an
-/// entry type with uninitialized bytes (an enum whose variants differ in size) keeps stale words there that
-/// the census reads as references. Compiled to nothing otherwise.
-#[inline]
-#[cfg_attr(not(feature = "alloc-profile"), expect(clippy::needless_pass_by_ref_mut, reason = "The allocation census mutates this storage when alloc-profile is enabled."))]
-pub fn census_reset<T: Default>(t: &mut T) {
-    #[cfg(feature = "alloc-profile")]
-    if crate::alloc_profile::census::recording() {
-        *t = T::default();
-    }
-    #[cfg(not(feature = "alloc-profile"))]
-    let _ = t;
-}
-
-/// Census builds (`TSRS_CENSUS=1`): a `None` option keeps uninitialized payload bytes (copied from the stack
-/// slot or heap block the value was built in), which the conservative census reads as references.
-///
-/// Zeroes them, for options kept for the rest of a session (process-wide caches, long-lived tables). Compiled
-/// to nothing otherwise.
-#[inline]
-#[cfg_attr(not(feature = "alloc-profile"), expect(clippy::needless_pass_by_ref_mut, reason = "The allocation census mutates this storage when alloc-profile is enabled."))]
-pub fn census_scrub_none<T>(opt: &mut Option<T>) {
-    #[cfg(feature = "alloc-profile")]
-    if crate::alloc_profile::census::recording() && opt.is_none() {
-        let p: *mut Option<T> = opt;
-        // SAFETY: `*p` is `None` and owns nothing; it is overwritten with zeros and then with `None` again before
-        // anything reads it, so it holds a valid `None` afterwards whatever the type's niche encoding is.
-        unsafe {
-            std::ptr::write_bytes(p.cast::<u8>(), 0, std::mem::size_of::<Option<T>>());
-            p.write(None);
-        }
-    }
-    #[cfg(not(feature = "alloc-profile"))]
-    let _ = opt;
-}
-
-/// Clears stale stack words before the census inspects new allocations.
-///
-/// Census builds (`TSRS_CENSUS=1`): clears the stack area the caller's next callees will use, so values built
-/// there (a struct with an unset `OnceLock`, padding) do not carry stale words that look like references.
-///
-/// Compiled to nothing otherwise.
-#[inline]
-pub fn census_scrub_stack() {
-    #[cfg(feature = "alloc-profile")]
-    if crate::alloc_profile::census::recording() {
-        crate::arena::scrub_stack_for_census();
-    }
-}
-
 /// The current thread's arena position, for discarding a speculative parse (`arena_rewind`).
 #[inline]
 pub fn arena_checkpoint() -> Checkpoint {
@@ -1639,7 +1408,6 @@ impl ArenaStringBuilder {
 
     /// Creates an empty builder with at least `capacity` bytes allocated in the current arena.
     #[inline]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn with_capacity(capacity: usize) -> ArenaStringBuilder {
         if capacity == 0 {
             return ArenaStringBuilder::new();
@@ -1729,55 +1497,40 @@ impl fmt::Write for ArenaStringBuilder {
 }
 
 #[inline]
-#[cfg_attr(feature = "alloc-profile", track_caller)]
 fn arena_string_capacity(capacity: usize) -> std::ptr::NonNull<u8> {
     let layout = std::alloc::Layout::from_size_align(capacity, 1).expect("arena string capacity overflow");
-    let ptr = with_arena(|a| a.alloc_layout(layout));
-    profile!(str, capacity, ptr.addr().get());
-    ptr
+    with_arena(|a| a.alloc_layout(layout))
 }
 
 /// Copies a string into the arena.
 #[inline]
-#[cfg_attr(feature = "alloc-profile", track_caller)]
 pub fn alloc_str(s: &str) -> &'static str {
     if s.is_empty() {
         return "";
     }
     let r: &'static str = with_arena(|a| &*a.alloc_str(s));
-    profile!(str, s.len(), r.as_ptr() as usize);
     r
 }
 
 /// `alloc_str` in the thread's scratch region if one is entered (see `P::new_scratch`), else like `alloc_str`.
 #[inline]
-#[cfg_attr(feature = "alloc-profile", track_caller)]
 pub fn alloc_str_scratch(s: &str) -> &'static str {
     if s.is_empty() {
         return "";
     }
     let r: &'static str = with_scratch_arena(|a| &*a.alloc_str(s));
-    profile!(str, s.len(), r.as_ptr() as usize);
     r
 }
 
 /// Allocates a plain `&'static T` (for values that do not need pointer identity semantics).
 #[inline]
-#[cfg_attr(feature = "alloc-profile", track_caller)]
 pub fn alloc<T>(value: T) -> &'static T {
     let r: &'static T = with_arena(|a| {
         let r = a.alloc_with(p_layout::<T>(), value);
         a.track_drop(std::ptr::from_mut::<T>(r), 1);
         &*r
     });
-    profile!(T, p_layout::<T>().size(), std::ptr::from_ref::<T>(r) as usize);
     r
-}
-
-/// Prints the allocation profile (no-op unless built with `--features tsrs_core/alloc-profile`).
-pub fn alloc_profile_dump() {
-    #[cfg(feature = "alloc-profile")]
-    crate::alloc_profile::dump();
 }
 
 /// Bytes allocated so far by the current thread's arena.

@@ -39,7 +39,7 @@ went 17.5-19 s -> 16.8-18 s at load 10-15, 4 checkers 7.9-8.5 s -> 7.6 s, both w
 4. Active type-mapper caches: Go's `popActiveMapper` clears the map and keeps it for the next push; the port
    dropped it and started from an empty map each push. Popped maps now go to a pool (cleared, or dropped when one
    instantiation grew them past 4x). 308.1 -> 304.9 G.
-5. `TSRS_HEAP_PROFILE=count` (alloc-profile feature): samples every 1024th heap allocation by stack. The private monorepo
+5. The historical allocation-count sampler (now removed) sampled every 1024th heap allocation by stack. The private monorepo
    single: 218M heap allocations at the start of the pass, 204M after change 6.
 6. `getStringLiteralValue` returned a `String` copy (Go returns the string); ~10M allocations, mostly from
    template-literal matching against string literal sources. 304.9 -> 301.9 G.

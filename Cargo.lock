@@ -626,10 +626,8 @@ version = "0.15.0"
 dependencies = [
  "libc",
  "libmimalloc-sys2",
- "rustc-hash",
  "tsrs_api",
  "tsrs_api_transport",
- "tsrs_ast",
  "tsrs_compiler",
  "tsrs_core",
  "tsrs_execute",
@@ -700,7 +698,6 @@ dependencies = [
  "indexmap",
  "libc",
  "memchr",
- "mimalloc-safe",
  "num-bigint",
  "num-traits",
  "rustc-hash",

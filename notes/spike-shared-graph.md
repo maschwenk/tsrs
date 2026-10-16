@@ -242,7 +242,7 @@ not a measurement. Linux has 4 KiB pages and THP, and the slack and residency be
   - `EvolvingArrayType.final_array_type`, reached only with a 20 permille seed (back to `OvCell`).
   No fault in the final runs: the eight projects at 4/16/32 checkers with 10 and 20 permille seeds, at 8 checkers
   with 50 and 100 permille, and t3code, formbricks and cal-diy at 16/32 with 2.5-100 permille.
-- `TSRS_ARENA_POISON=1` (alloc-profile build): t3code-server and formbricks-web at 16 checkers with the switch on: diagnostics identical to main and
+- `TSRS_ARENA_POISON=1` (former profiling build): t3code-server and formbricks-web at 16 checkers with the switch on: diagnostics identical to main and
   to a `TSRS_FREE_LEAVES=0` run, no poisoned read (a fork never reaches a freed leaf through the seed: the seed never
   checks a leaf file).
 

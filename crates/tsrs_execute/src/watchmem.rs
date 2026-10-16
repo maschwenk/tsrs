@@ -113,7 +113,6 @@ impl Freer {
     ///   as this one: what they allocated during the cycle is freed here, from another thread, and such a
     ///   block stays allocated in its page (unpurgeable) until the owning thread collects
     ///   (notes/watch-macos.md, "memory").
-    /// - the profiling build's per-cycle heap report (`tsrs_core::memsplit::cycle_done`; nothing otherwise).
     pub(crate) fn after_cycle(&self) {
         self.run(|| {
             #[cfg(target_os = "macos")]
@@ -121,7 +120,6 @@ impl Freer {
                 tsrs_compiler::worker_pool().broadcast(|_| tsrs_core::memsplit::heap_collect(true));
                 tsrs_core::memsplit::heap_collect(true);
             }
-            tsrs_core::memsplit::cycle_done();
         });
     }
 

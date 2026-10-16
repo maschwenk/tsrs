@@ -4,6 +4,10 @@ These notes record measurements, design decisions, regressions and approaches th
 evidence from a particular revision and machine; the [compatibility table](../docs/COMPATIBILITY.md) describes
 current capabilities, and the [release notes](../docs/STATUS.md) describe shipped changes.
 
+Allocation profiles and reachability-census results in older notes came from tooling that has been removed.
+Their measurements remain historical evidence. For supported memory reports and ownership checks, use the
+[current debugging guide](../docs/DEBUGGING.md#arena-recycling-checks).
+
 ## Before changing performance or memory use
 
 Start with the [measurement and landing rules](../AGENTS.md#performance-and-memory-changes), then read the

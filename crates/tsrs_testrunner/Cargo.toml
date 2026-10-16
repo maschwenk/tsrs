@@ -9,10 +9,6 @@ publish.workspace = true
 [lints]
 workspace = true
 
-[features]
-# Allocation profile (tsrs_core/alloc-profile); replaces the mimalloc global allocator with the counting one.
-alloc-profile = ["tsrs_core/alloc-profile"]
-
 [dependencies]
 tsrs_core.workspace = true
 tsrs_diagnostics.workspace = true

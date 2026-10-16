@@ -1,5 +1,8 @@
 # lsp-mem: memory of the long-lived server (phase 4, docs/LSP.md "Memory plan for a long-lived server")
 
+> The allocation profiler and reachability census have been removed. Measurements using them describe the
+> recorded revision; use the [current memory debugging guide](../docs/DEBUGGING.md#arena-recycling-checks) for new work.
+
 Wave `mem` of the language-server port: regions for file versions, checkers and programs. The design and its two
 corrections to the original plan are in docs/LSP.md; the auto-import registry's ownership and the remaining census
 hits were fixed afterwards (notes/lsp-memfix.md). This note keeps the measurements and the census method.
@@ -45,11 +48,11 @@ retired): webpack 16.48-16.49 G vs 16.49-16.86 G (base), mui-docs 83.81-83.85 G 
 best base run; about half of it is the region branch in the bump allocator), wall and peak RSS within noise, output
 byte-identical.
 
-## Census gate
+## Historical census validation
 
-`tsrs --lsp` in the alloc-profile build runs the census at exit (`TSRS_CENSUS=1`, roots: server, session, current
-snapshot, main stack, data segments; `TSRS_CENSUS_VERIFY=1` also walks the current snapshot's programs precisely).
-Region frees are recorded as would-free ranges (memory kept, drops run), checked with the free-time filter.
+The instrumented language server ran a census at exit, rooted at the server, session, current snapshot,
+main stack and data segments. A precise walk also checked the current snapshot's programs.
+Region frees were recorded as would-free ranges (memory kept, drops run), checked with the free-time filter.
 Getting the strong mark to 0 needed, besides real fixes (below): gaps between slab carves and at region chunk starts
 in profile builds (one-past-the-end pointers in arenas and the registry equal the next region's first block),
 registry keys stored as address + 1 (vacated B-tree slots), stack scrubs before building a `Program` pool slot and a
@@ -122,7 +125,7 @@ Results (`fast` profile, MiB):
 | heavy file, 150 canceled pulls, RSS at 50 / 100 / 150 | 349, 620, 893 | 84, 84, 84 | 210, 211, 217 |
 | heavy file, diagnostics every 36 s (idle disposal each round), rounds 0-5 | 136, 188, 240, 294, 341, 394 | 137, 143, 143, 143, 141, 145 | 471, 849, 845, 756, 504, 623 |
 
-Census (alloc-profile + plain pointers, `TSRS_CENSUS=1 TSRS_CENSUS_VERIFY=1`; a session over xstate and a small
+Historical census (plain pointers; a session over xstate and a small
 `noLib` / `declaration` / `isolatedDeclarations` / missing `types` project: diagnostics with global, declaration and
 include-processor diagnostics, hover, definition, references, implementation, rename, completion, signature help,
 call hierarchy, inlay hints, semantic tokens, code actions, workspace symbols, 30+ canceled requests, two 36 s idle

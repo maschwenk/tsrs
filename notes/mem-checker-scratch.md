@@ -1,5 +1,8 @@
 # mem-checker-scratch: per-checker garbage, free-list high-water and hash-table slack on the app projects
 
+> The allocation profiler and reachability census have been removed. Measurements using them describe the
+> recorded revision; use the [current memory debugging guide](../docs/DEBUGGING.md#arena-recycling-checks) for new work.
+
 Question (2026-10-07, round 4, "beat bun check on memory"): notes/mem-per-checker-duplication.md 2c found that each
 extra checker leaves 8-14% of what it allocates as unreachable, never-freed garbage and sends another 17-30% to the
 arena free lists, and that every checker owns hash tables with up to 2x their entries in capacity. This note
@@ -40,7 +43,7 @@ Neither census mark decoded it:
   not have been reported.
 
 Both marks now also decode `(w & (2^48 - 1) & !7) >> 1`. The conservative mark does this for words with a length in
-the top 16 bits; the strong mark does it for `TypeMapper` words (crates/tsrs_core/src/alloc_profile/census.rs).
+the top 16 bits; the strong mark did it for `TypeMapper` words in the now-removed census.
 Effect on t3code-server:
 
 | | 1 checker before / after | 16 checkers before / after |
@@ -50,14 +53,14 @@ Effect on t3code-server:
 | strongly reachable freed blocks (violations) | 0 / 0 | 0 / 0 |
 
 So the free-gate now covers 0.64M more blocks at 1 checker and 2.8M more at 16, and it still finds no violation.
-The same holds on formbricks-web and cal-diy at 1 and 16 checkers, on formbricks at 4 with `TSRS_CENSUS_VERIFY=1`, and
+The same holds on formbricks-web and cal-diy at 1 and 16 checkers, on formbricks at 4 with the historical precise verification walk, and
 on t3code with `TSRS_LAZY_MEMBERS=0`. The figure in mem-per-checker-duplication.md 2c ("8-14% garbage") included these
 lists. The `[P<Type>]` rows created at `create_lazy_member_table` (checker_09.rs:2792/2799, the lazy tables' mapper
 lists) were the largest "garbage" rows, and they are live.
 
 ## 2. Garbage per extra checker, by cause
 
-`TSRS_CENSUS=1 TSRS_CENSUS_SKIP_FREED=1 TSRS_CENSUS_FRAMES=6` at 1 and 16 checkers. Freed blocks are left out (they
+The historical census used six allocation-stack frames at 1 and 16 checkers. Freed blocks were left out (they
 are reused in a normal build). The rows are the sampled arena stacks plus the heap blocks, grouped by the frames
 above the allocation. MB per extra checker; the % is of what an extra checker holds at exit (arena plus live heap,
 census bytes: 113.8 / 63.4 / 76.4 MB).
@@ -143,7 +146,7 @@ checkers. Not prototyped.
 
 ## 3. Free lists and recycled pools at their peak
 
-The alloc profile (`--features alloc-profile`, compressed pointers, normal reuse) now prints, per arena, the bytes on
+The historical allocation profile (compressed pointers, normal reuse) reported, per arena, the bytes on
 the free lists at exit and at their peak, the sum of the per-size-class peaks, bytes reissued, and bytes the
 recycling sites bumped because their list was empty. Checker arenas only; at 1 checker the check runs on the `tsrs`
 thread.
@@ -229,15 +232,8 @@ at most 0.2% each, so presizing them would buy well under 1% of instructions.
 ## Reproduce
 
 ```sh
-CARGO_TARGET_DIR=target/census cargo build --release --locked -p tsrs_cli --features alloc-profile,tsrs_core/plain-ptrs
-CARGO_TARGET_DIR=target/prof cargo build --release --locked -p tsrs_cli --features alloc-profile
 cargo build --release --locked -p tsrs_cli
 cd <bench checkout>
-# section 2: garbage by cause (one census at a time: 4-13 GB)
-TSRS_CENSUS=1 TSRS_CENSUS_SKIP_FREED=1 TSRS_CENSUS_FRAMES=6 TSRS_CENSUS_TSV=c-N.tsv \
-  target/census/release/tsrs -p <tsconfig> --noEmit --incremental false --pretty false --checkers {1,16}
-# section 3: free lists ("-- arena free lists" in the alloc profile)
-target/prof/release/tsrs -p <tsconfig> --noEmit --incremental false --pretty false --checkers {1,16}
 # section 4: tables
 TSRS_HEAP_CENSUS=1 TSRS_HEAP_CENSUS_MIN=0 target/release/tsrs ... --extendedDiagnostics --checkers {1,16,32}
 # section 2 prototype on Linux: push a branch with the change and tools/perf/scratchprobe.sh (branch

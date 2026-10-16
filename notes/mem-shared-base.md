@@ -69,7 +69,7 @@ also report the pages each checker allocates.
 
 ### The private monorepo, 4 checkers (default locality assignment)
 
-Peak 7.56 GiB vs 5.73 GiB single. Alloc profile (`--features alloc-profile`): arena requested 4,326 -> 5,531 MB
+Peak 7.56 GiB vs 5.73 GiB single. Historical allocation profile: arena requested 4,326 -> 5,531 MB
 (+1,205 MB), heap outside the arena 1,596 -> 2,317 MB (+721 MB). The arena rows that grow most: `Symbol` +155 MB,
 `TypeMapper` +145, `[P<Type>]` +128, `[ValueSymbolLinks]` chunks +98, references +73, signatures +61, unions
 +54, intersections +53, anonymous object types +49, conditional types +42, `StructuredMembers` +40, inference
@@ -243,7 +243,7 @@ Gates (all with the switch on):
   checkers (17,314,530 symbols / 14,606,003 types / 80,372,489 instantiations on 4), and opt-out with 4 checkers
   and the go assignment (40,847,730 / 16,681,463 / 91,689,770); diagnostics identical between 1 and 4 checkers;
   `TSRS_ARENA_POISON=1` identical. No arena memory is freed or reused (a page converted to dense drops a heap
-  box), so the census free-gate does not apply.
+  box), so no arena recycling check was needed for that experiment.
 - `cargo test -p tsrs_checker links::tests`: sparse and dense stores map every id of a scrambled insert order to
   the same slot before and after densification (a positive control that skips the per-word count update fails
   it).

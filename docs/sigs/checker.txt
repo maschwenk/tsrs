@@ -147,7 +147,6 @@ census_begin | pub(crate) fn census_begin(&mut self, cat: Cat, key: impl FnOnce(
 census_collect | pub fn census_collect(&mut self) | rust:workcensus.rs:533 | Checker
 census_enabled | pub fn census_enabled() -> bool | rust:workcensus.rs:492 | Checker
 census_end | pub(crate) fn census_end(&mut self, span: Option<Span>) -> Option<Timing> | rust:workcensus.rs:525 | Checker
-census_layouts | pub(crate) fn census_layouts() | rust:types.rs:1258 | -
 census_mut | pub(crate) fn census_mut(&mut self) -> Option<&mut Census> | rust:workcensus.rs:508 | Checker
 census_on | pub(crate) fn census_on(&self) -> bool | rust:workcensus.rs:503 | Checker
 census_path | pub fn census_path() -> Option<&'static str> | rust:workcensus.rs:29 | -

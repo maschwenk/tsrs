@@ -232,5 +232,5 @@ The other twelve projects' median wall change over the checker counts is -1.4% t
   `leaf-alternative-containers` and `leaf-structural-instantiation`.
 - `cargo check --workspace` (no warnings), `tools/lint/ratchet.py`, `tools/lint/source.py`, `cargo test -p tsrs_core
   -p tsrs_compiler` (new: `a_batch_gives_back_whole_spans`), `cargo test -p tsrs_cli --test free_leaf_files`.
-- The reachability census is not affected: `TSRS_CENSUS=1` turns file regions off (`leaf_settings_from_env`), and
-  nothing here reuses a freed range (retired ranges are still never handed out again).
+- The historical census ran with file regions disabled. Nothing here reuses a freed range; retired ranges are
+  never handed out again. The current ownership checks use poison runs.

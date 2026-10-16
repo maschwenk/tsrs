@@ -48,7 +48,7 @@ never reused. tscWatch / tsbuildWatch pass lists are unchanged.
 
 ## Second round: what grew beside the file regions
 
-Measured with an alloc-profile build (per-site arena counts, the arena address range in use, live regions, slabs and
+Measured with the now-removed allocation profiler (per-site arena counts, the arena address range in use, live regions, slabs and
 thread arenas, dumped after each cycle) and the sampling heap profiler with allocation epochs (bytes still live that
 were allocated more than five cycles earlier).
 

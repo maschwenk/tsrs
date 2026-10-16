@@ -18,8 +18,8 @@ checkers -12.0% / -4.9% / -4.7% / -3.2% / -3.7% / -3.6% / 0 / 0, single-threaded
 
 ## 1. Ceiling (census)
 
-Tool (branch `mem/lazy-dts-census`, not merged): the alloc-profile build with `TSRS_LAZY_DTS_CENSUS=1`
-(`tsrs_core::lazydts_census`, `tsrs_compiler` lazydts_census.rs). The parser and the binder record, per member of
+Historical tool (branch `mem/lazy-dts-census`, not merged): custom allocation instrumentation
+(`tsrs_core::lazydts_census`, `tsrs_compiler` lazydts_census.rs), unavailable in the current checkout. The parser and the binder record, per member of
 every interface, class, type literal and module block of a declaration file, the arena bytes it took plus the thread's
 net heap bytes (binder symbol tables keep their entries on the heap); before the first checker is created the compiler
 registers those lists in the files the program will not check, with their owner and member symbols. From then on a
@@ -223,7 +223,7 @@ parsed again, 422 of them while their file was bound (merges and unusual states)
   xstate single-threaded and at 1, 4, 16 and 32 checkers (42 cells); `Types` and `Instantiations` identical
   single-threaded and with `--checkerAssignment locality` (14 cells); `TSRS_ARENA_POISON=1` single-threaded and at
   32 checkers on the five app projects, identical. A declaration-emit project gave identical `.d.ts` files.
-- `RUSTFLAGS="-D warnings" cargo check --workspace --locked` (also with `alloc-profile`), `tools/lint/ratchet.py`
+- `RUSTFLAGS="-D warnings" cargo check --workspace --locked` (including the historical instrumentation build), `tools/lint/ratchet.py`
   (no new findings), `tools/lint/source.py` (no new `unsafe impl`; every atomic ordering commented).
 
 ## 6. Left and rejected
@@ -251,10 +251,6 @@ parsed again, 422 of them while their file was bound (merges and unusual states)
 ## Reproduce
 
 ```sh
-git checkout mem/lazy-dts-census    # the census tool
-CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile
-cd <project> && TSRS_LAZY_DTS_CENSUS=1 TSRS_LAZY_DTS_CENSUS_TSV=/tmp/files.tsv <worktree>/target/prof/release/tsrs -p <tsconfig> \
-  --noEmit --incremental false --extendedDiagnostics --checkers 16
 TSRS_LAZY_DTS=stats tsrs -p <tsconfig> --noEmit ...      # lists made lazy / deferred / parsed again
 TSRS_LAZY_DTS=force tsrs-test run --suite all --baselines types,symbols   # every declaration file lazy; trees must equal main's
 depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref <branch> --input script=tools/perf/lazydtsprobe.sh \

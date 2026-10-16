@@ -12,8 +12,6 @@ workspace = true
 [features]
 # Atomic borrow checking for FrozenCell in release builds (always on with debug_assertions).
 checked-cells = []
-# Per-call-site arena profile and a counting allocator for executables to install (src/alloc_profile.rs).
-alloc-profile = ["dep:mimalloc-safe"]
 # Opt out of Unix pointer compression (build.rs; for comparisons: `--features tsrs_core/plain-ptrs`).
 plain-ptrs = []
 # The shared type graph (src/sharedgraph.rs, on with TSRS_SHARED_GRAPH=1). Without it every frozen-object test is a
@@ -31,7 +29,6 @@ simdutf8.workspace = true
 dragonbox_ecma.workspace = true
 num-bigint.workspace = true
 num-traits.workspace = true
-mimalloc-safe = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

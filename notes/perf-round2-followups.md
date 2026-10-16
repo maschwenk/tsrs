@@ -494,8 +494,8 @@ with the switch off, which is why it is not in the default build.
   property names, effective call arguments, path helpers), arena concatenation of symbol declarations, two pools and
   two `SmallVec`s. Do not redo those sites. Left, with the reason, in the note: `SymbolMap` growth (memory-tuned),
   `SymbolTable` snapshots (callees may mutate the table), results Go allocates too, `get_text_of_node`'s copy
-  (58 callers). The heap profile's `TSRS_HEAP_PROFILE=count` names the caller's caller of each allocation as built
-  (the note has the fix used); check a site's attribution before trusting it. Measured and not landed there:
+  (58 callers). The now-removed heap sampler attributed each allocation to its caller's caller
+  (the note has the correction used); account for that when reading those measurements. Measured and not landed there:
   `somePropertyReducesToNever`'s count map from a per-checker pool, -0.88% mui-docs / -0.83% mikro-orm instructions
   (branch `perf/property-count-pool`; landed later with notes/perf-icount-alloc.md, -0.78% there with other pools).
 - From notes/perf-icount-alloc.md (exact VM counts, locality mode, a large private monorepo at 8 checkers): the

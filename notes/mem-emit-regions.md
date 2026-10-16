@@ -31,8 +31,8 @@ runs). Peak = maximum RSS. The machine was shared at load 20-40 throughout, so w
 ## 1. Where emit's memory went (base)
 
 The tooling: `TSRS_EMIT_MEM=1` prints, for each file, the arena bytes used in its region and outside it, plus the
-reserve's use. The plain-ptrs alloc-profile build gives per-site tables, and a local label that is not committed
-marked allocations made outside the scratch region while it was entered.
+reserve's use. The now-removed allocation profiler supplied per-site tables with plain pointers. A local,
+uncommitted label marked allocations made outside the scratch region while it was entered.
 
 **The 38k-file codebase (27,503 emitted sources):**
 
@@ -129,11 +129,11 @@ written, or once its diagnostics are collected.
 - **Released 1 MiB slabs are kept for reuse.** Up to 64 stay committed instead of being decommitted at once; short
   regions churn slabs.
 
-### Escape analysis (census, plain-ptrs alloc-profile build)
+### Historical escape analysis (plain pointers)
 
-`TSRS_CENSUS=1 TSRS_CENSUS_VERIFY=1` records each freed region as would-free and marks from the program, the config
-and the result diagnostics. Plain mode is needed: link-store keys and hash keys are addresses there, so the census
-also sees keys. The first run on xstate found 84 violations, in four classes, all fixed:
+The now-removed census recorded each freed region as would-free and marked from the program, the config
+and the result diagnostics. It required plain pointers: link-store keys and hash keys were addresses there,
+so the census also saw keys. The first run on xstate found 84 violations, in four classes, all fixed:
 
 1. **Request builders kept their link values and `GoMap` tables in the checker's arena.** The tables referred to
    scratch `SerializedTypeEntry`s and specifier strings. Fix: scratch link stores, and `GoMap` tables live where the
@@ -148,9 +148,9 @@ also sees keys. The first run on xstate found 84 violations, in four classes, al
    alive, so such an entry is never hit again there either. Fix: `Checker::forget_scratch_keyed_caches`, called when
    a file's transform ends. It clears `jsx_links` (every key is a synthesized name) and removes the recorded
    accessible-chain entries whose scope lies in the region (`arena::scratch_contains`).
-4. **Stale words in hash tables after removals.** Census builds rebuild the touched tables; this is census-only.
+4. **Stale words in hash tables after removals.** The census instrumentation rebuilt the touched tables.
 
-After the fixes the census shows 0 violations:
+After the fixes the census showed 0 violations:
 
 | corpus | regions freed | arena blocks in them | precise walk |
 | --- | --- | --- | --- |
@@ -255,8 +255,6 @@ scratch/run1.sh <tsrs> <xstate|vscode|webpack|olympus> <tag> [flags]      # adds
 #   DECL=0 drops --declaration, TIMEOUT=<s> caps the run
 TSRS_EMIT_MEM=1 <tsrs> ...                                                  # per file: region bytes, outside bytes;
                                                                             # at the end: reserve in use / high water
-CARGO_TARGET_DIR=target/prof cargo build --release -p tsrs_cli --features alloc-profile,tsrs_core/plain-ptrs
-TSRS_CENSUS=1 TSRS_CENSUS_VERIFY=1 <prof tsrs> ...                          # would-free violations, precise walk
 TSRS_ARENA_POISON=1 <tsrs> ...                                              # freed regions filled, never reused
 tsgo-ref ... --pprofDir <dir>; go tool pprof -sample_index=alloc_space -top <dir>/*-memprofile.pb.gz
 ```

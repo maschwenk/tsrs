@@ -1,5 +1,8 @@
 # mem-recycle: giving provably dead arena memory back
 
+> The allocation profiler and reachability census have been removed. Measurements using them describe the
+> recorded revision; use the [current memory debugging guide](../docs/DEBUGGING.md#arena-recycling-checks) for new work.
+
 Follow-up to notes/mem-census.md, which measured ~743 MB of the private monorepo's 6.3 GiB single-checker peak as
 unreachable at exit. This pass reclaims the classes whose death can be proven locally, verified by the census.
 
@@ -22,38 +25,19 @@ chunks doubling from 1 MiB like bumpalo's; same fast path, instructions unchange
 Ids never depend on addresses (node and symbol ids are counters, flow nodes get ids in the checker, mappers and
 contexts have none), so reuse cannot change counters or baselines; nothing orders by address.
 
-Verification modes (no reuse in either):
+## Ownership validation
 
-- `TSRS_ARENA_POISON=1` (any build): freed blocks and rewound ranges are filled with 0xA5; a later read of a pointer
-  field crashes, any other read changes output. Debug builds poison free-list blocks too and assert on reuse that
-  the poison is intact (`debug_assert`-level check at every recycling allocation).
-- The census build (`TSRS_CENSUS=1`, alloc-profile): frees and rewinds are recorded as would-free, never reused, and
-  checked at exit (below). Arena chunks are mapped at 0x7c00_0000_0000+ there, zero-sized values get a dangling
-  address (a ZST "allocation" returned the start of the previous block), and the stack below the freeing frame is
-  scrubbed, all to keep stale words from looking like references.
+`TSRS_ARENA_POISON=1` (any build) fills freed blocks and rewound ranges with 0xA5 and never reuses them.
+Debug builds also poison free-list blocks and assert on reuse that the poison is intact.
+See the [current arena recycling checks](../docs/DEBUGGING.md#arena-recycling-checks).
 
-## The census gate
+The historical census combined a precise AST/symbol/flow walk with a conservative heap mark. Frees were recorded
+without reusing their memory, then checked for surviving references. Layout descriptions and cleared stale storage
+reduced false positives from padding, empty containers and reused stack slots. Both checks had to report zero
+references to freed blocks. That tooling has been removed; the measurements below record its results at the time.
 
-1. **Precise program walk** (`TSRS_CENSUS_VERIFY=1`, crates/tsrs_cli/src/census.rs): every node (children, parent,
-   eager JSDoc), every diagnostic, every symbol declaration and the whole flow graph (flow nodes of every node,
-   antecedents, antecedent lists, flow node nodes) is checked against the would-free set. This is exact for the
-   parser and binder frees.
-2. **Strong mark** (crates/tsrs_core/src/alloc_profile/census.rs `check_would_free`): the conservative mark keeps
-   thousands of freed blocks "reachable", because freed objects are exactly the ones whose addresses linger in dead
-   stack slots, struct padding (`P::new` copies a value with its padding from the stack: `TypeParameter`,
-   `LiteralType`, `MappedType`, `IndexInfo`, `Diagnostic`, the empty `OnceCell<LazyMembers>` of a lazy member table),
-   pooled vectors' spare capacity (scrubbed in census builds), empty tail slices pointing at the next block, and
-   bytes of text or number pairs. So reachability is recomputed from the roots with the references the program
-   stores: a 48-bit pointer to a block start (tags on mapper / context words, length bits in mapper slice words,
-   interior pointers into heap blocks and 8-aligned into arena lists), x8-encoded symbol entries in heap blocks. An
-   edge into a freed block must also come from a block allocated before the free and not be 64 KiB-aligned (a stale
-   pointer whose low bytes a small field overwrote). Every freed block reached that way is a violation; the report
-   names the referrer, its offset and its neighbouring words (heap referrers by allocating function). On the private
-   monorepo the strong mark covers 94% of the conservatively reachable bytes; the rest is lazily parsed JSDoc, string
-   slices and similar. Positive control: with the escape barrier removed from `MapperCell::set`, one conformance test
-   reports 35 violations (conditional types holding freed mappers).
-
-Both must be 0. `TSRS_CENSUS_ASSERT=1` exits with status 3 otherwise.
+Positive control: removing the escape barrier from `MapperCell::set` produced 35 violations in one conformance
+test, from conditional types holding freed mappers.
 
 ## Step 1: parser speculation and binder labels
 
@@ -110,7 +94,7 @@ Recycling sites (each frees only what it made, only when not escaped):
 
 Census (the private monorepo, all four runs): 15.4M blocks / 351 MB freed single default (16.3M / 364 MB opt-out,
 23.6M / 509 MB and 24.5M / 522 MB on 4 checkers); precise walk 0; strong mark 0 violations. Along the way the
-census needed: pooled vectors scrubbed of stale entries (`census_scrub_slack`: the inference state pool, the
+census needed: pooled vectors scrubbed of stale entries (the inference state pool, the
 inference-context and active-mapper stacks, the scratch lists), dangling ZST addresses, and the header / padding
 rules above; each of the strong references it reported was traced to one of those (referrer chains, neighbouring
 words). Conformance corpus (12,758 files): precise walk 0 and strong mark 0 in every file. Suite trees identical

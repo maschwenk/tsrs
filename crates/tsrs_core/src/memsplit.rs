@@ -369,17 +369,3 @@ fn read_process_memory() -> usize {
 fn read_process_memory() -> usize {
     0
 }
-
-// Watch memory: called on the watch's free thread after each cycle's frees; the alloc-profile build installs
-// `alloc_profile::cycle_report` (`set_cycle_hook`).
-static CYCLE_HOOK: OnceLock<fn()> = OnceLock::new();
-
-pub fn set_cycle_hook(hook: fn()) {
-    let _ = CYCLE_HOOK.set(hook);
-}
-
-pub fn cycle_done() {
-    if let Some(f) = CYCLE_HOOK.get() {
-        f();
-    }
-}

@@ -38,7 +38,7 @@ for reuse. Every `SymbolTable` method tested the first word for the frozen form.
 
 ## Numbers
 
-Front end (`--noCheck`, alloc-profile build, macOS M5 Max): net about -9.4 MB on vscode (heap peak 238.9 -> 225.8
+Front end (`--noCheck`, former profiling build, macOS M5 Max): net about -9.4 MB on vscode (heap peak 238.9 -> 225.8
 MB, arena used 868.0 -> 871.8 MB) and -8.0 MB on formbricks-web (321.5 -> 309.2 MB, 575.7 -> 580.0 MB), below the
 study's 12-15 MB estimate. The 16-byte header saving was mostly spent on the 8-byte `FrozenTable` objects and the wide
 filters.

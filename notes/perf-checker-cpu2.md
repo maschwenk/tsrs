@@ -19,8 +19,8 @@ moved by about +-1% between identical runs of the same binary and wall/cycles by
 below are mostly noise, the instruction deltas are the metric. Profiles: `samply record -r 4000
 --unstable-presymbolicate` and a small reader of the profile JSON (exclusive / inclusive / callers tables,
 per-address samples, a "share of samples in the first 64 bytes of the function" column, and a list of hot functions
-with large stack frames joined from `objdump`). Allocation sites: the alloc-profile build with
-`TSRS_HEAP_PROFILE=count` (notes/mem-census.md); building it with `CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=packed`
+with large stack frames joined from `objdump`). Allocation sites came from the now-removed allocation-count sampler
+(notes/mem-census.md); building it with `CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=packed`
 gives a dSYM, so `atos` resolves inlined frames to source lines (the plain release build keeps line tables only in
 object files that LTO deletes).
 
@@ -179,6 +179,4 @@ check phase only, so a function that kept its absolute cost gains share as other
 cargo build --release -p tsrs_cli
 cd <38k-file codebase> && /usr/bin/time -l tsrs -p . --noEmit --incremental false --extendedDiagnostics --pretty false --singleThreaded
 samply record -r 4000 --unstable-presymbolicate -s -o prof.json.gz tsrs -p . --noEmit --incremental false --singleThreaded
-CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=packed CARGO_TARGET_DIR=target/prof cargo build --release -p tsrs_cli --features alloc-profile
-TSRS_HEAP_PROFILE=count TSRS_HEAP_PROFILE_TOP=30000 target/prof/release/tsrs -p . --noEmit --incremental false --singleThreaded
 ```

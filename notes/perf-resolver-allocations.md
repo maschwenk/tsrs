@@ -1,5 +1,8 @@
 # Thread-local resolver path buffers
 
+> The allocation profiler and reachability census have been removed. Measurements using them describe the
+> recorded revision; use the [current memory debugging guide](../docs/DEBUGGING.md#arena-recycling-checks) for new work.
+
 PR scope: reuse strings only in `try_extension` and `try_file`'s module-suffix loop. The other
 allocation experiments are excluded. Based on oxc-resolver `2e976e6489ff902f315d0179a667f8d0465dcee7`,
 `src/cache/thread_local.rs` (256-byte scratch path), adapted to TypeScript lexical string paths.
@@ -17,8 +20,8 @@ Historical measurements of this isolated change against `0188eed0333447c52f57a9e
 before rebasing onto main `aa7911e7`. Apple M3 Max (14 cores, 36 GiB), macOS arm64, Rust 1.99.0.
 These are the scratch-only results, not the broader allocation experiment's results.
 
-The standalone `tools/perf/resolver-allocations.rs` driver uses the existing `alloc-profile` allocator.
-Each run makes 40,000 requests: relative files, missing relative files, exported packages and missing
+The now-removed standalone allocation probe used a counting allocator.
+Each run made 40,000 requests: relative files, missing relative files, exported packages and missing
 packages, in ten resolver instances on one cached virtual filesystem. Suffix mode adds `.native`,
 `.web` and the empty suffix. Counts include setup and result hashing; result hashes match baseline.
 
@@ -41,17 +44,8 @@ macOS instruction counts include kernel work and noise. These results are below 
 thresholds; deterministic Linux `bench/count.py` verification remains outstanding. Retained in the
 draft PR at the owner's request. Saved binaries and logs: `/private/tmp/tsrs-resolver-results/{base,scratch-base,scratch}`.
 
-## Reproduce the allocation probe
-
-Create a scratch Cargo binary outside the workspace, copy the driver to `src/main.rs`, and point its
-path dependencies `tsrs_core`, `tsrs_module` and `tsrs_vfs` at the checkout being measured. Enable
-`features = ["alloc-profile"]` on `tsrs_core`. Use the same driver against each revision:
-
-```sh
-cargo build --offline --release --manifest-path /tmp/resolver-probe/Cargo.toml
-/tmp/resolver-probe/target/release/resolver-allocation-probe resolve
-/tmp/resolver-probe/target/release/resolver-allocation-probe suffix
-```
+The probe and its allocator have been removed. The counts above belong to the revisions recorded here;
+use the [benchmark workflow](../bench/README.md) for current instruction and peak-RSS measurements.
 
 ## Validation
 

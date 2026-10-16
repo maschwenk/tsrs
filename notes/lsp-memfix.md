@@ -1,5 +1,8 @@
 # lsp-memfix: auto-import registry ownership, census hits with completions (phase 4)
 
+> The allocation profiler and reachability census have been removed. Measurements using them describe the
+> recorded revision; use the [current memory debugging guide](../docs/DEBUGGING.md#arena-recycling-checks) for new work.
+
 Wave agent `memfix`, branch `lsp-memfix` (from `lsp` 3be0092). Leftovers of notes/lsp-mem.md ("Needs from others",
 "Doubts"; on 2026-10-10 lsp-mem.md dropped the items resolved here and kept the rest under "Limitations noted at the
 time").
@@ -44,11 +47,11 @@ Layouts from `-Zprint-type-sizes` (nightly, release).
 
 | hit | referrer layout | verdict and fix |
 | --- | --- | --- |
-| keyword completion cache: heap block (`get_typescript_keyword_completions`) +472 -> freed `Node` | `CompletionItem` is 744 bytes; +472 is inside `data: Option<CompletionItemData>` (+312..+504, 192 bytes), which is `None` for keyword items (niche: `file_name`'s capacity at +312); neighbouring words were a return address and an arena pointer | stale payload bytes of a `None`. `tsrs_core::census_scrub_none` (census builds: zero a `None`'s bytes, then write `None` back) on all 18 option fields of every cached item (both caches and `all_keyword_completions`); the old `census_scrub_stack` there did not reach the clone path and is removed |
+| keyword completion cache: heap block (`get_typescript_keyword_completions`) +472 -> freed `Node` | `CompletionItem` is 744 bytes; +472 is inside `data: Option<CompletionItemData>` (+312..+504, 192 bytes), which is `None` for keyword items (niche: `file_name`'s capacity at +312); neighbouring words were a return address and an arena pointer | stale payload bytes of a `None`. The historical census scrubbed all 18 option fields (zero a `None`'s bytes, then write `None` back) of every cached item (both caches and `all_keyword_completions`); the earlier stack scrubber did not reach the clone path |
 | registry entrypoints: `ArcInner<ResolvedEntrypoint>` +96 -> freed scratch `str` (4 hits) | struct at +16: 3 strings (0..72), `include_conditions` (72..104): hashbrown `RawTableInner` has `ctrl` first; +88 (= ctrl) was 0, i.e. `None`; +96/+104 are its payload | stale payload. Scrubbed where the registry keeps them (`extract_package`), and the bucket's option fields in `replace_bucket` |
-| root `__DATA` +0x1f00 -> freed `InfoCacheEntry` (with and without completions) | `EMPTY_COMPILER_OPTIONS` (`LazyLock<CompilerOptions>`, 848 bytes at `__DATA`+0x1ca0): +0x260 = `paths: None` (+560..+616), payload word | stale: the static was first initialized during a registry update, copying its stack. Census builds initialize it before the server starts (`census::prepare_lsp`) |
+| root `__DATA` +0x1f00 -> freed `InfoCacheEntry` (with and without completions) | `EMPTY_COMPILER_OPTIONS` (`LazyLock<CompilerOptions>`, 848 bytes at `__DATA`+0x1ca0): +0x260 = `paths: None` (+560..+616), payload word | stale: the static was first initialized during a registry update, copying its stack. The historical census initialized it before the server started |
 | heap block from `get_conditional_type_instantiation_ex` +128, word `0xabf92f8032f45ea6` (plain session, once) | a hash in a checker cache; decoded as a `SymbolMapEntry` (odd bit set, len 36) its low 45 bits x 8 hit a freed `Symbol` start | chance match of the x8 symbol-entry rule (~1e-7 per random word). The rule now requires the referrer to be an entry buffer: its first word must also decode to a `Symbol` (an `EntryVec` buffer starts with entry 0). A debug run counted 0 rejected words; strong-mark coverage varies 1.14-1.45M blocks run to run either way |
-| root stack +0x2a8 -> freed `TypeMapper` (one completion session) | inside the census's own frames on the main thread | stale stack word; `census_scrub_stack` before the LSP census |
+| root stack +0x2a8 -> freed `TypeMapper` (one completion session) | inside the census's own frames on the main thread | stale stack word; stack scrubbing before the historical LSP census |
 
 The "module-resolver package.json block" doubt of notes/lsp-mem.md is the cache bug above (real, fixed), as far as
 can be told: no such hit remains.
@@ -77,7 +80,7 @@ was empty before and after every run.
 - Conformance: 13,458 pass / 2 codes / 2 fail, pass list identical; `TSRS_LAZY_MEMBERS=0 --baselines types,symbols`
   12,779 / 12,779, lists identical.
 - Fourslash: 4,066 / 4,546, pass list identical to `lsp-mem`.
-- Census (xstate, 200 edits, `TSRS_CENSUS=1 TSRS_CENSUS_VERIFY=1`): diagnostics + hover session 65,739 regions freed
+- Historical census (xstate, 200 edits, with a precise verification walk): diagnostics + hover session 65,739 regions freed
   (45.2M blocks, 2,108 MB would-free), strong mark 0 violations, precise walk 0; with completion requests 4,864
   regions (22.8M blocks, 1,143 MB), 0 violations, precise walk 0. Four runs of each after the fixes: all 0 except one
   completion run with the census-frame stack word (fixed, then 0 in the two runs after).
@@ -89,8 +92,8 @@ was empty before and after every run.
 
 ## Shared-file edits
 
-- `tsrs_core`: `arena.rs` (`enter_table_owner`), `ptr.rs` + `lib.rs` (`census_scrub_none`),
-  `alloc_profile/census.rs` (x8 symbol entries only from entry buffers).
+- `tsrs_core`: `arena.rs` (`enter_table_owner`); the now-removed census also scrubbed absent optional fields
+  and decoded x8 symbol entries only from entry buffers.
 - `tsrs_module`: `packagejson/cache.rs` (`InfoCache.origin`, `owner_addr`), `resolver.rs` (`get_package_json_info`
   allocates entries through `enter_table_owner`).
 - `tsrs_checker`: `program.rs` (`Program::source_files_complete`, default true), `utilities.rs` (`sort_symbols`).
@@ -116,6 +119,6 @@ was empty before and after every run.
 
 ## Doubts
 
-- `census_scrub_none` relies on `p.write(None)` storing only the niche (the census shows it does); it is census-only.
+- The historical census scrubber relied on `p.write(None)` storing only the niche; that helper has been removed.
 - Strong-mark coverage varies between runs of the same session (timing: idle checkers, what is alive at exit).
 - The private monorepo + completions peak (4.48 GiB) has no `tsgo-ref` comparison.

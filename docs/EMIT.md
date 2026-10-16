@@ -88,9 +88,8 @@ the nodes it makes through a per-file emit context's factory, `NodeFactory::scra
 checker escapes to its own arena (`CheckerSlot::with` calls `escape_scratch`), and so do diagnostics and the
 emit host's program calls; the checker caches keyed by nodes that can be synthesized (the referenced-import links of
 JSX factory names, accessible-chain entries whose scope is a synthesized node) drop those keys when the file's
-transform ends. At most 2,048 transformed files wait for the print workers. The census (alloc-profile + plain-ptrs
-build, `TSRS_CENSUS=1`) records a freed region as would-free and checks that nothing reachable points into it;
-`TSRS_ARENA_POISON=1` fills it and never reuses it.
+transform ends. At most 2,048 transformed files wait for the print workers. `TSRS_ARENA_POISON=1` fills freed
+regions with poison and never reuses them.
 
 ### Writing files
 

@@ -98,8 +98,8 @@ Peak RSS at the default checker count, medians of three separate runs (bytes):
 | Compiler | 110,497,792 | 109,158,400 | 108,486,656 |
 | Compiler-Unions | 115,429,376 | 115,605,504 | 115,372,032 |
 
-These small RSS differences are not a memory improvement claim. On macOS arm64, `--features alloc-profile`
-with one parser/checker reports heap allocation counts of 405,225 → 404,445 for Compiler and
+These small RSS differences are not a memory improvement claim. On macOS arm64, the former profiling build
+with one parser/checker reported heap allocation counts of 405,225 → 404,445 for Compiler and
 439,453 → 436,681 for Compiler-Unions (original PR → correction). Arena bytes and peak live heap bytes are
 unchanged. Restoring the outer union loop together with the type-list comparator, or separately restoring the
 union-worker body, union-capacity folds or union-cache hash fold did not recover the remaining Compiler-Unions increase, so those reversions
@@ -138,7 +138,7 @@ alone did not help; keep their iterator forms. The three candidates are recorded
 
 The last ancestor/collector corrections (`7a1d78e7` → `8f70f6dc`) leave heap allocation counts unchanged:
 401,601 for Compiler and 433,694 for Compiler-Unions, with unchanged arena bytes and peak live heap bytes
-(`--features alloc-profile`, one parser/checker, macOS arm64).
+(the former profiling build, one parser/checker, macOS arm64).
 
 ## Full-suite comparison after the hot-loop corrections
 
@@ -216,7 +216,7 @@ loops together, then check the combined correction against all 17 projects. The 
 small to claim an improvement. All probe outputs and exit codes match exactly.
 
 The combined correction leaves heap allocation counts unchanged at 401,551 for Compiler and 433,650 for
-Compiler-Unions, comparing `37942867` with the follow-up on macOS arm64 (`--features alloc-profile`, one
+Compiler-Unions, comparing `37942867` with the follow-up on macOS arm64 (the former profiling build, one
 parser/checker). Arena requests remain 33.0/31.9 MB and peak live heap remains 10.0/12.8 MB. The full conformance
 gate and 29 regressions pass, with all 18 conformance result lists unchanged; workspace checks and both required
 lint scripts pass.

@@ -1476,7 +1476,6 @@ pub struct Checker {
 /// Go `NewChecker(program, tracer)`. The tracer and the returned mutex are not ported.
 pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     program.bind_source_files();
-    crate::types::census_layouts();
 
     // Placeholders for pointer fields Go leaves nil until they are assigned below.
     let compiler_options = program.options();

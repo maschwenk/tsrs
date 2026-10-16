@@ -1163,7 +1163,6 @@ impl Checker {
     // checker.go:22586
     pub(crate) fn pop_active_mapper(&mut self) {
         self.active_mappers.pop();
-        tsrs_core::census_scrub_slack(&mut self.active_mappers);
         // Go clears the map and leaves it in the list for later reuse.
         let mut cache = self.active_type_mappers_caches.pop().unwrap();
         if cache.capacity() > 64 && cache.capacity() > 4 * cache.len() {

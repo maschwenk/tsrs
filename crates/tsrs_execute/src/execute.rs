@@ -400,10 +400,6 @@ fn perform_compilation(
     if std::env::var_os("TSRS_LAZY_DTS").is_some_and(|v| v == "stats") {
         eprint!("{}", tsrs_ast::lazylist::stats_line());
     }
-    #[cfg(feature = "alloc-profile")]
-    if let Some(census) = crate::CENSUS_HOOK.get() {
-        census(program, &[config.addr(), result.diagnostics.as_ptr() as usize]);
-    }
 
     CommandLineResult { watcher: None, status: result.status }
 }

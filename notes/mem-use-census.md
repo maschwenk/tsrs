@@ -1,18 +1,21 @@
 # mem-use-census: what the checker builds, keeps reachable, and never reads
 
+> The allocation profiler and reachability census have been removed. Measurements using them describe the
+> recorded revision; use the [current memory debugging guide](../docs/DEBUGGING.md#arena-recycling-checks) for new work.
+
 The reachability census (notes/mem-census.md) asks what is garbage at exit. This pass asks a different question
 for the memory the checker adds: which objects are **created, stay reachable, and are never read after
 creation**. Those are the candidates for laziness of the #64475 kind (build on first use instead of eagerly),
 which free nothing but avoid creating.
 
-Status (2026-10-10): nothing from this note is on main. The tool (`TSRS_USE_CENSUS`, `tsrs_core::ucell`, `usebits`)
+Status (2026-10-10): nothing from this note is on main. The read-tracking tool (`tsrs_core::ucell`, `usebits`)
 and the two deferrals U1 (`TSRS_LAZY_DISCRIMINANTS`) and U2 (`TSRS_LAZY_BASES`) lived on branch `mem/use-census`; PR #7
 was closed with them (notes/mem-never-read-apps.md). The tool was later ported to branch `mem/use-census-apps` for
 that note. The findings below stand as measurements.
 
 ## The tool (branch only)
 
-An alloc-profile build kept a bitmap over the arena address range, one bit per 4 bytes, set at the address of a field
+An instrumented build kept a bitmap over the arena address range, one bit per 4 bytes, set at the address of a field
 that was read through the checker's cells (`get` / `borrow` on `Cell`, `RefCell`, the packed slice and string cells,
 and the getters of hand-packed words). At exit a block counted as *used* if any bit inside it was set. Writes, mode
 checks inside packed setters (a new `peek`), flag read-modify-writes, symbol-table key comparison, ids and identity

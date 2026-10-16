@@ -195,10 +195,7 @@ Two ownership constraints matter when changing this code:
   include processor's diagnostics); both are parked until the pool is freed. Holding a checker keeps the program
   owner alive.
 
-The census build is the gate (notes/mem-recycle.md; at server exit with `TSRS_CENSUS=1`, roots = server, session,
-snapshot): a freed region is recorded as would-free and kept, and nothing reachable may point into it. Kept `None`
-options carry uninitialized payload bytes; long-lived ones (process-wide completion caches, registry buckets and
-entrypoints) are zeroed in census builds (`tsrs_core::census_scrub_none`).
+Run the [arena recycling checks](DEBUGGING.md#arena-recycling-checks) after changes to region ownership.
 
 The memory notes record edit and completion measurements on xstate, including registry updates. The server
 has also been run on a large private monorepo.

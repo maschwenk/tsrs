@@ -1,5 +1,8 @@
 # mem-pointer-compression: 32-bit arena handles for `P<T>`
 
+> The allocation profiler and reachability census have been removed. Measurements using them describe the
+> recorded revision; use the [current memory debugging guide](../docs/DEBUGGING.md#arena-recycling-checks) for new work.
+
 Build update (2026-10-15): the `compressed-ptrs` feature described in the original plan below has been removed.
 Compression is automatic on Unix unless `tsrs_core/plain-ptrs` is enabled, including with `--no-default-features`.
 The measurements below are unchanged.
@@ -43,8 +46,8 @@ nondeterminism. The gates compare whole result trees, so a hidden dependency wou
   a slab is freed. A registry maps chunk ranges to regions by address.
 - **Free lists** (mem-recycle): per arena, intrusive lists of dead blocks inside its chunks. Address-internal; no
   change.
-- **Census / poison modes**: census builds map chunks with `mmap` at a fixed high hint so 48-bit words that look like
-  pointers are recognizable.
+- **Historical census**: the instrumented build mapped chunks with `mmap` at a fixed high hint so 48-bit words
+  that looked like pointers were recognizable. This census has since been removed.
 
 Plan: **one region for everything**. At the first chunk request the process reserves 32 GiB + one page of address
 space (`mmap(PROT_NONE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE)`), stores its base in a global, and keeps the first
@@ -110,9 +113,8 @@ so they need no features of their own. The API that is common to both modes:
   `P::handle(self) -> u32` exists only in compressed mode, for the (u32 handle, u32 metadata) rewrites.
 - `SP<T>`: a pointer to a `static`, with `P`'s identity semantics (for the emit helpers).
 
-The census (alloc-profile + `TSRS_CENSUS=1`) decodes 48-bit words as pointers; in compressed mode it would need to
-decode 32-bit handles, which is a separate project. Compressed builds refuse `TSRS_CENSUS=1` with a message; the
-allocation profile itself (per-type bytes) works in both modes.
+The historical census decoded 48-bit words as pointers and required plain pointers. Per-type allocation counts
+were available in both pointer modes. Both tools have since been removed.
 
 ### Steps
 
@@ -120,7 +122,7 @@ allocation profile itself (per-type bytes) works in both modes.
 2. `tsrs_core`: the reservation and chunk allocator, `P` as a handle behind the feature, `to_bits` / `from_bits`,
    `SP`, `Aligned8` link chunks, 8-aligned `alloc`; the front-end packed words through `to_bits`.
 3. Workspace compiles in both modes; gates in compressed mode against origin/main.
-4. Measure (1 / 4 checkers, `--noCheck`, interleaved, median of 3), alloc-profile per-type sizes before / after,
+4. Measure (1 / 4 checkers, `--noCheck`, interleaved, median of 3), the then-available per-type allocation sizes before / after,
    the LSP driver; then flip the default if the gates pass.
 
 ## 2. What was built
@@ -193,7 +195,7 @@ agents): 1 checker 23.77 -> 25.17 s (+5.9%), 4 checkers 10.96 -> 10.54 s (-3.8%)
 (-14.9% / -14.1%, +6.4% / +6.7%). Read: the single-threaded run pays for the instructions, four checkers gain from
 the smaller working set; a quiet-machine rerun is still owed before claiming either.
 
-Arena by type (alloc-profile build, 1 checker; arena requested 3,866 -> 3,080 MB, -20%; chunk total 6,317 -> 3,437
+Arena by type (former profiling build, 1 checker; arena requested 3,866 -> 3,080 MB, -20%; chunk total 6,317 -> 3,437
 MB because thread chunks stop doubling at 64 MiB). Rows above 29 MB in the base:
 
 | type | count | B/each before | after | MB before | after |
@@ -299,7 +301,7 @@ binaries, another session editing a file); runs with the same `Lines` have ident
 Not done, because the premise no longer holds on today's layout: the slices the brief lists (type lists, node list
 elements, symbol declarations, `resolved_type_arguments`, signature parameter lists) and `PackedStr` are already one
 word (`ThinSlice`, `OptionThinSliceCell`, mem-layout3 step 1), so an 8-byte `PSlice` would not shrink them. Going
-through the alloc-profile type table for types above 0.5M allocations, the only remaining 12- or 16-byte slice field
+through the historical allocation table for types above 0.5M allocations, the only remaining 12- or 16-byte slice field
 is `InferenceContext.inferences` (a 12-byte `SliceCell`, 1.43M contexts): in compressed mode it is now a one-word cell
 (`tsrs_core::PSliceCell`), `InferenceContext` 56 -> 48 bytes, arena requested 3,079.5 -> 3,068.6 MB (-11 MB; most
 contexts are recycled, so the peak delta is within noise). A position-independent `PSlice` remains useful for the
@@ -307,15 +309,15 @@ persisted front end (node lists, declarations, identifier text), where it needs 
 (offsets in 4-byte units cover only 16 GiB, or 33-bit offsets with 31-bit lengths) and on empty / static slices,
 whose identity `same_slice` observes.
 
-### Census in compressed mode
+### Historical census limitation under compression
 
-Left as is: compressed builds refuse `TSRS_CENSUS=1`; use `--features alloc-profile,tsrs_core/plain-ptrs` (plain
-census on the branch head: strong mark 0 violations, precise walk 48,191,467 references, 0 to freed blocks). Teaching
-the strong mark handles is not cheap: it scans every 4-byte-aligned word conservatively, and as 32-bit handles every
+The census only supported plain pointers (on the branch head: strong mark 0 violations, precise walk 48,191,467
+references, 0 to freed blocks). Teaching the strong mark handles would have been costly: it scanned every
+4-byte-aligned word conservatively, and as 32-bit handles every
 id, position, count and flag word between 8,192 and the arena's top handle points at some block, so freed blocks
 would be "reached" by integers and the violation count would be noise unless every arena type registered its
 scalar fields; the packed words would also need handle-specific decoders (`to_bits` byte offsets in mappers and
-value-symbol links, `pack` in headers). The precise walk (`TSRS_CENSUS_VERIFY`) uses `addr()` and would work.
+value-symbol links, `pack` in headers). The precise walk used `addr()` and did not have that decoding limitation.
 
 ## 6. x86-64, both builds on transparent huge pages
 
@@ -357,6 +359,5 @@ them.
 cargo build --release -p tsrs_cli                                    # compressed (default)
 cargo build --release -p tsrs_cli --features tsrs_core/plain-ptrs    # references, as before
 cd <38k-file codebase> && /usr/bin/time -l <tsrs> -p . --noEmit --extendedDiagnostics --pretty false --incremental false --checkers 1
-CARGO_TARGET_DIR=target/prof cargo build --release -p tsrs_cli --features alloc-profile   # per-type table: TSRS_ALLOC_PROFILE_TOP=3000
 python3 tools/lsp-mem/lsp_mem.py --cmd "<tsrs> --lsp -stdio" --project <dir> --file <file> --edits 200 --every 20
 ```

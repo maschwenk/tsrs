@@ -25,7 +25,7 @@ Base: origin/main 0b4d117.
 
 ## Numbers
 
-macOS, M5 Max 18 cores, release builds; front end (`--noCheck`, alloc-profile build), allocations including
+macOS, M5 Max 18 cores, release builds; front end (`--noCheck`, former profiling build), allocations including
 free-list reuse:
 
 | project | row | before | after |

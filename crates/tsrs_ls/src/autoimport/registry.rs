@@ -1459,15 +1459,7 @@ impl bucketBuildResult {
     }
 
     fn replace_bucket(&self) {
-        let mut bucket = self.bucket.clone().unwrap_or_default();
-        // Census builds: registry versions keep the bucket after the update's scratch region is freed.
-        tsrs_core::census_scrub_none(&mut bucket.package_files);
-        tsrs_core::census_scrub_none(&mut bucket.resolved_package_names);
-        tsrs_core::census_scrub_none(&mut bucket.dependency_names);
-        tsrs_core::census_scrub_none(&mut bucket.index);
-        tsrs_core::census_scrub_none(&mut bucket.state.dirty_packages);
-        tsrs_core::census_scrub_none(&mut bucket.state.recursive_search_packages);
-        let bucket = Shared::new(bucket);
+        let bucket = Shared::new(self.bucket.clone().unwrap_or_default());
         match &self.replace_bucket {
             bucketTarget::NodeModules(e) => e.replace(bucket),
             bucketTarget::Project(e) => e.replace(bucket),
@@ -1721,15 +1713,7 @@ impl registryBuilder<'_> {
             return None;
         }
 
-        let package_entrypoints: Vec<Arc<ResolvedEntrypoint>> = package_entrypoints
-            .into_iter()
-            .map(|mut entrypoint| {
-                // Census builds: the registry keeps these after the update's scratch region is freed.
-                tsrs_core::census_scrub_none(&mut entrypoint.include_conditions);
-                tsrs_core::census_scrub_none(&mut entrypoint.exclude_conditions);
-                Arc::new(entrypoint)
-            })
-            .collect();
+        let package_entrypoints: Vec<Arc<ResolvedEntrypoint>> = package_entrypoints.into_iter().map(Arc::new).collect();
         let failed_targets: Arc<Mutex<Set<String>>> = Arc::new(Mutex::new(Set::new()));
         let failed_sources: Arc<Mutex<FxHashMap<Path, Arc<Mutex<failedAmbientModuleLookupSource>>>>> = Arc::new(Mutex::new(FxHashMap::default()));
         let mut result = perPackageExtractionResult {

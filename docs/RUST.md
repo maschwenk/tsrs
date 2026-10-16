@@ -113,17 +113,17 @@ stays on oxc's allowlist: changing eager `unwrap_or(f())` evaluation can change 
    LTO modes, or tuning knobs assuming higher is better — existing settings encode prior measurements.")
 3. **Arena struct sizes are pinned.** A type with one instance per node, symbol, type, signature or link has
    `const _: () = assert!(std::mem::size_of::<T>() == N);` next to it. A change that edits `N` states the old and new
-   size and the census result (`notes/mem-census.md`). (oxc generates these for every AST type; ty pins `Type` at 16
-   bytes; rust-analyzer pins `TypeRef`.)
+   size and exercises the affected ownership paths (`docs/DEBUGGING.md`, "Arena recycling checks"). (oxc generates
+   these for every AST type; ty pins `Type` at 16 bytes; rust-analyzer pins `TypeRef`.)
 4. **Integers express their domain.** Source byte positions and offsets are `u32`, collection indexes/counts are
    `usize`, and bit sets use unsigned storage. An absent value is `Option`, directional or otherwise genuinely
    negative state is a named enum, and comparators return `Ordering`. Signed protocol/FFI integers stay signed only
    at the boundary and are validated before entering these internal domains.
 4. **Return what is stored; allocate once.** Where Go returns a stored slice or string, Rust returns `&'static [T]`
    or `&'static str`, not a fresh `Vec` or `String` (`notes/cpu-checker.md` changes 6 to 8 found such copies by profiling:
-   304.9 G -> 296.3 G instructions; per-call copies of names and lists were found the same way). When a hot path changes, check it with
-   `--features alloc-profile`. In a recursive collector, pass an accumulator instead of returning a collection per
-   level (rust-analyzer style guide, "Premature Pessimization").
+   304.9 G -> 296.3 G instructions; per-call copies of names and lists were found the same way). When a hot path changes,
+   measure instructions retired and peak RSS. In a recursive collector, pass an accumulator instead of returning a
+   collection per level (rust-analyzer style guide, "Premature Pessimization").
 5. **Comparators are total orders.** Rust's `sort_by` may panic on a comparator that is not one; Go's does not.
    Where the Go comparator is not total, complete it with a tie-breaker (`notes/lsp-memfix.md`).
 6. **Slow paths are split out.** The rare branch of a hot function goes into a `#[cold]` function so the common
@@ -184,7 +184,7 @@ Not tried. Each needs a measurement before it is adopted; none is applied yet:
 
 | Candidate | Who does it | What it would give | What it needs |
 | --- | --- | --- | --- |
-| Allocation-count snapshot gate | oxc `tasks/track_memory_allocations` (`cargo allocs`, then `git diff --exit-code` in CI), Rolldown | A stray heap allocation on a hot path becomes a diff in a checked-in snapshot. Counts are exact on one thread. | A fixed corpus, one checker, the counting allocator behind `alloc-profile`. |
+| Allocation-count snapshot gate | oxc `tasks/track_memory_allocations` (`cargo allocs`, then `git diff --exit-code` in CI), Rolldown | A stray heap allocation on a hot path becomes a diff in a checked-in snapshot. Counts are exact on one thread. | A fixed corpus, one checker, and a new allocation-counting tool. |
 | Miri on all of `tsrs_core` | oxc (strict provenance, allocator and AST crates), rust-analyzer (`intern`), Bun (tree borrows, 17 crates) | Soundness of the handle and region code, where a third of the `unsafe` is. The arena free-list tests already run under Miri in CI (`arena-safety`, `notes/fix-arena-recycle-uaf.md`). | Nightly and `--features plain-ptrs` (Miri does not support the compressed handles' `PROT_NONE` reservation). |
 | Conformance with `debug-assertions` and `overflow-checks` in an optimized profile | oxc `[profile.coverage]` | Overflow and failed debug assertions that release builds skip. | A profile and a second conformance run. |
 | A symbol order file at link time | Bun (order file from a function-entry trace) | Part of BOLT's gain without a post-link step, on every platform. | A function-entry trace and `-Wl,--symbol-ordering-file` / `-order_file`. |

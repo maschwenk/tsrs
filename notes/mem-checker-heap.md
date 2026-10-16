@@ -1,5 +1,8 @@
 # mem-checker-heap: the memory each checker holds outside the arena
 
+> The allocation profiler and reachability census have been removed. Measurements using them describe the
+> recorded revision; use the [current memory debugging guide](../docs/DEBUGGING.md#arena-recycling-checks) for new work.
+
 Three memory rounds shrank the arena objects (types, symbols, nodes). This round looks at what each checker allocates
 with malloc (mimalloc): caches, link-store tables, symbol-table entries, per-type maps, vector slack. Representation
 only: what is cached, and when, does not change. Goal: -5 to -10% peak at 8 checkers without more instructions.
@@ -16,15 +19,14 @@ origin/main 8f3ad97, `--noEmit --incremental false --extendedDiagnostics`.
   memo), with containers, entries, capacity, bytes per slot, load factor and heap bytes (hashbrown's layout: buckets x
   slot rounded to 16, plus control bytes; requested bytes, before mimalloc's size classes). `TSRS_HEAP_CENSUS_MIN`
   (bytes, default 1 MiB) is the smallest row printed. Nothing runs unless the variable is set.
-- The alloc-profile heap sampler (`--features alloc-profile`, `TSRS_HEAP_PROFILE=1`) now works on Linux (symbols from
-  `addr2line` over the `release` profile's line tables, inlined frames included; `/proc/self/maps` for the load
-  address, data segments and `pthread_getattr_np` for the stack, so the census code also links there),
-  `TSRS_HEAP_PROFILE_RATE=<bytes>` sets the sampling interval (default 256 KiB), and `TSRS_HEAP_PROFILE_TSV=<file>`
-  writes every sampled stack per thread group (`main` = the CLI's `tsrs` thread, `checker-N`, `other` = parse and
-  rayon threads) with its live, at-peak and cumulative bytes; stderr gets the per-group totals. This attributes the
-  containers that arena objects own (conditional-type instantiation maps, member symbol tables, ...), which the
-  census cannot reach. Containers that are folded into one function by the linker (identical generic code) show the
-  wrong generic parameters in the innermost frames; the callers are right.
+- The now-removed heap sampler supported Linux, resolving symbols and inlined frames with `addr2line` over the
+  `release` profile's line tables. It used `/proc/self/maps` for the load address and data segments, and
+  `pthread_getattr_np` for the stack. Its default sampling interval was 256 KiB. It exported every sampled stack
+  per thread group (`main` = the CLI's `tsrs` thread, `checker-N`, `other` = parse and rayon threads) with its live,
+  at-peak and cumulative bytes, and printed per-group totals on stderr. This attributed containers owned by arena
+  objects (conditional-type instantiation maps, member symbol tables, ...), which the heap census cannot reach.
+  Where the linker folded identical generic code into one function, the innermost frames showed incorrect generic
+  parameters; the caller frames were correct.
 
 ## Where a checker's memory is
 

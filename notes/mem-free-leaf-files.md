@@ -89,7 +89,7 @@ that another file imports has an import reason.
 | declaration diagnostics (`--noEmit` with `declaration` or `composite`) | not settled: they run the declaration transform over every file after the pass, so leaf freeing is off |
 | `--explainFiles` | not settled: it reads each importer's import nodes, so leaf freeing is off |
 | `--checkerCostCache` | reads `SourceFile` fields only (leaves have no ts-check directive) |
-| `TSRS_FILE_TIMES`, `TSRS_ASSIGNMENT_STATS`, the work, heap and reachability censuses | walk trees or checker tables after the pass: leaf freeing is off |
+| `TSRS_FILE_TIMES`, `TSRS_ASSIGNMENT_STATS`, the work and heap censuses | walk trees or checker tables after the pass: leaf freeing is off |
 | checker creation (globals, augmentations, UMD globals, pattern ambient modules) | runs when the pool is created, before the pass |
 | deferred diagnostics | produced at the end of the file's own check |
 | getAlternativeContainingModules' loops over every module (printer.rs) | skip other checkers' leaves, see below |
@@ -219,7 +219,7 @@ Single-threaded instructions (Linux, bench/count.py, two runs each): vscode 113.
 t3code-server 57.767 G -> 57.865 G (+0.17%). Peak RSS single-threaded: vscode 2,036 -> 1,720 MB, t3code-server 891 ->
 827 MB.
 
-Alloc-profile build, vscode, 4 checkers: arena requested 1,581.0 -> 1,580.6 MB (the same objects); thread-arena chunks
+Former profiling build, vscode, 4 checkers: arena requested 1,581.0 -> 1,580.6 MB (the same objects); thread-arena chunks
 1,903 -> 1,503 MB plus 444 MB of file regions (338 MB used); heap peak 445.3 -> 438.2 MB.
 
 ## Gates
@@ -251,8 +251,8 @@ Alloc-profile build, vscode, 4 checkers: arena requested 1,581.0 -> 1,580.6 MB (
 - Leaves whose paths the prediction misses (cal-diy: 145 of its 206 leaves, 29% of the leaves' nodes, but 5.6 MB in
   all): not freed. `TSRS_FREE_LEAVES=all` frees them at the every-file placement's time cost.
 - Files that re-export (barrel files) or that another file imports: by definition not leaves.
-- The reachability census cannot check this: checker caches keep stale entries keyed by a freed leaf's nodes and
-  symbols (never read), which it reports. File regions are off under `TSRS_CENSUS=1`; poison runs are the gate.
+- Poison runs check stale accesses. The historical reachability census could not validate this policy: checker
+  caches keep unread entries keyed by freed leaf nodes and symbols, which it reported as surviving references.
 - On Linux a stray read of a freed leaf reads zeros (`MADV_DONTNEED`) instead of faulting.
 - The pages a leaf shares with a live neighbouring chunk stay.
 

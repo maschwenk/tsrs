@@ -22,7 +22,7 @@ fn run_with(dir: &Path, checkers: &str, poison: bool, extended: bool, relation_l
     if extended {
         cmd.arg("--extendedDiagnostics");
     }
-    for var in ["TSRS_CHECKER_ASSIGNMENT", "TSRS_FILE_TIMES", "TSRS_ASSIGNMENT_STATS", "TSRS_HEAP_CENSUS", "TSRS_CENSUS", "TSRS_MAX_MEMORY"] {
+    for var in ["TSRS_CHECKER_ASSIGNMENT", "TSRS_FILE_TIMES", "TSRS_ASSIGNMENT_STATS", "TSRS_HEAP_CENSUS", "TSRS_MAX_MEMORY"] {
         cmd.env_remove(var);
     }
     match relation_limit {

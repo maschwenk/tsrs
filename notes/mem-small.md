@@ -25,7 +25,7 @@ pointer + `u32` length) and the `u32` id packed into 24 bytes, then four words: 
 declaration, parent and the pointer to the `SymbolTables` tail (members, exports, export symbol; allocated on the
 first non-nil write, mem-layout step 5). Removing one word is enough.
 
-Counted (alloc-profile, the private monorepo single, default mode): 796,407 tails for 13,212,574 symbols (6.0%).
+Counted (historical allocation profile, the private monorepo single, default mode): 796,407 tails for 13,212,574 symbols (6.0%).
 So the tail pointer now shares one word with `parent` (`SymbolParentWord`): the word holds the parent's address
 until the symbol gets a tail; the first tail write allocates the tail with the current parent copied into it and
 stores the tail's address with bit 63 set. `parent()` reads the word (or the tail's parent when the bit is set),
@@ -76,7 +76,7 @@ length). The flow node of every kind is now read and written through `Node::flow
 `has_flow_node_data()` (21 call sites; the generated `flow_node_data()` became the crate-private `flow_node_base()`,
 so no caller can miss an identifier's flow node).
 
-Arena (alloc-profile, single): `NodeAlloc<Identifier>` 310.7 MB (8.15M x 40) -> 239.9 MB (7.86M x 32) + 10.8 MB
+Arena (historical allocation profile, single): `NodeAlloc<Identifier>` 310.7 MB (8.15M x 40) -> 239.9 MB (7.86M x 32) + 10.8 MB
 `IdentifierWithText` (283K x 40).
 
 | run (3 interleaved rounds) | peak GiB | instructions |
@@ -95,7 +95,7 @@ redundant, is the landed version.) The extra instructions are the text index loo
 Gates: suite trees identical to step 1 in all three modes, also with a dev build (debug assertions) and
 `TSRS_CHECK_SHARED=1`; AST oracle 113/113 libs, 17,318/17,319 test units (the known non-UTF-8 file) and 38,911/38,911
 private-monorepo files identical to Go; private-monorepo output and counters identical in all four runs (and with
-the dev build, 4 checkers). Census (`TSRS_CENSUS_VERIFY=1`, both lazy modes): precise walk 0 references to freed
+the dev build, 4 checkers). Historical census (precise verification, both lazy modes): precise walk 0 references to freed
 blocks; the strong mark reported one "violation" in each mode, a heap word of `new_checker` whose two `u32` halves
 (0x7c00, 0x7c01 / 0x7c02) read as the address of a freed `[P<InferenceInfo>]` block in the census arena region
 (0x7c00_0000_0000+). It is a coincidence of the census's address choice: with the census arena moved to
@@ -105,7 +105,7 @@ nodes; the precise walk does, through `flow_node()`.)
 
 ## 3. Next arena rows: `Symbol` 48 -> 40 bytes (value declaration as a bit)
 
-Profile after step 2 (alloc-profile, single): Symbol 605 MB (13.2M x 48), TypeMapper 255, NodeAlloc<Identifier> 240,
+Profile after step 2 (historical allocation profile, single): Symbol 605 MB (13.2M x 48), TypeMapper 255, NodeAlloc<Identifier> 240,
 [ValueSymbolLinks] 238, [P<Type>] 217, ObjectType / TypeReference 167 / 165, Signature 136, StructuredMembers 125.
 `Symbol` is still the largest row, so it went first.
 

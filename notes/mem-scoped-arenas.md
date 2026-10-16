@@ -1,5 +1,8 @@
 # mem-scoped-arenas: scoped reclamation of the checker's dead memory
 
+> The allocation profiler and reachability census have been removed. Measurements using them describe the
+> recorded revision; use the [current memory debugging guide](../docs/DEBUGGING.md#arena-recycling-checks) for new work.
+
 Branch `mem/scoped-arenas` (from main ff92b7f). The task: give back, per checker scope (an inference context, a
 `chooseOverload` attempt, a speculative expression check), the memory notes/mem-census.md measured as unreachable
 at exit, without a dangling `P<T>` and without any change in results.
@@ -14,9 +17,9 @@ that are exact were reclaimed with the existing per-object escape bit, freed at 
 
 ## What was left at the start
 
-New census switch `TSRS_CENSUS_SKIP_FREED=1`: the tables leave out the blocks the arena already frees or rewinds
+The historical census tables left out the blocks the arena already freed or rewound
 (reused in normal builds), so they show the garbage that remains. Main ff92b7f, private monorepo, one checker,
-default mode, grouped by cause from `TSRS_CENSUS_TSV` (script below):
+default mode, grouped by cause from the exported census tables:
 
 | cause | main, MB at exit | this branch |
 | --- | --- | --- |
@@ -92,10 +95,10 @@ is created later is unobservable.
 
 ## Census proof per class
 
-Private monorepo, alloc-profile build, `TSRS_CENSUS=1 TSRS_CENSUS_VERIFY=1 TSRS_CENSUS_ASSERT=1`: every freed block
-must be unreachable from the program's roots by the strong mark (pointer words the program stores, from blocks
+Private monorepo, historical instrumented build: every freed block
+had to be unreachable from the program's roots by the strong mark (pointer words the program stores, from blocks
 allocated before the free), and the precise walk (every node, parent, JSDoc node, diagnostic, flow node, flow list,
-declaration) must find no freed block.
+declaration) had to find no freed block.
 
 New frees (one checker, default mode, by allocation site; main 334.0 MB -> 388.1 MB):
 
@@ -124,8 +127,8 @@ exit).
 
 ## Poison and debug checks
 
-- `TSRS_ARENA_POISON=1` fills freed blocks with 0xA5 and never reuses them. New: alloc-profile builds then check
-  every `P` dereference (`Deref`, `P::get`) of an 8-byte-aligned target of 8 bytes or more against the fill and panic
+- `TSRS_ARENA_POISON=1` fills freed blocks with 0xA5 and never reuses them. The now-removed profiling build also checked
+  every `P` dereference (`Deref`, `P::get`) of an 8-byte-aligned target of 8 bytes or more against the fill and panicked
   at the use ("dereference of a freed block"), instead of a changed result somewhere later.
 - Private monorepo with the poison-checking profile build: output and counters identical to main in all four modes
   (1 / 4 checkers, default / `TSRS_LAZY_MEMBERS=0`).
@@ -135,9 +138,9 @@ exit).
   assertions: freed free-list blocks are poisoned and checked when reused, frees assert that the block belongs to
   the arena that frees it): trees identical in default and `TSRS_LAZY_MEMBERS=0`.
 
-## Census tooling changes
+## Historical census tooling changes
 
-- `TSRS_CENSUS_SKIP_FREED=1` (above).
+- Excluded already-freed blocks from the garbage tables (above).
 - The strong mark scans the root ranges (data segments, stack) in 8-byte steps. With 4-byte steps it read the high
   half of one word and the low half of the next as a pointer: in `SOURCE_TEXTS` (pointer, length) slots, a heap
   address's high half 0x200 next to a text length of 0x7c01 is the arena address 0x7c01_0000_0200, which happened to be
@@ -175,7 +178,7 @@ run; main and this branch agree whenever they saw the same file.)
 - Fourslash: 4,066 pass / 63 fail, same pass list as main.
 - `cargo test -p tsrs_cli`: green (tsctests, default_emit). On macOS the test binary links only with `api.rs`'s
   `memory_tests` (glibc `malloc_trim`, `/proc`) compiled out, which is the same on main; not changed here.
-- `RUSTFLAGS="-D warnings" cargo +1.99.0 check --workspace --locked`, and `-p tsrs_cli --features alloc-profile`: clean.
+- `RUSTFLAGS="-D warnings" cargo +1.99.0 check --workspace --locked`, including the historical instrumentation build: clean.
 
 ## Not done / rejected
 
@@ -192,13 +195,8 @@ run; main and this branch agree whenever they saw the same file.)
 
 ## Reproduce
 
-```sh
-CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile
-cd <private monorepo>/apps/olympus
-TSRS_CENSUS=1 TSRS_CENSUS_VERIFY=1 TSRS_CENSUS_ASSERT=1 TSRS_CENSUS_SKIP_FREED=1 TSRS_CENSUS_TSV=/tmp/c.tsv \
-  <wt>/target/prof/release/tsrs -p . --noEmit --extendedDiagnostics --pretty false --incremental false --checkers 1
-TSRS_ARENA_POISON=1 <wt>/target/prof/release/tsrs -p . --noEmit ...   # poison + dereference check
-```
+The historical census run is no longer available. For current ownership validation, use the
+[arena recycling checks](../docs/DEBUGGING.md#arena-recycling-checks).
 
 The scope measurement was a local patch: `tsrs_core::census_scope_begin(kind) -> u32` (the thread's census block
 count) and `census_scope_end(begin, kind)` (records the outermost scope of each kind), called around the argument

@@ -5,6 +5,11 @@ change are identified separately from measurements of the packaged release. For 
 see the [compatibility table](COMPATIBILITY.md); detailed investigations are indexed in the
 [engineering notes](../notes/README.md). The early development log follows the release entries.
 
+## Unreleased
+
+Removed the `alloc-profile` build feature, its counting allocator, heap sampler and reachability census.
+The remaining memory reports and arena recycling checks are documented in the [debugging guide](DEBUGGING.md).
+
 ## 2026-10-14: 0.15.0 release
 
 All seven packages use `0.15.0-ts7.1.0-dev.20260929`. The TypeScript pin is unchanged (`b85298b6`, 7.1.0-dev.20260929).
@@ -656,8 +661,8 @@ the private monorepo depends on: types and symbols identical (1,526 files), coun
 
 The private monorepo's peak footprint is now below the Go reference: 15.35 GB `--singleThreaded` (was 19.5; tsgo 16.7) and
 23.35 GB with 4 checkers (was 28.3; tsgo 24.4), counters and conformance unchanged. The largest item was lazy JSDoc
-parsing copying the whole file text per node (3 GB). Opt-in arena/heap allocation profile:
-`--features alloc-profile` on `tsrs_cli` (+ `TSRS_HEAP_PROFILE=1`; docs/DEBUGGING.md).
+parsing copying the whole file text per node (3 GB). These measurements used the arena/heap allocation profiler
+that has since been removed.
 
 ## 2026-09-30 (later): lazy member resolution on by default
 
@@ -791,7 +796,7 @@ no Actions history); all tags were kept. Commit SHAs from before this date no lo
 
 ## 2026-10-01: memory census (garbage at exit)
 
-`TSRS_CENSUS=1` (alloc-profile build) marks what is reachable at exit: on the private monorepo with one checker, 661 of 4,572 MB arena and 82 of 1,592 MB live heap are unreachable (~0.7 of 6.3 GiB peak), led by inference contexts (~210 MB), scratch mappers and type lists (~175 MB), and object literal types from overload re-checks (~165 MB). Method, tables and a ranked recycling list: `notes/mem-census.md`.
+The historical reachability census measured what was reachable at exit: on the private monorepo with one checker, 661 of 4,572 MB arena and 82 of 1,592 MB live heap are unreachable (~0.7 of 6.3 GiB peak), led by inference contexts (~210 MB), scratch mappers and type lists (~175 MB), and object literal types from overload re-checks (~165 MB). Method, tables and a ranked recycling list: `notes/mem-census.md`.
 
 ## 2026-10-01: parse CPU (scanner, parser, AST construction)
 

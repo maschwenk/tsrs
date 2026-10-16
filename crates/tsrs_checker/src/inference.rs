@@ -23,7 +23,6 @@ impl Checker {
     pub(crate) fn put_inference_state(&mut self, n: P<InferenceState>) {
         n.visited.clear_scratch();
         n.inferences.borrow_mut().clear();
-        tsrs_core::census_scrub_slack(&mut n.inferences.borrow_mut());
         n.original_source.set(None);
         n.original_target.set(None);
         n.priority.set(InferencePriority::None);

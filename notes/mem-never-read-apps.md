@@ -1,5 +1,8 @@
 # mem-never-read-apps: what each checker creates, keeps and never reads on the app projects
 
+> The allocation profiler and reachability census have been removed. Measurements using them describe the
+> recorded revision; use the [current memory debugging guide](../docs/DEBUGGING.md#arena-recycling-checks) for new work.
+
 Question (2026-10-07): notes/mem-use-census.md found that about 13% of what a checker allocates is reachable and never
 read, on the 38k-file codebase, vscode and mui-docs. On t3code-server, cal-diy and formbricks-web every extra checker
 rebuilds a different kind of graph (Effect generics with project arguments; zod and @types/react instantiations,
@@ -22,12 +25,12 @@ per-checker growth (pools P5 and P9 below), so landing them would not change thi
 Base: origin/main 4f43c94. Mac: Apple M5 Max, 18 cores, 16 KiB pages, 1-minute load 10-20 during the runs. Linux:
 Depot `depot-ubuntu-24.04-64`, THP `madvise`. MB are 2^20 bytes.
 
-## 1. Method: the use census on current main
+## 1. Historical method: the use census on the recorded revision
 
-The tool of notes/mem-use-census.md (`TSRS_CENSUS=1 TSRS_USE_CENSUS=1`, alloc-profile build) was ported to main on
+The experimental read-tracking tool of notes/mem-use-census.md was updated to the then-current main on
 branch `mem/use-census-apps` (435addd, 74190f7, 0c6e7cb; analysis script `tools/perf/usecensus.py` in b8024ab). Main
-has compressed handles now, and the reachability census decodes 48-bit words, so the census build is
-`--features alloc-profile,tsrs_core/plain-ptrs`: handles are 8 bytes there and every byte figure below is larger than
+had compressed handles, but the reachability census decoded 48-bit words and required plain pointers:
+handles were 8 bytes there and every byte figure below is larger than
 in a release build (roughly 1.2-1.4x). Read the shares. What had to change besides the merge:
 
 - New cells of main record reads: `ThinSlice::get` (the elements' block), `ThinSliceCell`, `OptionThinSliceCell`,
@@ -46,7 +49,7 @@ in a release build (roughly 1.2-1.4x). Read the shares. What had to change besid
   `get_declaration_modifier_flags_from_symbol` in `properties_related_to` and member lookups.
 
 Runs: `-p <project> --noEmit --incremental false --extendedDiagnostics --checkers {1,4}`,
-`TSRS_USE_CENSUS_FRAMES=9` (and 24 for the outermost asker), `TSRS_USE_CENSUS_FIRST_READS=1`, `TSRS_CENSUS_TSV`.
+nine stack frames (24 for the outermost asker), first-reader tracking and exported census tables.
 5-10 GB and 20-40 s per run.
 
 ## 2. Totals (checker phase: arena blocks and link records allocated after the first checker, freed blocks left out)
@@ -225,14 +228,6 @@ graph, and it is read; reducing it means sharing it (notes/mem-shared-base.md, o
 ## Reproduce
 
 ```sh
-git worktree add ../census origin/mem/use-census-apps && cd ../census
-CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile,tsrs_core/plain-ptrs
-cd <bench-cache>/solutions/t3code-server
-TSRS_CENSUS=1 TSRS_USE_CENSUS=1 TSRS_USE_CENSUS_FRAMES=9 TSRS_USE_CENSUS_FIRST_READS=1 TSRS_CENSUS_TSV=t3-c1.tsv \
-  <census>/target/prof/release/tsrs -p apps/server --noEmit --incremental false --extendedDiagnostics --checkers 1 2> t3-c1.err
-# the same with --checkers 4 into t3-c4.tsv / t3-c4.err, then
-python3 <census>/tools/perf/usecensus.py pools t3 4
-python3 <census>/tools/perf/usecensus.py askers t3-c1.tsv t3-c4.tsv 4
 # D1: build 8be2e48; TSRS_LAZY_SIGNATURES=0 restores main's behaviour
 depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref <branch with 8be2e48> \
   --input projects=t3code-server,cal-diy,formbricks-web,vscode --input script=tools/perf/leafprobe.sh \

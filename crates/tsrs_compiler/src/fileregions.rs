@@ -101,14 +101,12 @@ pub const MAX_DEFAULT_CHECKERS: usize = 16;
 /// Keeps lazy declaration parsing within its supported CLI modes.
 ///
 /// Whether the CLI may parse declaration-file member lists lazily (notes/mem-lazy-dts-members.md):
-/// `TSRS_LAZY_DTS=0` turns it off, and so do the debug modes that walk or freeze the whole program (the
-/// reachability census, the shared-object check).
+/// `TSRS_LAZY_DTS=0` turns it off, and so does the shared-object check, which freezes the whole program.
 pub fn lazy_dts_allowed() -> bool {
     if std::env::var_os("TSRS_LAZY_DTS").is_some_and(|v| v == "0" || v == "off") {
         return false;
     }
-    let census = std::env::var_os("TSRS_CENSUS").is_some_and(|v| v == "1") || tsrs_core::census_recording();
-    !census && !tsrs_core::ptr::shared_check::enabled()
+    !tsrs_core::ptr::shared_check::enabled()
 }
 
 /// Enables lazy declaration parsing for subsequent CLI programs.
@@ -226,12 +224,11 @@ fn global_library_files(program: &crate::program::Program) -> Vec<P<SourceFile>>
 /// `stats` reports (`stats_report`); `all` gives every TypeScript root file a region
 /// (`LeafSettings::every_file`), at any count. Off under the debug modes that walk files or checker data
 /// after the pass (`TSRS_FILE_TIMES` walks every tree; `TSRS_ASSIGNMENT_STATS`, the work and heap censuses
-/// walk checker tables) or that must see every block alive (the reachability census, `TSRS_CENSUS=1`). Off
+/// walk checker tables). Off
 /// without compressed pointers on unix (`Region::retire_on_free`), whatever the value.
 pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
-    let census = std::env::var_os("TSRS_CENSUS").is_some_and(|v| v == "1") || tsrs_core::census_recording();
     let checker_census = crate::Checker::census_enabled() || crate::Checker::heap_census_enabled();
-    if census || checker_census || crate::checkerpool::file_times_path().is_some() || crate::checkerpool::assignment_stats_enabled() {
+    if checker_census || crate::checkerpool::file_times_path().is_some() || crate::checkerpool::assignment_stats_enabled() {
         return LeafSettings::default();
     }
     // Only where a freed region's pages go back to the system and its range is never reused (`Region::retire_on_free`

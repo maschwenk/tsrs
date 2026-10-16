@@ -57,12 +57,6 @@ const TAG_TABLES: u8 = 1;
 /// The value declaration is the first declaration.
 const TAG_VALUE_FIRST: u8 = 2;
 
-/// Census builds: the name word keeps its length and tag bits above the address (`crate::census_layouts`).
-pub(crate) fn census_layout() {
-    let off = std::mem::offset_of!(Symbol, name);
-    tsrs_core::census_layout(std::any::type_name::<Symbol>(), &[tsrs_core::CensusField::Tagged { off }]);
-}
-
 impl Symbol {
     /// Allocates a fresh symbol (Go `&ast.Symbol{Flags: flags, Name: name}`).
     pub fn new(flags: SymbolFlags, name: &'static str) -> P<Symbol> {
@@ -663,7 +657,6 @@ fn index_hash(hash: u32) -> u64 {
     let h = hash as u64;
     h | (h << 44)
 }
-
 
 impl SymbolMap {
     fn with_capacity(n: usize) -> SymbolMap {

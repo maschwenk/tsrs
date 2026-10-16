@@ -329,13 +329,11 @@ const TAGGED_ADDR: u64 = (1 << TAGGED_LEN_SHIFT) - 1;
 
 impl OwnedTaggedStrCell {
     #[inline]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new(value: &'static str) -> OwnedTaggedStrCell {
         OwnedTaggedStrCell(Cell::new(Self::pack(value)))
     }
 
     #[inline]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     fn pack(s: &'static str) -> u64 {
         let a = s.as_ptr().expose_provenance() as u64;
         if (s.len() as u64) < TAGGED_LEN_MASK && a >> TAGGED_LEN_SHIFT == 0 {
@@ -345,7 +343,6 @@ impl OwnedTaggedStrCell {
     }
 
     #[cold]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     fn pack_long(s: &str) -> u64 {
         let len = u32::try_from(s.len()).expect("string longer than u32::MAX");
         let mut bytes = Vec::with_capacity(4 + s.len());
@@ -374,7 +371,6 @@ impl OwnedTaggedStrCell {
     }
 
     #[inline]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn set(&self, value: &'static str) {
         crate::ptr::shared_check::assert_not_shared(self, "OwnedTaggedStrCell");
         self.0.set(Self::pack(value) | self.0.get() & !(TAGGED_ADDR | (TAGGED_LEN_MASK << TAGGED_LEN_SHIFT)));
@@ -417,7 +413,6 @@ impl<T> Default for OwnedPSliceCell<T> {
 
 impl<T> OwnedPSliceCell<T> {
     #[inline]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new(value: &'static [T]) -> OwnedPSliceCell<T> {
         #[cfg(not(compressed_ptrs))]
         return OwnedPSliceCell(crate::ptr::SliceCell::new(value));
@@ -431,7 +426,6 @@ impl<T> OwnedPSliceCell<T> {
     }
 
     #[inline]
-    #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn set(&self, value: &'static [T]) {
         crate::ptr::shared_check::assert_not_shared(self, "OwnedPSliceCell");
         self.0.set(value);

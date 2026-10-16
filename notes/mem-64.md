@@ -62,7 +62,7 @@ its threads, so the per-checker cost is all work-related.
 
 ### macOS (M5 Max, 18 cores, 16 KiB pages, no THP), vscode: arena / heap / rest per checker
 
-`--features alloc-profile` (`TSRS_ALLOC_PROFILE_TOP`, per-arena table added here), peak = `/usr/bin/time -l`
+The historical allocation profiler's per-arena table, peak = `/usr/bin/time -l`
 peak memory footprint. MB = 2^20 bytes.
 
 | checkers | arena requested | heap (non-arena) | peak | peak - (arena + heap) |
@@ -257,5 +257,5 @@ parse worker holds ~11 MiB of it at the peak; the 64 creation threads hold littl
   `malloc_trim`, as on main).
 - `tools/lint/ratchet.py`: ok, none new; `tools/lint/source.py --update` (two Relaxed atomics of the sparse-page
   switches removed from `atomics.tsv`).
-- Tooling kept: `tools/perf/probe.sh` (variant builds, `/proc` sampling, perf counter), the alloc profile's per-arena
-  table (`crates/tsrs_core/src/alloc_profile.rs`).
+- `tools/perf/probe.sh` supplied variant builds, `/proc` sampling and perf counters. The per-arena allocation
+  table used for this investigation came from the profiler that has since been removed.

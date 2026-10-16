@@ -47,7 +47,7 @@ excalidraw and within 4% on type-fest.
 
 ### Where the memory went
 
-At 9 checkers, the alloc-profile build (`TSRS_ALLOC_PROFILE_TOP=40`) attributes most of the arena to node builder
+At 9 checkers, the historical allocation profile attributed most of the arena to node builder
 output:
 
 - 221.8 MB of `NodeBuilderContext` (559K of them; 62K at one checker)
@@ -360,7 +360,6 @@ python3 bench/run.py --setup-only --projects excalidraw,type-fest
 cd bench/.work/solutions/excalidraw
 F="--noEmit --incremental false --pretty false --extendedDiagnostics"
 /usr/bin/time -l tsrs -p . $F --checkers 9                                 # peak, instructions
-TSRS_ALLOC_PROFILE_TOP=40 target/prof/release/tsrs -p . $F --checkers 9    # --features alloc-profile build
 TSRS_ASSIGNMENT_STATS=times tsrs -p . $F --checkers 9                      # per-checker seconds
 BUN_INSTALL=~/Developer/tsrs-work/bun-canary bun check -p $PWD --no-pretty --all --threads=9   # from an empty cwd
 # type-fest per-file costs (locality, 2+ checkers)

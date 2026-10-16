@@ -129,17 +129,6 @@ pub(crate) fn identifier_alloc_size(n: &Node) -> usize {
     }
 }
 
-/// Census builds: the identifier word holds a flow node's address / 8 in the modes that keep one
-/// (`crate::census_layouts`).
-pub(crate) fn census_layout() {
-    use std::mem::offset_of;
-    let word = offset_of!(Identifier, word);
-    let field = |data: usize| tsrs_core::CensusField::X8 { off: data + word, modes: (1 << MODE_SOURCE_FLOW) | (1 << MODE_TEXT) };
-    tsrs_core::census_layout(std::any::type_name::<NodeAlloc<Identifier>>(), &[field(offset_of!(NodeAlloc<Identifier>, data))]);
-    let data = offset_of!(NodeAlloc<IdentifierWithText>, data) + offset_of!(IdentifierWithText, identifier);
-    tsrs_core::census_layout(std::any::type_name::<NodeAlloc<IdentifierWithText>>(), &[field(data)]);
-}
-
 #[inline]
 fn flow_slot(flow: Option<P<FlowNode>>) -> u64 {
     P::pack_opt(flow)

@@ -274,9 +274,6 @@ impl checkerPool {
         let region = Region::new(1 << 20);
         let mut checker = {
             let _scope = region.enter();
-            // Census builds: the checker struct is built on the stack with unset fields (e.g. the length word of a
-            // `None` slice); clear the stale words they would copy.
-            tsrs_core::census_scrub_stack();
             PooledChecker::new(tsrs_checker::new_checker(self.program))
         };
         self.instances.lock().unwrap().insert(checker.as_non_null().as_ptr() as usize, checkerInstance { disposed: None, region, leases: 0, pinned });

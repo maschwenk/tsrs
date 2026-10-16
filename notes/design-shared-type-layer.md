@@ -591,7 +591,7 @@ The spike plan called this design B: "the only design that can hang".
 | Late freeze: the sample on checker 0, scratch-region checkers 1-7, the switch (finish the file, keep its files' diagnostics, retire, fork) | 1 week |
 | Tables: two-level interning maps, the instantiation-table split, link-store read-through, flag families at the freeze, `FrozenCell` swaps | 1 week |
 | A generated `Checker::fork` over the 347 fields of `Checker` (checker.rs:941-1340) instead of the spike's hand-written 345 | 0.5 week |
-| Memos keyed by `type_count`, Go mode off, `TSRS_CENSUS` / heap census and the `plain-ptrs` build made aware of the frozen region | 0.5-1 week |
+| Memos keyed by `type_count`, Go mode off, heap census and the `plain-ptrs` build made aware of the frozen region | 0.5-1 week |
 | Fidelity gates (stage 2) | 1-2 weeks, open-ended if a history-dependent difference appears |
 
 The fidelity gates are: conformance in the default mode, with `TSRS_LAZY_MEMBERS=0`, and canonical with 4 checkers per

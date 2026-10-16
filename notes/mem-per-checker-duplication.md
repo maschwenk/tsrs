@@ -64,13 +64,13 @@ instructions repeat work another checker also did.
 
 ## 2. What an extra checker's memory is
 
-### 2a. Arena, heap, rest (`--features alloc-profile`, 1 vs 16 checkers)
+### 2a. Arena, heap, rest (historical allocation profile, 1 vs 16 checkers)
 
 "Arena used" is the arena chunks minus their untouched tails (resident on macOS); "requested" counts every allocation,
 including blocks handed out again from free lists (mappers, inference contexts, type lists; notes/mem-recycle.md), so it
 overstates. Heap = the counting allocator's live heap. MiB per extra checker, (16-checker value - 1-checker value) / 15:
 
-| project | arena used | heap | rest (footprint - both) | footprint (alloc-profile build) | arena requested | of which reissued from free lists |
+| project | arena used | heap | rest (footprint - both) | footprint (former profiling build) | arena requested | of which reissued from free lists |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | t3code-server | 67.7 | 22.1 | 4.3 | 94.1 | 95.6 | 27.9 |
 | formbricks-web | 36.2 | 22.7 | 7.2 | 66.1 | 43.1 | 6.9 |
@@ -105,8 +105,8 @@ checker.
 
 ### 2c. Reachable, reissued, garbage (reachability census, t3code and formbricks)
 
-`--features alloc-profile,tsrs_core/plain-ptrs`, `TSRS_CENSUS=1` at 1 and 16 checkers. In this build nothing is reissued
-and pointers are 8 bytes, so bytes are larger than in 2a; read the shares. Per extra checker:
+The historical census used plain pointers at 1 and 16 checkers. In that build nothing was reissued
+and pointers were 8 bytes, so byte counts are larger than in 2a; read the shares. Per extra checker:
 
 | project | allocated | reachable at exit | freed to free lists (reissued in a normal run) | unreachable, never freed |
 | --- | ---: | ---: | ---: | ---: |
@@ -386,13 +386,9 @@ not tsgo's) and frees scratch; it does not size its thread count per project.
 
 ```sh
 cargo build --release --locked -p tsrs_cli
-CARGO_TARGET_DIR=target/alloc-profile cargo build --release --locked -p tsrs_cli --features alloc-profile
-CARGO_TARGET_DIR=target/census cargo build --release --locked -p tsrs_cli --features alloc-profile,tsrs_core/plain-ptrs
 CARGO_TARGET_DIR=target/astats cargo build --release --locked -p tsrs_cli -p tsrs_checker --features tsrs_checker/assignment-stats
 cd bench/.work/solutions/<project>
 /usr/bin/time -l tsrs -p <tsconfig> --noEmit --incremental false --pretty false --extendedDiagnostics --checkers N
-TSRS_ALLOC_PROFILE_TOP=60 target/alloc-profile/release/tsrs ... --checkers {1,16}   # 2a, 2b
-TSRS_CENSUS=1 TSRS_CENSUS_TSV=census.tsv target/census/release/tsrs ... --checkers {1,16}   # 2c
 TSRS_HEAP_CENSUS=1 tsrs ... --checkers {1,16}   # 2d
 TSRS_ASSIGNMENT_STATS=1 target/astats/release/tsrs ... --checkers 16   # section 3, per-file report
 tsrs ... --checkers 16 --checkerCostCache costs.txt   # per-file checker CPU, 5a

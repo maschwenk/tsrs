@@ -1,5 +1,8 @@
 # mem-overload-rollback: can the speculative work of overload resolution be rolled back?
 
+> The allocation profiler and reachability census have been removed. Measurements using them describe the
+> recorded revision; use the [current memory debugging guide](../docs/DEBUGGING.md#arena-recycling-checks) for new work.
+
 Experiment 2 of the 2026-10-02 checker-memory round. Question: can the memory allocated by the argument checks of
 rejected overload candidates (and other speculative argument checks whose results are thrown away) be given back,
 without changing any output byte? Result: **measured, not implemented.** The upper bound for the scope the brief
@@ -26,9 +29,9 @@ the `--extendedDiagnostics` counters all depend on them, and most caches are key
 
 So the measurement asks, per variant of (b), how much of the region's memory is unreachable.
 
-## Method (alloc-profile build, `TSRS_CENSUS=1`)
+## Historical method
 
-- **Regions.** `TSRS_CENSUS_REGION=applicable` (default) wraps every `isSignatureApplicable` call from
+- **Regions.** The default region mode wrapped every `isSignatureApplicable` call from
   `chooseOverload` (the three calls without error reporting: each candidate's argument checks and relation checks,
   rejected and chosen, including nested calls inside the arguments). `overload` wraps all of `chooseOverload`
   (adds `inferTypeArguments`, the inference contexts and the signature instantiations). Every arena and heap block
@@ -44,7 +47,7 @@ So the measurement asks, per variant of (b), how much of the region's memory is 
   symbol, value-symbol links of checker-created symbols (binder symbols' slots stay strong), and the tables keyed by
   type ids (an id -> type map built from noted types; one checker, so ids are unique). Entries whose key cannot be
   recovered (`subtype_reduction_cache`, `flow_loop_cache`, `error_types`, `marker_types`, a few undecodable values)
-  are either fully weak (default: over-approximates) or strong (`TSRS_CENSUS_WEAK=decoded`): the two runs bracket
+  are either fully weak (default: over-approximates) or strong (decoded-key mode): the two runs bracket
   variant b2.
 - **Upper bound.** Both marks run at exit. A block unreachable at the end of its region stays unreachable (any later
   lookup goes through a table that holds the pointer), but a block reachable at region end may die later (a scratch
@@ -101,19 +104,11 @@ If someone revisits it: the cheap, exact subset is the census's item 3 restricte
 property symbols never got links and that never entered a cache (a per-type "escaped" bit set by every cache insert
 and link write that takes a type). The b1 column bounds it: at most 127 MB in the named scope.
 
-## Instrumentation landed on the branch
+## Historical branch instrumentation
 
-Status (2026-10-10): none of this is on main. `tsrs_core::census_hooks`, `crates/tsrs_checker/src/census_weak.rs`
-and the `TSRS_CENSUS_REGION` / `TSRS_CENSUS_WEAK` switches are absent from crates/; rerunning the measurement needs
-the experiment branch.
-
-- `tsrs_core::census_hooks` (no-ops without the alloc-profile feature): `region_enter` / `region_exit`, `weak`,
-  `ephemeron`, `note` / `noted`. `census.rs` tags region blocks and prints the region report (types, weak tables
-  holding the b2 part, heap blocks by allocating function, `region` rows in `TSRS_CENSUS_TSV`).
-- `crates/tsrs_checker/src/census_weak.rs`: the weak-table registration; `CensusRegion` guards in
-  `chooseOverload` / `isSignatureApplicable` (checker_05.rs); notes in `newType`, `newSymbol` and the instantiation
-  tables' `make`; `census_entries` / `census_slots` on the link stores; `Symbol::peek_id`.
-- Env: `TSRS_CENSUS_REGION=applicable|overload|none`, `TSRS_CENSUS_WEAK=decoded`.
+The experiment added allocation-region hooks, weak-table registration and ephemeron handling on its branch.
+These hooks never shipped on main, and the underlying allocation profiler and reachability census have now
+been removed. Reproducing the measurements requires the historical experiment revision.
 
 ## Gates (normal build vs the branch point de3beaf)
 
@@ -123,9 +118,8 @@ the experiment branch.
 - Fourslash: 4,066 pass / 63 fail.
 - The private monorepo: diagnostics and `--extendedDiagnostics` counters identical with 1 and 4 checkers and in the
   opt-out mode.
-- `RUSTFLAGS="-D warnings" cargo +1.99.0 check --workspace --locked` clean (also `-p tsrs_cli --features
-  alloc-profile`).
-- No memory is freed, so the census free-gate does not apply to this change. Side finding: the would-free check on
+- `RUSTFLAGS="-D warnings" cargo +1.99.0 check --workspace --locked` was clean, including the historical instrumentation build.
+- This measurement-only change freed no memory. Side finding: the would-free check on
   the branch point itself (no change of ours) now reports 25-27 strongly reachable freed blocks on the private
   monorepo (referrers: `InferenceInfo` +40, `LiteralType` +16, relater maybe-key tables); mem-recycle recorded 0.
   Not investigated here; whoever owns the recycling sites should look.

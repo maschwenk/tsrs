@@ -82,7 +82,7 @@ The writers, counted with `perf record -e syscalls:sys_enter_{mprotect,madvise,m
 With the THP heap the text buffers mostly land in heap memory that is already resident (each fault maps 2 MiB), so
 the kernel's copy rarely faults.
 
-The source text is most of what the front end keeps on the heap. The alloc-profile build's sampled heap profile on
+The source text is most of what the front end keeps on the heap. The former profiling build's sampled heap profile on
 vscode `--noCheck`: heap peak 238-251 MB, 179 MB live at the end. The top live stacks are all
 `DirFS::read_file <- Common::read_file <- CompilerHost::get_source_file <- fileregions::parse_task`. About 1 GB more
 is allocated and freed during the parse.

@@ -1,23 +1,20 @@
-// The alloc-profile build installs tsrs_core's counting allocator (over mimalloc) instead; Miri (which cannot run
-// mimalloc) and `system-alloc` builds (sanitizers, which see only the system allocator's blocks) keep the system's.
-#[cfg(not(any(feature = "alloc-profile", feature = "system-alloc", miri)))]
+// Miri (which cannot run mimalloc) and `system-alloc` builds (sanitizers, which see only the system allocator's
+// blocks) keep the system allocator.
+#[cfg(not(any(feature = "system-alloc", miri)))]
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
-#[cfg(feature = "alloc-profile")]
-#[global_allocator]
-static GLOBAL: tsrs_core::alloc_profile::CountingAllocator = tsrs_core::alloc_profile::CountingAllocator;
 
 /// mimalloc as the global allocator, like `mimalloc_safe::MiMalloc` except that an allocation whose alignment
 /// mimalloc gives every block of its size (at most 16 bytes, and at most the size) takes the plain entry points
 /// rather than the `_aligned` ones, whose extra alignment handling every allocation paid (as the `mimalloc` crate
 /// does).
-#[cfg(not(any(feature = "alloc-profile", feature = "system-alloc")))]
+#[cfg(not(feature = "system-alloc"))]
 struct MiMalloc;
 
-#[cfg(not(any(feature = "alloc-profile", feature = "system-alloc")))]
+#[cfg(not(feature = "system-alloc"))]
 const MI_MAX_ALIGN_SIZE: usize = 16;
 
-#[cfg(not(any(feature = "alloc-profile", feature = "system-alloc")))]
+#[cfg(not(feature = "system-alloc"))]
 // SAFETY: every method forwards to mimalloc, which returns blocks aligned as asked (`MI_MAX_ALIGN_SIZE` for the plain
 // entry points, for blocks at least that large; small blocks are aligned to their size class).
 unsafe impl std::alloc::GlobalAlloc for MiMalloc {
@@ -64,8 +61,6 @@ unsafe impl std::alloc::GlobalAlloc for MiMalloc {
     }
 }
 
-#[cfg(feature = "alloc-profile")]
-mod census;
 mod api;
 mod lsp;
 mod signals;
@@ -73,7 +68,7 @@ mod signals;
 use tsrs_execute::{build, execute, sys, tsc};
 
 // TSRS_MEM_SPLIT (tsrs_core::memsplit): mimalloc's view of its heap, every page of every thread.
-#[cfg(not(any(feature = "alloc-profile", feature = "system-alloc")))]
+#[cfg(not(feature = "system-alloc"))]
 fn mimalloc_heap_stats() -> tsrs_core::memsplit::HeapStats {
     #[repr(C)]
     struct HeapArea {
@@ -110,7 +105,7 @@ fn mimalloc_heap_stats() -> tsrs_core::memsplit::HeapStats {
     stats
 }
 
-#[cfg(not(any(feature = "alloc-profile", feature = "system-alloc")))]
+#[cfg(not(feature = "system-alloc"))]
 fn mimalloc_collect(force: bool) {
     unsafe extern "C" {
         fn mi_collect(force: bool);
@@ -141,12 +136,8 @@ fn main() {
     #[cfg(target_os = "linux")]
     allow_transparent_huge_pages();
     let args: Vec<String> = std::env::args().skip(1).collect();
-    #[cfg(not(any(feature = "alloc-profile", feature = "system-alloc")))]
+    #[cfg(not(feature = "system-alloc"))]
     tsrs_core::memsplit::set_heap_hooks(mimalloc_heap_stats, mimalloc_collect);
-    #[cfg(feature = "alloc-profile")]
-    tsrs_execute::set_census_hook(census::run);
-    #[cfg(feature = "alloc-profile")]
-    tsrs_core::memsplit::set_cycle_hook(tsrs_core::alloc_profile::cycle_report);
     // main.go:21: `--lsp` runs the language server (its threads have their own stacks); `--api` runs the
     // native API server (docs/NODE_API.md).
     if args.first().map(String::as_str) == Some("--lsp") {
@@ -163,13 +154,12 @@ fn main() {
     // Type checking recurses deeply; run on a thread with a large stack
     // (Go's goroutine stacks grow on demand).
     let status = std::thread::Builder::new()
-        .name("tsrs".to_string()) // the alloc profile's "main" thread group
+        .name("tsrs".to_string())
         .stack_size(512 << 20)
         .spawn(move || {
             let sys: &'static sys::osSys = Box::leak(Box::new(sys::new_system()));
             let result = execute::command_line(sys, args);
             tsc::System::flush(sys);
-            tsrs_core::alloc_profile_dump();
             tsrs_compiler::dump_site_counts();
             result.status
         })

@@ -189,59 +189,29 @@ anything that writes (mutation testing, scripts that create files) uses the disp
 `$TSRS_WORK/project-clone`. Before you finish, run `git -C <pristine root> status --short`
 (read-only) and confirm it prints nothing.
 
-## The census free-gate (run it after any memory or layout change)
+## Arena recycling checks
 
-tsrs gives some arena memory back (free lists for dead mappers, inference contexts, type lists, flow labels;
-parser rewinds; language-server regions; notes/mem-recycle.md, notes/lsp-mem.md). A freed block that something
-still points to is a use-after-free. The alloc-profile build checks that at exit: frees are recorded, never reused,
-and every freed block must be unreachable.
-
-The census decodes 48-bit words as pointers, so it needs plain pointers (compressed handles are 32-bit offsets,
-notes/mem-pointer-compression.md); a compressed build refuses `TSRS_CENSUS=1`.
+`TSRS_ARENA_POISON=1` fills freed arena blocks, rewound ranges and released regions with poison and keeps their
+memory mapped. Run the recycling and language-server lifetime regressions after changes to arena ownership:
 
 ```sh
-CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile,tsrs_core/plain-ptrs
-cd $PWD/target && TSRS_CENSUS=1 TSRS_CENSUS_VERIFY=1 TSRS_CENSUS_TOP=5 \
-  ./prof/release/tsrs -p $PRIVATE_PROJECT/tsconfig.json --noEmit --checkers 1 2> census.err
-grep -E "census verify \(recycling\)|strongly reachable freed blocks|violation class" census.err
+cargo build --profile dev -p tsrs_cli -p tsrs_testrunner
+cargo test -p tsrs_core
+cargo test -p tsrs_cli --test recycle_checkers --test free_leaf_files --test lsp_edit_resolutions
 ```
 
-Both numbers must be 0: the precise walk (`census verify (recycling): ... 0 to freed or rewound blocks`) and the
-strong mark (`strongly reachable freed blocks (violations): 0`). Also run `--checkers 4` and `TSRS_LAZY_MEMBERS=0`.
-A run takes 2-3 minutes and ~15 GB (more with 4 checkers): run one at a time. `TSRS_CENSUS_ASSERT=1` exits with
-status 3 on a violation; `TSRS_CENSUS_CHAINS=N` prints N referrer chains (default 20); `TSRS_CENSUS_FRAMES=N` sets the
-frames of the "<- caller" tables (default 2 for heap blocks, 3 for arena blocks). Without the census, the
-alloc-profile build prints the free lists of each arena ("arena free lists": bytes on them at exit and at their peak,
-reissued, and bumped by recycling sites that found their list empty).
+The CLI regressions exercise normal and poison modes. These checks exercise stale accesses; they do not scan the
+object graph for all references to freed memory.
 
-Each `violation class` line names the freed block's site and the referrer's type and field offset. Look the offset
-up in the referrer's current layout (`offset_of!`) before believing it: the strong mark reads every 4-byte step as a
-48-bit pointer unless the type registered its padding, scalar, tagged and x8-encoded words with
-`tsrs_core::census_layout` (`tsrs_checker::types::census_layouts`, `tsrs_ast::census_layouts`). **A layout change
-must update those registrations** (they are computed with `offset_of!`, so reordering fields is covered, but a new
-packed word, flag bits above an address or a new enum payload is not). Stale registrations both invent violations
-(padding read as pointers) and hide real ones (pointer fields skipped). A violation that survives that check is a
-real bug: fix the escape tracking or stop freeing that class. Several census processes run in parallel can report a
-non-zero line for a file that reports 0 alone (the conservative mark's roots include stack contents, which depend on
-scheduling): rerun such a file alone before treating it as a violation.
+The `alloc-profile` feature, heap sampler and reachability census have been removed. Older measurements in the
+[engineering notes](../notes/README.md) describe the instrumentation available at the recorded revision.
 
 ## What each checker holds on the heap: the heap census
 
 `TSRS_HEAP_CENSUS=1` with `--extendedDiagnostics` prints, per checker on stderr, every hash table and vector the
 checker owns directly (cache maps, relation caches, link stores, lazy member tables, ...) with entries, capacity,
 bytes per slot, load factor and heap bytes (`crates/tsrs_checker/src/heapcensus.rs`, notes/mem-checker-heap.md).
-`TSRS_HEAP_CENSUS_MIN=<bytes>` sets the smallest row (default 1 MiB). It works in any build. Containers owned by
-arena objects are attributed by the heap sampler of the alloc-profile build instead:
-
-```sh
-CARGO_PROFILE_RELEASE_STRIP=none CARGO_PROFILE_RELEASE_DEBUG=line-tables-only CARGO_TARGET_DIR=target/prof \
-  cargo build --release -p tsrs_cli --features alloc-profile
-TSRS_HEAP_PROFILE=1 TSRS_HEAP_PROFILE_RATE=65536 TSRS_HEAP_PROFILE_TSV=/tmp/heap.tsv target/prof/release/tsrs -p . --noEmit --checkers 8
-```
-
-The TSV has one row per sampled stack and thread group (`main`, `checker-N`, `other`) with live, at-peak and
-cumulative bytes. Symbols come from `atos` on macOS and `addr2line` on Linux; the `release` profile strips symbols and
-has no debug info, hence the two `CARGO_PROFILE_RELEASE_*` overrides in the build command.
+`TSRS_HEAP_CENSUS_MIN=<bytes>` sets the smallest row (default 1 MiB). It works in any build.
 
 ## What the resident memory is: the memory split
 
@@ -255,11 +225,6 @@ heap live + heap retained (in pages, outside pages) | stacks | file` (`crates/ts
 notes/mem-linux-residency-32.md). `TSRS_MEM_SPLIT=purge` also has mimalloc purge its freed memory after `check end`
 (`mi_collect(true)`) and prints the split again. `tools/perf/slackprobe.sh` runs it on the selected Depot runner
 (`.depot/workflows/perf-probe.yml`, 32 vCPU by default) with interleaved timed reps.
-
-The `alloc-profile` feature on `tsrs_cli` or `tsrs_testrunner` enables arena instrumentation and installs
-`tsrs_core::alloc_profile::CountingAllocator` in that executable. Enabling only `tsrs_core/alloc-profile`
-instruments the library without replacing the executable's allocator. This also lets profiling builds coexist
-with the parser oracle, which owns its own allocator.
 
 ## Optional build features
 
@@ -277,7 +242,7 @@ performance measurements). Features live on the crate that controls the instrume
 The CLI and compiler aliases for these features have been removed. Creation-site counters also live entirely in
 `tsrs_checker`; the `tsrs_core/site-counts` feature has been removed.
 Selecting `tsrs_checker` alongside `tsrs_cli` lets Cargo enable its features without a direct CLI dependency.
-The `alloc-profile` and `system-alloc` CLI features still control the executable's allocator.
+The `system-alloc` CLI feature selects the system allocator instead of mimalloc.
 
 Pointer compression is automatic on Unix. Use `--features tsrs_core/plain-ptrs` to disable it;
 `--no-default-features` no longer disables compression, and the `compressed-ptrs` feature has been removed.
@@ -392,9 +357,8 @@ only its own declarations; on vscode 2,289 of the 2,337 leaves are predicted (99
 are parsed into the thread arenas as before. The text, the `SourceFile` and the diagnostics are kept, so the report is
 the same. It is off with declaration emit (`declaration`, `composite`), `--explainFiles`, `--incremental`, `--build`,
 `--checkerAssignment go`, in the language server, the API and the test harnesses, under the debug modes that walk
-files or checker tables after the check (`TSRS_FILE_TIMES`, `TSRS_ASSIGNMENT_STATS`, the work and heap censuses,
-`TSRS_CENSUS=1`), and in builds without compressed pointers (`plain-ptrs`, non-unix): there a freed region's memory
-stays mapped and the heap its values owned is reused, so a stale read would see a live object, and nothing would be
+files or checker tables after the check (`TSRS_FILE_TIMES`, `TSRS_ASSIGNMENT_STATS`, the work and heap censuses),
+and in builds without compressed pointers (`plain-ptrs`, non-unix): there a freed region's memory stays mapped and the heap its values owned is reused, so a stale read would see a live object, and nothing would be
 saved. Asking a program for one freed leaf's diagnostics after the pass panics (the tree is gone); the CLI never does.
 
 | variable | values | effect |
@@ -418,7 +382,7 @@ reader of the list's nodes or of the owner symbol's members parses and binds it 
 reference directives and what they reference) and of interfaces merged into the global scope are forced in parallel,
 so that the checkers do not wait for one another on them (`force_shared_lists`; `TSRS_LAZY_DTS_SHARED=0` skips the
 global libraries). Output is the same; `--extendedDiagnostics` `Symbols` counts only the lists that were bound. Off in the language server, the
-API and the test harnesses, and under `TSRS_CENSUS=1` and `TSRS_CHECK_SHARED=1`.
+API and the test harnesses, and under `TSRS_CHECK_SHARED=1`.
 
 | variable | values | effect |
 | --- | --- | --- |
@@ -454,26 +418,6 @@ suite in the default checker mode with forced splits and compare its lists with 
 --baselines types,symbols --panic-summary` against the same with `TSRS_SPLIT_FILES=0` (about 630 declaration files in
 330 test programs are split). `cargo test -p tsrs_cli --test split_check` runs testdata/split-check in every mode
 against tsgo-ref's output.
-
-## What survives a watch cycle: the per-cycle heap report
-
-An alloc-profile build prints, after each watch cycle (`--watch` and `-b --watch`, on the free thread once the
-cycle's frees are done), the exact live Rust heap, mimalloc's committed memory and the process RSS, the sampled live
-bytes by the cycle that allocated them (epoch 0 is the first build), and the stacks of the bytes allocated by a cycle
-that are still live `TSRS_CYCLE_REPORT_AGE` (default 4) cycles later, the top `TSRS_CYCLE_REPORT_TOP` (default 12).
-`TSRS_CYCLE_MI_STATS=1` adds mimalloc's own statistics (blocks in use per size class, pages, abandoned pages,
-committed). It needs the heap sampler on:
-
-```sh
-CARGO_TARGET_DIR=target/prof CARGO_PROFILE_RELEASE_STRIP=false CARGO_PROFILE_RELEASE_DEBUG=line-tables-only \
-  cargo build --release -p tsrs_cli --features alloc-profile
-TSRS_HEAP_PROFILE=1 TSRS_HEAP_PROFILE_RATE=65536 target/prof/release/tsrs --watch -p . 2> cycles.err
-```
-
-Rows whose first frames are `alloc_profile::record` are the profiler's own per-site table growing (its newest buffer
-always looks like a survivor); leave them out. The build is several times slower than release, and the counting
-allocator's mimalloc does not take the collect hook (`set_heap_hooks`), so its committed and RSS numbers are those of
-a watch without the post-cycle collect. notes/watch-macos.md ("Memory") has a worked example.
 
 ## Data races: ThreadSanitizer (`tools/ci/tsan.sh`)
 
