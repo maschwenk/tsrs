@@ -10,6 +10,7 @@
 //   node tools/node-api/consumer.mjs --dist <dir> [--keep]
 
 import { execFileSync, spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -45,6 +46,8 @@ try {
     const pkgDir = path.join(dir, "node_modules", "tsrs");
     const pkg = JSON.parse(fs.readFileSync(path.join(pkgDir, "package.json"), "utf8"));
     for (const sub of ["./unstable/sync", "./unstable/async"]) check(pkg.exports?.[sub] !== undefined, `package exports ${sub}`);
+    const root = createRequire(path.join(dir, "package.json"))("tsrs");
+    check(root.versionMajorMinor === pkg.tsrs.typescriptVersion.match(/^\d+\.\d+/)?.[0], "root export versionMajorMinor");
     const bin = path.join(dir, "node_modules", ".bin", win ? "tsrs.cmd" : "tsrs");
 
     // ── CLI regressions ──

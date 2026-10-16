@@ -7,8 +7,8 @@ import tempfile
 import time
 import unittest
 
-from run import (HARNESS, MODES, Context, check_config, check_projects, child_env, compare, difference, execute,
-                 install_plan, read_compilation, summarize, write_json)
+from run import (EXCLUDED_REPOSITORIES, HARNESS, MODES, Context, add_search_results, check_config, check_projects,
+                 child_env, compare, difference, execute, install_plan, read_compilation, summarize, write_json)
 
 
 def context(tsgo, tsrs, temp):
@@ -20,6 +20,17 @@ def compilation(text="", files=1, code=0, timeout=False):
 
 
 class ComparisonTests(unittest.TestCase):
+    def test_definitely_typed_has_a_dedicated_suite(self):
+        self.assertEqual(EXCLUDED_REPOSITORIES, {"DefinitelyTyped/DefinitelyTyped"})
+        items = [{"full_name": "DefinitelyTyped/DefinitelyTyped", "default_branch": "master",
+                  "stargazers_count": 50000}]
+        items += [{"full_name": f"owner/repo-{index}", "default_branch": "main",
+                   "stargazers_count": 1000 - index} for index in range(400)]
+        repositories = {}
+        add_search_results(repositories, items)
+        self.assertEqual(len(list(repositories.values())[:400]), 400)
+        self.assertNotIn("DefinitelyTyped/DefinitelyTyped", repositories)
+
     def test_dropped_changed_or_reordered_diagnostics_fail_parity(self):
         first = "a.ts(1,1): error TS2322: wrong type.\n  'foo' is missing."
         second = "b.ts(1,1): error TS2345: wrong argument."

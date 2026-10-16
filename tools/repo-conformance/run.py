@@ -24,6 +24,7 @@ from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[2]
 QUERY = "language:TypeScript stars:>100 archived:false fork:false"
+EXCLUDED_REPOSITORIES = {"DefinitelyTyped/DefinitelyTyped"}  # Covered exhaustively by tools/dt-conformance.
 FILES = re.compile(r"^Files:\s+(\d+)\s*$", re.MULTILINE)
 DIAGNOSTIC = re.compile(r"^(?:.+\(\d+,\d+\): )?(?:error|warning|message) TS\d+: ")
 # Extra flags per comparison mode, recorded in shard reports. Default runs both compilers as users do, with the
@@ -110,6 +111,18 @@ def head_commit(repo: dict, env: dict[str, str]) -> str:
     return output[0]
 
 
+def add_search_results(repositories: dict[str, dict], items: list[dict]) -> None:
+    for repo in items:
+        name = repo["full_name"]
+        if name in EXCLUDED_REPOSITORIES:
+            continue
+        if not NAME.fullmatch(name):
+            raise ValueError("Invalid repository name: " + name)
+        repositories[name] = {
+            "repository": name, "branch": repo["default_branch"], "stars": repo["stargazers_count"],
+        }
+
+
 def discover(count: int, shards: int, out: Path) -> dict:
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "tsrs-repo-conformance"}
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
@@ -122,11 +135,7 @@ def discover(count: int, shards: int, out: Path) -> dict:
             data = json.load(response)
         if data.get("incomplete_results"):
             raise RuntimeError("GitHub returned an incomplete repository search; retry discovery")
-        for repo in data["items"]:
-            name = repo["full_name"]
-            if not NAME.fullmatch(name):
-                raise ValueError("Invalid repository name: " + name)
-            repos[name] = {"repository": name, "branch": repo["default_branch"], "stars": repo["stargazers_count"]}
+        add_search_results(repos, data["items"])
         if len(repos) >= count:
             break
         if not data["items"]:

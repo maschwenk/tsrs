@@ -1,0 +1,174 @@
+# Full DefinitelyTyped differential testing through the TypeScript 7 JS API. The checkout, install and both dtslint
+# runs share one hardened container; dtslint uses child processes inside it, never cross-machine shards.
+
+name: DefinitelyTyped conformance
+
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  pull_request:
+    branches: [main]
+    paths:
+      - "crates/**"
+      - "npm/**"
+      - "tools/dt-conformance/**"
+      - "tools/repo-conformance/**"
+      - ".depot/workflows/dt-conformance.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".node-version"
+  workflow_dispatch:
+    inputs:
+      dt_commit:
+        description: Optional full DefinitelyTyped commit SHA (defaults to current master)
+        type: string
+        default: ""
+
+concurrency:
+  group: dt-conformance-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'schedule' && 'nightly' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  compare:
+    runs-on: depot-ubuntu-24.04-32
+    timeout-minutes: 360
+    steps:
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - name: Initialize diagnostic output
+        run: |
+          mkdir -p dt-conformance/results
+          id > dt-conformance/results/runner.txt
+
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out pinned TypeScript
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: ts-ref/tsc/go.mod
+          cache-dependency-path: ts-ref/tsc/go.sum
+
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: true
+          cache-key: dt-conformance
+
+      - name: Test harness result handling
+        run: |
+          set -o pipefail
+          python3 -m unittest discover -s tools/dt-conformance -p 'test_run.py' -v 2>&1 \
+            | tee dt-conformance/results/harness-tests.log
+          python3 -m unittest discover -s tools/repo-conformance -p 'test_run.py' -k definitely_typed -v 2>&1 \
+            | tee -a dt-conformance/results/harness-tests.log
+
+      - name: Build and test the isolation boundary
+        env:
+          TSRS_DT_CONFORMANCE_SANDBOX_IMAGE: tsrs-dt-conformance
+        run: |
+          set -o pipefail
+          docker build --tag tsrs-dt-conformance tools/dt-conformance 2>&1 \
+            | tee dt-conformance/results/isolation-test.log
+          python3 -m unittest discover -s tools/dt-conformance -p 'test_sandbox.py' -v 2>&1 \
+            | tee -a dt-conformance/results/isolation-test.log
+
+      - name: Surface an early harness failure
+        if: failure()
+        run: |
+          for log in dt-conformance/results/harness-tests.log dt-conformance/results/isolation-test.log; do
+            if [[ -f "$log" ]]; then
+              tail -n 20 "$log" | sed -e 's/%/%25/g' -e 's/^/::error title=DefinitelyTyped harness::/'
+            fi
+          done
+
+      - name: Install TypeScript build dependencies
+        working-directory: ts-ref
+        run: npm ci
+
+      - name: Build pinned tsgo and its API package
+        working-directory: ts-ref
+        run: |
+          npm run build
+          npx hereby build:api
+
+      - name: Build tsrs
+        run: cargo build --release --locked -p tsrs_cli
+
+      - name: Stage the candidate API and platform packages
+        run: >-
+          node npm/build.mjs
+          --binary x86_64-unknown-linux-gnu=target/release/tsrs
+          --out dt-conformance/packages
+
+      - name: Pin DefinitelyTyped
+        env:
+          DT_COMMIT: ${{ inputs.dt_commit }}
+        run: >-
+          python3 tools/dt-conformance/run.py plan
+          --dt-commit "$DT_COMMIT"
+          --out dt-conformance/manifest.json
+
+      - name: Compare every DefinitelyTyped package
+        id: suite
+        continue-on-error: true
+        run: >-
+          python3 tools/dt-conformance/run.py run
+          --manifest dt-conformance/manifest.json
+          --typescript ts-ref
+          --candidate-package dt-conformance/packages/tsrs
+          --candidate-platform dt-conformance/packages/tsrs-linux-x64-gnu
+          --out dt-conformance/results
+          --scratch "$RUNNER_TEMP/dt-conformance"
+          --sandbox-image tsrs-dt-conformance
+          --processes 32
+
+      - name: Remove the suite container
+        if: always()
+        run: docker ps --all --quiet --filter label=tsrs.dt-conformance | xargs --no-run-if-empty docker rm --force
+
+      - name: Add the report to the run summary
+        if: always()
+        run: |
+          if [[ -f dt-conformance/results/report.md ]]; then
+            cat dt-conformance/results/report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "DefinitelyTyped conformance did not produce a report." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: definitelytyped-conformance
+          path: |
+            dt-conformance/manifest.json
+            dt-conformance/results/
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Fail on a difference or incomplete run
+        if: steps.suite.outcome != 'success'
+        run: |
+          echo "DefinitelyTyped did not match; see the report and definitelytyped-conformance artifact"
+          exit 1

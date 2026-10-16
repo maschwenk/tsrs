@@ -11,6 +11,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const root = require("tsrs");
 assert.match(root.version, /^\d+\.\d+\.\d+.*-ts/);
+assert.equal(root.versionMajorMinor, root.typescriptVersion.match(/^\d+\.\d+/)?.[0]);
 assert.match(root.typescriptCommit, /^[0-9a-f]{40}$/);
 
 const sync = await import("tsrs/unstable/sync");
