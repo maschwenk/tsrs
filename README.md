@@ -18,9 +18,13 @@ You can try `tsrs` today and give us feedback on performance, memory usage, and 
 ## Conformance
 
 `tsrs` currently targets the main branch of [microsoft/TypeScript](https://github.com/microsoft/typescript).
-We aim to release a stable version against TypeScript 7.1 with 100% conformance.
+We aim to release a stable version against TypeScript 7.1 with 100% conformance. In our testing on existing projects,
+we have yet to find a correctness bug in `tsrs`.
 
-We take conformance really seriously and are fixing the remaining 0.01% of issues we discover in existing projects.
+There are known order issues: the pinned Go compiler can produce different diagnostics and traces depending on
+parallel parse, resolution, and check order, while `tsrs` canonicalizes some checker history by default. For the
+closest comparison, use `--checkerAssignment go --noLazyMembers`; tsgo parser and resolver races can still vary
+between runs.
 
 `--init` and `--showConfig` are not supported. See [compatibility and evidence](https://github.com/maschwenk/tsrs/blob/main/docs/COMPATIBILITY.md)
 for supported features and known gaps.
