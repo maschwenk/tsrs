@@ -93,6 +93,15 @@ jobs:
           python3 -m unittest discover -s tools/dt-conformance -p 'test_sandbox.py' -v 2>&1 \
             | tee -a dt-conformance/results/isolation-test.log
 
+      - name: Surface an early harness failure
+        if: failure()
+        run: |
+          for log in dt-conformance/results/harness-tests.log dt-conformance/results/isolation-test.log; do
+            if [[ -f "$log" ]]; then
+              tail -n 20 "$log" | sed -e 's/%/%25/g' -e 's/^/::error title=DefinitelyTyped harness::/'
+            fi
+          done
+
       - name: Install TypeScript build dependencies
         working-directory: ts-ref
         run: npm ci
