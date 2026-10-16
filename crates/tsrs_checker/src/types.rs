@@ -2,7 +2,7 @@ use std::fmt;
 use std::hash::Hash;
 use std::num::NonZeroU32;
 
-use bitflags::bitflags;
+use crate::direct_bitflags as bitflags;
 use tsrs_core::sharedgraph::{OvCell, OvExact, OvOptionThinSliceCell, RawWord};
 use tsrs_core::{TextPos, ThinSliceCell};
 

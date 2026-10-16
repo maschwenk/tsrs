@@ -2,7 +2,7 @@
 
 use std::fmt::Display;
 
-use bitflags::bitflags;
+use crate::direct_bitflags as bitflags;
 
 use crate::*;
 

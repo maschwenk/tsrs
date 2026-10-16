@@ -4,7 +4,7 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{LazyLock, OnceLock};
 
-use bitflags::bitflags;
+use crate::direct_bitflags as bitflags;
 
 use crate::*;
 use tsrs_core::PSliceCell;

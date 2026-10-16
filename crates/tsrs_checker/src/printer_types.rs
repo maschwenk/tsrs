@@ -4,7 +4,7 @@
 //!
 //! The node builder's own data model is in `nodebuilder_types.rs`.
 
-use bitflags::bitflags;
+use crate::direct_bitflags as bitflags;
 
 use crate::*;
 

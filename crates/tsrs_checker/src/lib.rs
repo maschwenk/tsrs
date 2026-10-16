@@ -20,6 +20,56 @@ pub(crate) use tsrs_modulespecifiers as modulespecifiers;
 pub(crate) use tsrs_modulespecifiers::ModuleSpecifierGenerationHost;
 pub(crate) use tsrs_pseudochecker::{new_pseudo_checker, PseudoChecker, PseudoParameter, PseudoType};
 
+// The regular `bitflags!` form generates a public wrapper and a private flags type, duplicating
+// methods, operators and iterators. The checker has enough flags types for that duplication to be
+// measurable, and doesn't use the external-trait derives that need the private type. Use bitflags'
+// custom-type form while keeping the declarations and their symbolic Debug output unchanged.
+pub(crate) struct DirectBitflagsDebug<'a, F>(pub(crate) &'a F);
+
+impl<F: bitflags::Flags> std::fmt::Debug for DirectBitflagsDebug<'_, F>
+where
+    F::Bits: bitflags::parser::WriteHex,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.0.is_empty() {
+            std::fmt::Write::write_str(f, "0x0")
+        } else {
+            bitflags::parser::to_writer(self.0, f)
+        }
+    }
+}
+
+macro_rules! direct_bitflags {
+    (
+        $(#[doc = $doc:literal])*
+        #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
+        $vis:vis struct $flags:ident: $bits:ty {
+            $($body:tt)*
+        }
+    ) => {
+        $(#[doc = $doc])*
+        #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+        #[repr(transparent)]
+        $vis struct $flags($bits);
+
+        ::bitflags::bitflags! {
+            impl $flags: $bits {
+                $($body)*
+            }
+        }
+
+        impl std::fmt::Debug for $flags {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.debug_tuple(stringify!($flags))
+                    .field(&$crate::DirectBitflagsDebug(self))
+                    .finish()
+            }
+        }
+    };
+}
+
+pub(crate) use direct_bitflags;
+
 // Data model (checker-foundation).
 pub mod workcensus;
 pub mod sitecount;
