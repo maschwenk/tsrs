@@ -43,7 +43,7 @@ changes on both sides. Results from different comparisons are not an ablation of
 Reproduce the final PR comparison with:
 
 ```sh
-depot ci dispatch --repo maschwenk/tsrs --workflow pr-verify.yml --ref idiomatic-unsigned-integers \
+depot ci dispatch --repo oxc-project/tsrs --workflow pr-verify.yml --ref idiomatic-unsigned-integers \
   --input projects=all --input checkers=1,4,16,32 --input reps=3
 ```
 

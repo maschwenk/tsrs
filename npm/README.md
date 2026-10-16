@@ -170,7 +170,7 @@ there.
 What maintainers must configure before the first release:
 
 - The `@tsrs` npm org and each package must exist. Configure a GitHub Actions trusted publisher for `tsrs`,
-  `@tsrs/wasm` and each platform package, including the four new GNU/musl names: owner `maschwenk`, repository `tsrs`, workflow
+  `@tsrs/wasm` and each platform package, including the four new GNU/musl names: owner `oxc-project`, repository `tsrs`, workflow
   filename `release.yml`, no environment name, with direct publishing allowed.
 - The publish job uses pnpm 12.10.1 and `id-token: write` to authenticate through GitHub Actions OIDC. No registry publish
   token or repository secret is required. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)

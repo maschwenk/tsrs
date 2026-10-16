@@ -318,7 +318,7 @@ allocated so that every object is private:
 
 Go mode is not touched. This is 2-3 days of work (estimate), most of it ported from the spike branch.
 
-**The measurement.** `depot ci dispatch --repo maschwenk/tsrs --workflow pr-verify.yml --ref <branch> --input cpus=16
+**The measurement.** `depot ci dispatch --repo oxc-project/tsrs --workflow pr-verify.yml --ref <branch> --input cpus=16
 --input projects=t3code-server,formbricks-web,cal-diy,supabase-studio,mikro-orm,vscode,xstate-main --input
 checkers=1,8 --input reps=10 --input poison=false`. This gives:
 

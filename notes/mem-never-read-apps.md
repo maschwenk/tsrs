@@ -229,7 +229,7 @@ graph, and it is read; reducing it means sharing it (notes/mem-shared-base.md, o
 
 ```sh
 # D1: build 8be2e48; TSRS_LAZY_SIGNATURES=0 restores main's behaviour
-depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref <branch with 8be2e48> \
+depot ci dispatch --repo oxc-project/tsrs --workflow perf-probe.yml --ref <branch with 8be2e48> \
   --input projects=t3code-server,cal-diy,formbricks-web,vscode --input script=tools/perf/leafprobe.sh \
   --input probe_args='--checkers 4,16,32 --reps 6 --no-strace --variant main:TSRS_LAZY_SIGNATURES=0 --variant d1:TSRS_LAZY_SIGNATURES=1'
 ```

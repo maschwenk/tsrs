@@ -23,7 +23,7 @@ interleaved runs per cell, freeing is now within 2% wall time at 1, 4 and 8 chec
 inputs and restores bench.yml's project caches, so a dispatched probe of a pushed branch runs on the 8-vCPU runner
 without cloning anything:
 
-    depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref <branch> \
+    depot ci dispatch --repo oxc-project/tsrs --workflow perf-probe.yml --ref <branch> \
       --input runner=depot-ubuntu-24.04-8 --input projects=vscode,formbricks-web \
       --input script=tools/perf/leafprobe.sh --input probe_args='--reps 20 --checkers 1,4,8'
 

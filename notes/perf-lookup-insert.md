@@ -10,7 +10,7 @@ no compiler-source changes.
 ## Original result
 
 The [original Linux comparison](https://depot.dev/orgs/qw3zz3l8cs/workflows/5sb887p6mr) used the same release build
-settings and two single-threaded instruction runs per binary. The [PR comparison](https://github.com/maschwenk/tsrs/pull/338#issuecomment-6111005799)
+settings and two single-threaded instruction runs per binary. The [PR comparison](https://github.com/oxc-project/tsrs/pull/338#issuecomment-6111005799)
 independently reported the same direction and size of changes. Examples:
 
 | Public project | Base instructions | Original instructions | Change |

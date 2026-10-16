@@ -22,7 +22,7 @@ what did not land.
 ## Status (2026-10-10)
 
 #166 and #167 landed and are in the code (filesparser.rs: the collect walk at line 876 and `parseTask::with_path` at
-line 77 cite their notes). #162 and #164 were reverted in https://github.com/maschwenk/tsrs/pull/190 (2026-10-07):
+line 77 cite their notes). #162 and #164 were reverted in https://github.com/oxc-project/tsrs/pull/190 (2026-10-07):
 each bought 3-4 ms at 32 checkers by adding a thread or an overlap around checker creation, below the bar in AGENTS.md
 ("A performance change must pay for its complexity"). `checkerPool::create_checkers` again creates the checkers and
 then runs `compute_associations` on the program thread, and "Diagnostics: program" runs on the program thread before

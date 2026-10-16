@@ -238,7 +238,7 @@ cd <bench checkout>
 TSRS_HEAP_CENSUS=1 TSRS_HEAP_CENSUS_MIN=0 target/release/tsrs ... --extendedDiagnostics --checkers {1,16,32}
 # section 2 prototype on Linux: push a branch with the change and tools/perf/scratchprobe.sh (branch
 # mem/export-star-tables has it), then
-depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref <branch> \
+depot ci dispatch --repo oxc-project/tsrs --workflow perf-probe.yml --ref <branch> \
   --input projects=formbricks-web,cal-diy,t3code-server --input script=tools/perf/scratchprobe.sh \
   --input probe_args='--reps 5 --checkers 1,4,32'
 ```

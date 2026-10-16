@@ -262,7 +262,7 @@ earlier benchmarked ancestor of its commit, not with the newest file by date. A 
 not carry a CI-skip marker in its title, body or commit subjects (CI's
 `skip-marker` job, `tools/ci/skip_marker.py`): `gh pr merge --squash` copies them into the commit message, and such a
 commit lands without CI and without a results file; notes-only pull requests carry the marker on purpose. A commit
-whose bench was skipped or cancelled (before 2026-10-07, most commits of a burst of merges) is backfilled with `depot ci dispatch --repo maschwenk/tsrs --workflow bench.yml --ref main --input
+whose bench was skipped or cancelled (before 2026-10-07, most commits of a burst of merges) is backfilled with `depot ci dispatch --repo oxc-project/tsrs --workflow bench.yml --ref main --input
 commit=<sha>`: the build and measuring jobs check out that commit, the merge job runs the current scripts, the results
 file is committed, and the tables and chart update only when no newer commit's report is there.
 
@@ -416,7 +416,7 @@ How to run it:
 
 ```sh
 depot ci run --workflow .depot/workflows/pr-verify.yml      # from any branch or dirty worktree, all defaults
-depot ci dispatch --repo maschwenk/tsrs --workflow pr-verify.yml --ref <pushed branch> \
+depot ci dispatch --repo oxc-project/tsrs --workflow pr-verify.yml --ref <pushed branch> \
   --input projects=vscode,webpack --input checkers=4,32 --input reps=5
 ```
 

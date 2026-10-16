@@ -220,7 +220,7 @@ cargo build --release --locked -p tsrs_cli
 cd <project> && TSRS_MEM_SPLIT=1 tsrs -p <tsconfig> --noEmit --incremental false --pretty false --checkers 32 2>&1 >/dev/null
 TSRS_MEM_SPLIT=purge tsrs ...   # also purge mimalloc's freed memory after `check end` and print again
 # On the 64-vCPU runner, a branch against a base commit, splits and interleaved reps:
-depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref <branch> \
+depot ci dispatch --repo oxc-project/tsrs --workflow perf-probe.yml --ref <branch> \
   --input projects=t3code-server,formbricks-web,vscode,drizzle-orm --input script=tools/perf/slackprobe.sh \
   --input probe_args="--base-ref <commit> --split --checkers 4,16,32 --rep-checkers 4:5,16:5,32:10 --variant 'base:BIN=\$BASE_BIN' --variant 'fix:'"
 ```

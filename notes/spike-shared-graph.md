@@ -333,7 +333,7 @@ the prototype in the same target directory. It then runs `tools/perf/leafprobe.p
 8 checkers (the default on 16 cores) and 16. One dispatch covers the six projects:
 
 ```sh
-depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref spike/shared-graph \
+depot ci dispatch --repo oxc-project/tsrs --workflow perf-probe.yml --ref spike/shared-graph \
   --input runner=depot-ubuntu-24.04-16 \
   --input projects=t3code-server,formbricks-web,cal-diy,supabase-studio,mikro-orm,vscode \
   --input script=tools/perf/sharedprobe.sh --input probe_args='--checkers 8,16 --reps 5 --no-strace --no-perf-stat'

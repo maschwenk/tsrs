@@ -65,7 +65,7 @@ jobs:
   # built it (results record the compiler; bench/regressions.py reads it).
   build:
     # Second loop guard: the results commit says [skip ci] (null on workflow_dispatch, which then runs).
-    if: github.repository == 'maschwenk/tsrs' && !contains(github.event.head_commit.message, '[skip ci]')
+    if: github.repository == 'oxc-project/tsrs' && !contains(github.event.head_commit.message, '[skip ci]')
     runs-on: depot-ubuntu-24.04-8
     timeout-minutes: 60
     outputs:

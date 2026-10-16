@@ -253,6 +253,6 @@ parsed again, 422 of them while their file was bound (merges and unusual states)
 ```sh
 TSRS_LAZY_DTS=stats tsrs -p <tsconfig> --noEmit ...      # lists made lazy / deferred / parsed again
 TSRS_LAZY_DTS=force tsrs-test run --suite all --baselines types,symbols   # every declaration file lazy; trees must equal main's
-depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref <branch> --input script=tools/perf/lazydtsprobe.sh \
+depot ci dispatch --repo oxc-project/tsrs --workflow perf-probe.yml --ref <branch> --input script=tools/perf/lazydtsprobe.sh \
   --input projects=drizzle-orm,formbricks-web,cal-diy --input probe_args='--reps 10 --checkers 32 --no-strace'
 ```

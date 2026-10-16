@@ -23,7 +23,7 @@ PUBLISHED_MODES = ["wide", *chart.POINTS.values()]
 
 # bench/RESULTS.md's per-project charts, drawn beside the README chart: the file stem for each metric.
 PER_PROJECT = {"wall_s": "per-project-time", "peak_rss_bytes": "per-project-memory"}
-RAW = "https://raw.githubusercontent.com/maschwenk/tsrs/main/bench"
+RAW = "https://raw.githubusercontent.com/oxc-project/tsrs/main/bench"
 
 
 def dark_image(image_path: Path) -> Path:

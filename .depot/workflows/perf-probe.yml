@@ -13,7 +13,7 @@
 # actions/cache is not available to `depot ci run` (API-triggered runs are not tied to a ref), so every run clones and
 # installs its projects (vscode: ~2 min) and builds from scratch (~4 min on 64 cores). A run of a pushed branch with
 #
-#   depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref <branch> --input runner=depot-ubuntu-24.04-8 \
+#   depot ci dispatch --repo oxc-project/tsrs --workflow perf-probe.yml --ref <branch> --input runner=depot-ubuntu-24.04-8 \
 #     --input projects=vscode,formbricks-web --input script=tools/perf/leafprobe.sh --input probe_args='--reps 5'
 #
 # For an explicit 64-vCPU scaling experiment, pass --input runner=depot-ubuntu-24.04-64.

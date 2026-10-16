@@ -34,7 +34,7 @@ prefaulting, and the zero-page faults his GC commit describes).
   baselines; main and his branch print the same on all four. On the bench projects the only difference is
   history-dependent (drizzle-orm, below).
 - **What transfers:** one change clears the bar by far and is ported: building unions by merging their sorted runs,
-  which generalizes his sorted-input check and two-union merge (draft https://github.com/maschwenk/tsrs/pull/250,
+  which generalizes his sorted-input check and two-union merge (draft https://github.com/oxc-project/tsrs/pull/250,
   -10% single-threaded instructions on mikro-orm). His member-order changes and his type-printing memo were ported and
   measured too and stay under 1% on every bench project (the memo removes 13% on excalidraw, not a bench project), so
   they are not proposed. Everything else is already in tsrs, fixes a Go runtime or allocation cost with no Rust
@@ -294,7 +294,7 @@ peak in both modes. Diagnostics were identical to main in every run.
 
 | candidate (his commits) | branch | shadow | single-threaded instructions vs main | verdict |
 | --- | --- | --- | --- | --- |
-| 1. unions by merging sorted runs (a3f430da0, 628f51ceb, generalized) | `perf/union-sorted-inputs`, https://github.com/maschwenk/tsrs/pull/250 | 0 mismatches in ~9.3M unions | mikro-orm **−10.04%** (80.59 → 72.50 G; single-threaded wall −8.5%), cal-diy −0.55%, the other seven 0.00% to −0.20% | **ported** (draft) |
+| 1. unions by merging sorted runs (a3f430da0, 628f51ceb, generalized) | `perf/union-sorted-inputs`, https://github.com/oxc-project/tsrs/pull/250 | 0 mismatches in ~9.3M unions | mikro-orm **−10.04%** (80.59 → 72.50 G; single-threaded wall −8.5%), cal-diy −0.55%, the other seven 0.00% to −0.20% | **ported** (draft) |
 | 2. member order: keyed `sort_symbols`, anonymous instantiations and generic instantiations reuse the target's order (ba343defd, 6d557d0e3) | `perf/member-order` (pushed, no PR) | 0 mismatches in ~9.3M sorts and reuses; the conformance gate then caught an ordering bug (below), fixed | −0.10% to −0.87% (cal-diy −0.87%, webpack −0.84%, formbricks −0.56%, supabase −0.53%), vscode +0.71% (inside its 1.1% spread) | under 1% everywhere: **not ported** |
 | 3. top-level type-printing memo (15c911a9b, with tsrs's rules: no object created, counters replayed, off under Go history, shadow mode) | `perf/type-print-memo` (pushed, no PR) | shadow clean (drizzle-orm 5,800 hits, excalidraw 42,597) | drizzle-orm −0.51%, webpack −0.17%, mikro-orm −0.13%, supabase within noise; **excalidraw −12.95%** (not a bench project; `Types` and `Instantiations` counters unchanged) | under 1% on every bench project: **not ported**; the code is there if a project like excalidraw joins the bench |
 

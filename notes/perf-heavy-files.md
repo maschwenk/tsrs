@@ -4,7 +4,7 @@ At 16-32 checkers on a 64-vCPU machine the check phase of these four projects en
 (brief of 2026-10-07: vscode 0.711 s with one 0.344 s file; t3code-server 1.431 s with three files of 0.82-0.95 s;
 mui-docs 0.870 s with three of ~0.5 s; formbricks-web 0.547 s with 0.245 / 0.202 s). This note says what each of those
 files spends its time on and whether an exact change can remove it. One could:
-notes/perf-heavy-files-infer-memo.md (https://github.com/maschwenk/tsrs/pull/145). The rest is the TypeScript algorithm,
+notes/perf-heavy-files-infer-memo.md (https://github.com/oxc-project/tsrs/pull/145). The rest is the TypeScript algorithm,
 which tsgo runs too, or work that every checker repeats and that cannot be shared without changing diagnostics.
 
 Method: the heavy file alone in a program (a tsconfig under a scratch directory that `extends` the project's, with

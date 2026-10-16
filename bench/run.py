@@ -598,7 +598,7 @@ def markdown(result: dict, modes: list[str] | None = None) -> str:
     noise = ("Shared CI machines vary by a few percent between runs of the same code; the single-threaded instruction "
              "counts in `bench/results/` are the exact measure. " if m.get("ci") else "")
     lines += ["", f"{noise}Date: {result['date']}. tsrs commit: `{commit}`. "
-              "Method: [benchmark methodology](https://github.com/maschwenk/tsrs/blob/main/bench/README.md)."]
+              "Method: [benchmark methodology](https://github.com/oxc-project/tsrs/blob/main/bench/README.md)."]
     return "\n".join(lines).rstrip() + "\n"
 
 

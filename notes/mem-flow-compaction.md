@@ -1,6 +1,6 @@
 # mem-flow-compaction: flat label edges and one shared Start for bodyless signatures
 
-**Reverted in https://github.com/maschwenk/tsrs/pull/191 (2026-10-07):** 377 lines of binder representation for -5.4 MB
+**Reverted in https://github.com/oxc-project/tsrs/pull/191 (2026-10-07):** 377 lines of binder representation for -5.4 MB
 (0.2% of vscode's peak), below the bar in AGENTS.md ("A performance change must pay for its complexity"). The
 measurements below stand; do not re-land the mechanism for this gain.
 

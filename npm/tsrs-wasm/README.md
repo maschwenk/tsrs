@@ -14,7 +14,7 @@ shared Rust compiler code, compiled for `wasm32-wasip1`, and runs single-threade
 
 The package version follows tsrs and identifies the TypeScript version it ports:
 `<tsrs-version>-ts<TypeScript-version>`. For the compiler's supported options and known gaps, see
-[compatibility](https://github.com/maschwenk/tsrs/blob/main/docs/COMPATIBILITY.md) and the WASM limits below.
+[compatibility](https://github.com/oxc-project/tsrs/blob/main/docs/COMPATIBILITY.md) and the WASM limits below.
 
 ## Command line (Node 22+)
 
@@ -77,7 +77,7 @@ By default, the host fetches `tsrs.wasm` next to `browser.js`. Use `url` to poin
 `module` to reuse an already compiled module. Serving the asset as `application/wasm` enables streaming compilation.
 
 From a repository checkout, run `node npm/tsrs-wasm/examples/browser/serve.mjs` to try the
-[browser example](https://github.com/maschwenk/tsrs/tree/main/npm/tsrs-wasm/examples/browser).
+[browser example](https://github.com/oxc-project/tsrs/tree/main/npm/tsrs-wasm/examples/browser).
 
 ## Runtime behavior
 
@@ -104,4 +104,4 @@ state, and linear memory never shrinks. Compiler state is not reused between cal
 
 Install the `wasm32-wasip1` Rust target and Binaryen's `wasm-opt`, then run `tools/wasm/build.sh` from the repository
 root. It writes `npm/tsrs-wasm/tsrs.wasm`; run it with `node npm/tsrs-wasm/bin/tsrs-wasm.js -p .`.
-See the [build notes](https://github.com/maschwenk/tsrs/blob/main/notes/wasm-build.md) for tool versions and build options.
+See the [build notes](https://github.com/oxc-project/tsrs/blob/main/notes/wasm-build.md) for tool versions and build options.

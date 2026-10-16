@@ -175,7 +175,7 @@ class PublishTests(unittest.TestCase):
         self.assertNotIn('### `--singleThreaded`', report)
         self.assertNotIn('### Scaling', report)
         self.assertTrue(report.startswith('# Benchmark results\n\n<!-- bench:start -->\n'))
-        self.assertIn('Method: [benchmark methodology](https://github.com/maschwenk/tsrs/blob/main/bench/README.md)', report)
+        self.assertIn('Method: [benchmark methodology](https://github.com/oxc-project/tsrs/blob/main/bench/README.md)', report)
         self.assertIn(f'](results/2026-10-11-{commit[:12]}.json)', report)
         self.assertIn(f'](results/2026-10-11-{commit[:12]}.md)', report)
         self.assertEqual('{http://www.w3.org/2000/svg}svg', ET.fromstring(svg).tag)

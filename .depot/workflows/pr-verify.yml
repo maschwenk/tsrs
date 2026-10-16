@@ -8,7 +8,7 @@
 # Three ways to start it:
 #   depot ci run --workflow .depot/workflows/pr-verify.yml       # any branch or dirty worktree; the inputs below take
 #                                                                # their defaults (edit them in the working copy to change)
-#   depot ci dispatch --repo maschwenk/tsrs --workflow pr-verify.yml --ref <pushed branch> --input projects=vscode
+#   depot ci dispatch --repo oxc-project/tsrs --workflow pr-verify.yml --ref <pushed branch> --input projects=vscode
 #   a pull request into main that changes crates/: runs on every push and posts the table as a comment; for a pull
 #   request that changes nothing under crates/ (a Cargo.lock bump, the bench harness) the `verify` label starts it
 # A `depot ci run` is not tied to a ref, so Depot skips actions/cache there: every project is cloned and installed

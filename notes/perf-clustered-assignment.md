@@ -379,7 +379,7 @@ TSRS_ASSIGNMENT_DUMP=/tmp/<project> tsrs -p <tsconfig> --noEmit --incremental fa
 /usr/bin/time -l tsrs -p <tsconfig> ... --checkers 16 --checkerAssignment locality
 TSRS_MODULE_AFFINITY=off /usr/bin/time -l tsrs -p <tsconfig> ... --checkers 16 --checkerAssignment locality
 # the runner probe (main and the branch as `--profile dist` in one directory, interleaved, default mode):
-depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref perf/clustered-assignment \
+depot ci dispatch --repo oxc-project/tsrs --workflow perf-probe.yml --ref perf/clustered-assignment \
   --input projects=vscode,next-packages-next,mui-docs,formbricks-web,cal-diy,supabase-studio,t3code-server \
   --input script=tools/perf/clusterprobe.sh --input probe_args='--reps 12 --stats-reps 1 --checkers 16,32'
 ```

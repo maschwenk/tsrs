@@ -6,7 +6,7 @@
 #
 # Setup before the first release:
 #   - npm trusted publishers for `tsrs`, `@tsrs/wasm` and every platform package: GitHub Actions,
-#     repository maschwenk/tsrs, workflow release.yml, no environment, with direct publishing allowed.
+#     repository oxc-project/tsrs, workflow release.yml, no environment, with direct publishing allowed.
 #   - tag pushes `v<workspace version>` or `v<npm version>` (node npm/build.mjs --print-version), e.g. v0.1.0.
 # Provenance (`pnpm publish --provenance`) is only possible from a public repository; it is enabled automatically
 # when the repository is public and skipped while it is private.

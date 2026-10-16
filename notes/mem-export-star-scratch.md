@@ -1,7 +1,7 @@
 # mem-export-star-scratch: no dead scratch per `export *` re-export
 
 Found by notes/mem-per-checker-duplication.md (section 2e,
-https://github.com/maschwenk/tsrs/pull/133). Every `export *` resolution left one arena record and one heap string per
+https://github.com/oxc-project/tsrs/pull/133). Every `export *` resolution left one arena record and one heap string per
 re-exported name that nothing could reach once the resolution returned. Each checker resolves the module exports it
 needs, so the leak grew with the checker count. The fix makes the records owned by the local table that holds them.
 Output does not change. Peak memory at 32 checkers dropped by 150 MiB on formbricks-web, 86 MiB on cal-diy and 36 MiB

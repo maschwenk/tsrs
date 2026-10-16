@@ -5,7 +5,7 @@
 # (tools/perf/layout-measure.py) and profiles the baseline on vscode. Not scheduled; run it from a pushed branch, which
 # restores the bench caches:
 #
-#   depot ci dispatch --repo maschwenk/tsrs --workflow perf-layout-probe.yml --ref <branch> [--input reps=7]
+#   depot ci dispatch --repo oxc-project/tsrs --workflow perf-layout-probe.yml --ref <branch> [--input reps=7]
 #
 # Everything worth keeping is the `perf-layout-probe` artifact (probe-out/).
 

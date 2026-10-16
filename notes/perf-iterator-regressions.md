@@ -1,6 +1,6 @@
 # Iterator refactor regressions (PRs 317 and 325)
 
-The [original PR comparison](https://github.com/maschwenk/tsrs/pull/317#issuecomment-6106599399)
+The [original PR comparison](https://github.com/oxc-project/tsrs/pull/317#issuecomment-6106599399)
 reported 0.036–0.339% more single-threaded instructions on 16 of 17 public projects, with unchanged diagnostics.
 This investigation removes regressions from the refactor; it does not introduce a new performance optimization.
 The final branch is below the pre-refactor baseline on all 17 projects, by 0.007–0.338%. Most iterator conversions
@@ -8,8 +8,8 @@ remain; the measured hot loops and stateful traversal retain their original cont
 
 ## Final result
 
-[PR 317](https://github.com/maschwenk/tsrs/pull/317) merged during the investigation. The remaining relation-loop
-correction is [PR 325](https://github.com/maschwenk/tsrs/pull/325), head `ac5ce4fb`.
+[PR 317](https://github.com/oxc-project/tsrs/pull/317) merged during the investigation. The remaining relation-loop
+correction is [PR 325](https://github.com/oxc-project/tsrs/pull/325), head `ac5ce4fb`.
 The [direct final comparison](https://depot.dev/orgs/qw3zz3l8cs/workflows/m5908hr0jq) builds pre-refactor main
 `e99e1816` and that head on the same 32-vCPU AMD EPYC 9R45 Linux runner with unchanged release settings.
 All 17 instruction counts decrease; all 34 diagnostic/exit comparisons match. This run uses one timed repetition
