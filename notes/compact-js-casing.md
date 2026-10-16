@@ -1,8 +1,9 @@
 # Compact JavaScript Unicode casing (issue #543)
 
 Requested change: generate the compact table directly from the pinned Unicode source data, with ad hoc tasks
-under `tasks/`. `tasks/gen-stringutil.mjs` replaces the Go-to-Rust transliterator. It reads
-`@unicode/unicode-15.1.0@1.6.17`, including simple/full mappings, final sigma, Cased and Case_Ignorable.
+under `tasks/`, with one Rust crate per task. `tasks/gen_stringutil` replaces the Go-to-Rust transliterator.
+It reads checksum-pinned Unicode 15.1.0 UCD files directly, including simple/full mappings, final sigma, Cased
+and Case_Ignorable. No npm Unicode package is needed.
 `tools/gen-check.sh` independently compares every mapping and range with the pinned Go table.
 
 The 2,927 records shrink from 64 to 16 bytes each: 187,328 → 46,832 bytes. Their 8,781 string fields use 2,970
@@ -62,8 +63,9 @@ binary search is retained.
 - All eight generators were rerun without unexpected changes. Final casing freshness/parity, the required
   workspace Clippy command, source lint and `git diff --check` pass.
 
-`tasks/README.md` documents the generator and `tasks/bench-js-case.rs` probe. The measurements above compile that
+`tasks/README.md` links to the generator and `tasks/bench_js_case` probe. The measurements above compile that
 probe with the old/new casing modules and the same common core helpers, using `rustc -C opt-level=3 -C lto=fat`.
+Moving generation into Rust leaves the generated table byte-identical apart from its provenance comment.
 For compiler measurements, build each revision with `cargo build --release --locked -p tsrs_cli`, save the
 binaries, then interleave:
 

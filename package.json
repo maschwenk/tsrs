@@ -1,8 +1,5 @@
 {
     "name": "tsrs-tooling",
     "private": true,
-    "packageManager": "pnpm@12.10.1",
-    "devDependencies": {
-        "@unicode/unicode-15.1.0": "1.6.17"
-    }
+    "packageManager": "pnpm@12.10.1"
 }

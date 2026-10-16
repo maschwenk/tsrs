@@ -3,15 +3,15 @@ use tsrs_core::stringutil::{encode_js_string_rune, to_lower_js, to_upper_js};
 
 fn hash_output(hash: &mut u64, text: &str) {
     for byte in text.len().to_le_bytes().into_iter().chain(text.bytes()) {
-        *hash = (*hash ^ u64::from(byte)).wrapping_mul(0x100000001b3);
+        *hash = (*hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3);
     }
 }
 
 fn main() {
     let mode = std::env::args().nth(1).unwrap();
     if mode == "verify" {
-        let mut hash = 0xcbf29ce484222325;
-        for cp in 0..=0x10ffff {
+        let mut hash = 0xcbf2_9ce4_8422_2325;
+        for cp in 0..=0x0010_ffff {
             let input = encode_js_string_rune(cp);
             hash_output(&mut hash, &to_lower_js(&input));
             hash_output(&mut hash, &to_upper_js(&input));
