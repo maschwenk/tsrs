@@ -36,7 +36,8 @@ mimalloc-safe = { version = "0.1.67", features = ["v3"] }
 # Pin exactly: 1.1.2 uses Unicode 15.1.0, matching the pinned TypeScript identifier tables.
 # Newer Unicode versions accept additional identifier characters; upgrade only when TypeScript's tables change.
 unicode-id-start = "=1.1.2"
-# Match the pinned Go Unicode 17 normalization tables.
+# Pin Unicode 17 behavior; unicode-normalization is the development-only parity oracle.
+icu_normalizer = { version = "=2.3.0", default-features = false, features = ["compiled_data"] }
 unicode-normalization = "=0.1.25"
 tsrs_core = { path = "crates/tsrs_core" }
 tsrs_diagnostics = { path = "crates/tsrs_diagnostics" }
