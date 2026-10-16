@@ -647,13 +647,24 @@ pub(crate) fn is_export_default_symbol(symbol: Option<P<Symbol>>) -> bool {
 fn is_pass_through_scope_kind(kind: Kind) -> bool {
     matches!(
         kind,
-        Kind::CallExpression
+        Kind::Identifier
+            | Kind::QualifiedName
+            | Kind::CallExpression
             | Kind::NewExpression
             | Kind::PropertyAccessExpression
             | Kind::ElementAccessExpression
             | Kind::ExpressionStatement
             | Kind::ReturnStatement
             | Kind::IfStatement
+            | Kind::SwitchStatement
+            | Kind::CaseClause
+            | Kind::DefaultClause
+            | Kind::WhileStatement
+            | Kind::DoStatement
+            | Kind::TryStatement
+            | Kind::ThrowStatement
+            | Kind::LabeledStatement
+            | Kind::ModuleBlock
             | Kind::VariableDeclaration
             | Kind::VariableDeclarationList
             | Kind::VariableStatement
@@ -666,10 +677,18 @@ fn is_pass_through_scope_kind(kind: Kind) -> bool {
             | Kind::ParenthesizedExpression
             | Kind::ConditionalExpression
             | Kind::PrefixUnaryExpression
+            | Kind::PostfixUnaryExpression
+            | Kind::TypeOfExpression
+            | Kind::VoidExpression
+            | Kind::DeleteExpression
             | Kind::AwaitExpression
+            | Kind::YieldExpression
+            | Kind::SpreadElement
+            | Kind::SatisfiesExpression
             | Kind::NonNullExpression
             | Kind::TemplateExpression
             | Kind::TemplateSpan
+            | Kind::TaggedTemplateExpression
             | Kind::JsxElement
             | Kind::JsxSelfClosingElement
             | Kind::JsxOpeningElement
@@ -684,6 +703,13 @@ fn is_pass_through_scope_kind(kind: Kind) -> bool {
             | Kind::IntersectionType
             | Kind::ArrayType
             | Kind::IndexedAccessType
+            | Kind::ParenthesizedType
+            | Kind::TupleType
+            | Kind::TypeOperator
+            | Kind::TypePredicate
+            | Kind::TypeParameter
+            | Kind::HeritageClause
+            | Kind::EnumMember
     )
 }
 
