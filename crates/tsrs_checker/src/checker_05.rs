@@ -6,9 +6,6 @@ use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 use std::cell::Cell;
 
-// Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
-// gosig into this directory: it rewrites every file listed in checker.json.
-
 // Non-function declarations in checker.go:8749-10856 (hand-ported by checker-foundation):
 //   type constructorAccessibilityError (checker.go:8829)
 //   type CallState (checker.go:9014)

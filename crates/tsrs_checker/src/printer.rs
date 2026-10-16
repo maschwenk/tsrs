@@ -8,9 +8,6 @@ use tsrs_core::*;
 
 use crate::*;
 
-// Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
-// gosig into this directory: it rewrites every file listed in checker.json.
-
 // TODO: Memoize once per checker to retain threadsafety
 // printer.go:13
 pub(crate) fn create_printer_with_defaults(emit_context: P<EmitContext>) -> Printer {

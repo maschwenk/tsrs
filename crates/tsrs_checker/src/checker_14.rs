@@ -5,9 +5,6 @@ use tsrs_ast as ast;
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 
-// Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
-// gosig into this directory: it rewrites every file listed in checker.json.
-
 // Non-function declarations in checker.go:28300-30509 (hand-ported by checker-foundation):
 //   const (checker.go:29618): maxTemplateLiteralTypeLength, maxTemplateLiteralTypeSpans
 

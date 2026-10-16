@@ -5,9 +5,6 @@ use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 use rustc_hash::FxHashMap;
 
-// Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
-// gosig into this directory: it rewrites every file listed in checker.json.
-
 // Non-function declarations in checker.go:1-2172 (hand-ported by checker-foundation):
 //   type CheckMode (checker.go:36)
 //   const (checker.go:38): CheckModeNormal, CheckModeContextual, CheckModeInferential,

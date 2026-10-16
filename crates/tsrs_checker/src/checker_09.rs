@@ -4,9 +4,6 @@ use tsrs_core::*;
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 
-// Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
-// gosig into this directory: it rewrites every file listed in checker.json.
-
 // Non-function declarations in checker.go:17433-19607 (hand-ported by checker-foundation):
 //   type CacheHashKey (checker.go:17701)
 //   type keyBuilder (checker.go:17707)

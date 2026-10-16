@@ -7,9 +7,6 @@ use tsrs_diagnostics::Message;
 use rustc_hash::FxHashMap;
 use std::fmt::Display;
 
-// Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
-// gosig into this directory: it rewrites every file listed in checker.json.
-
 impl Checker {
     // Return the type-only declaration node (if any) for the given alias symbol (non-transitively)
     // checker.go:2174

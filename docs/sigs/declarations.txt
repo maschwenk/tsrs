@@ -53,7 +53,7 @@ get_diagnostics | pub fn get_diagnostics(&self) -> Vec<P<Diagnostic>> | suppleme
 get_effective_base_type_node | pub(crate) fn get_effective_base_type_node(node: P<Node>) -> Option<P<Node>> | util.go:164 | -
 get_error_by_declaration_kind | pub(crate) fn get_error_by_declaration_kind(kind: Kind) -> Option<&'static Message> | diagnostics.go:502 | -
 get_expando_host_id | pub(crate) fn get_expando_host_id(&self, declaration: P<Node>) -> NodeId | transform.go:2868 | DeclarationTransformer
-get_leading_comment_ranges_of_node | pub(crate) fn get_leading_comment_ranges_of_node(&self, node: P<Node>, source_file: P<SourceFile>) -> Vec<CommentRange> | transform.go:203 | DeclarationTransformer
+get_leading_comment_ranges_of_node | pub(crate) fn get_leading_comment_ranges_of_node(node: P<Node>, source_file: P<SourceFile>) -> Vec<CommentRange> | transform.go:203 | DeclarationTransformer
 get_lib_references | pub(crate) fn get_lib_references(&self) -> Vec<P<FileReference>> | transform.go:519 | DeclarationTransformer
 get_method_name_visibility_diagnostic_message | pub(crate) fn get_method_name_visibility_diagnostic_message(node: P<Node>, symbol_accessibility_result: &SymbolAccessibilityResult) -> &'static Message | diagnostics.go:115 | -
 get_name_expression_preferring_identifier | pub(crate) fn get_name_expression_preferring_identifier(&self, name_expr: P<Node>) -> P<Node> | transform.go:2648 | DeclarationTransformer
@@ -172,7 +172,7 @@ transform_variable_declaration | pub(crate) fn transform_variable_declaration(&s
 transform_variable_statement | pub(crate) fn transform_variable_statement(&self, input: P<Node>) -> Option<P<Node>> | transform.go:2222 | DeclarationTransformer
 try_get_name_of_assigned_expression | pub(crate) fn try_get_name_of_assigned_expression(&self, unwrapped: P<Node>) -> Option<P<Node>> | transform.go:1192 | DeclarationTransformer
 try_get_property_name | pub(crate) fn try_get_property_name(&self, node: P<Node>) -> String | transform.go:2994 | DeclarationTransformer
-unwrap_parenthesized_expression | pub(crate) fn unwrap_parenthesized_expression(o: P<Node>) -> Option<P<Node>> | util.go:142 | -
+unwrap_parenthesized_expression | pub(crate) fn unwrap_parenthesized_expression(o: P<Node>) -> P<Node> | util.go:142 | -
 update_accessor_param_list | pub(crate) fn update_accessor_param_list(&self, input: P<Node>, is_private: bool) -> P<NodeList> | transform.go:1037 | DeclarationTransformer
 update_param_list | pub(crate) fn update_param_list(&self, node: P<Node>, params: P<NodeList>) -> P<NodeList> | transform.go:2399 | DeclarationTransformer
 visit | pub(crate) fn visit(&self, node: P<Node>) -> Option<P<Node>> | transform.go:226 | DeclarationTransformer

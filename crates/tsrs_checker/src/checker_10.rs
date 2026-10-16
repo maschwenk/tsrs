@@ -7,9 +7,6 @@ use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 use rustc_hash::FxHashMap;
 
-// Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
-// gosig into this directory: it rewrites every file listed in checker.json.
-
 // checker.go:19608
 pub(crate) fn get_base_type_node_of_class(t: P<Type>) -> Option<P<Node>> {
     let decl = ast::get_class_like_declaration_of_symbol(t.symbol().unwrap());

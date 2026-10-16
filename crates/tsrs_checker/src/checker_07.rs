@@ -7,9 +7,6 @@ use tsrs_diagnostics::Message;
 use rustc_hash::FxHashSet;
 use std::fmt::Display;
 
-// Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
-// gosig into this directory: it rewrites every file listed in checker.json.
-
 // Non-function declarations in checker.go:13069-15238 (hand-ported by checker-foundation):
 //   type PredicateSemantics (checker.go:13085)
 //   const (checker.go:13087): PredicateSemanticsNone, PredicateSemanticsAlways, PredicateSemanticsNever,

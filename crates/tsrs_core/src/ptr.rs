@@ -1533,11 +1533,6 @@ pub fn alloc<T>(value: T) -> &'static T {
     r
 }
 
-/// Bytes allocated so far by the current thread's arena.
-pub fn arena_allocated_bytes() -> usize {
-    with_arena(super::arena::Arena::capacity)
-}
-
 /// Bytes in use in the current allocation target (the thread's arena or an entered region), for measurements.
 pub fn arena_used_bytes() -> usize {
     with_arena(|a| a.used_ranges().iter().map(|&(_, len)| len).sum())

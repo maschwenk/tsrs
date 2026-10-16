@@ -4,9 +4,6 @@ use tsrs_core::*;
 use tsrs_ast as ast;
 use tsrs_diagnostics as diagnostics;
 
-// Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
-// gosig into this directory: it rewrites every file listed in checker.json.
-
 // Non-function declarations in checker.go:26123-28299 (hand-ported by checker-foundation):
 //   type IntersectionFlags (checker.go:26504)
 //   const (checker.go:26506): IntersectionFlagsNone, IntersectionFlagsNoSupertypeReduction,

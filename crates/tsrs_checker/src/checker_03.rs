@@ -9,9 +9,6 @@ use tsrs_diagnostics::Message;
 
 use crate::*;
 
-// Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
-// gosig into this directory: it rewrites every file listed in checker.json.
-
 // Non-function declarations in checker.go:4321-6526 (hand-ported by checker-foundation):
 //   type InheritanceInfo (checker.go:5122)
 

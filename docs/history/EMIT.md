@@ -174,7 +174,7 @@ the TestEmit table is already ported), `printer/namegenerator_test.go` (640),
 | transformers/{tstransforms, moduletransforms, estransforms, jsxtransforms, inliners} | modules `tsrs_transformers::{tstransforms, …}` | one module dir per Go package, one file per Go file; classfields.go split into `classfields_1.rs`/`_2.rs`, esdecorator.go likewise |
 | transformers/declarations | `tsrs_declarations` (unchanged) | |
 | sourcemap | `tsrs_sourcemap` | new crate, depends only on `tsrs_core` |
-| printer (factory.go rest, helpers.go, syntheticfile.go, emithost.go, source-map paths) | `tsrs_printer` | gosig stubs go to `factory_2.rs`, `helpers_defs.rs`; gosig skips the functions that `factory.rs` already defines |
+| printer (factory.go rest, helpers.go, syntheticfile.go, emithost.go, source-map paths) | `tsrs_printer` | initial stubs planned for `factory_2.rs` and `helpers_defs.rs`, preserving the functions already defined in `factory.rs` |
 | compiler emitter.go, emitHost.go, Program.Emit | `tsrs_compiler` (emitter.rs, emithost.rs, new `program_emit.rs`) | keep emit code out of program.rs and checkerpool.rs (the `lsp` branch rewrites both; section 11) |
 | execute/tsc emit parts | `tsrs_cli` | |
 | execute/incremental | `tsrs_incremental` | new crate |
@@ -303,27 +303,15 @@ Port Go's flow exactly (testrunner/compiler_runner.go, testutil/harnessutil, tes
   `incremental` is set. Until E13, run them as plain programs and list them as a known gap (only `.tsbuildinfo`
   content differs; it is not a baseline here).
 
-## 9. Signatures (`tools/gosig`)
+## 9. Initial signatures
 
-No signatures are generated yet. When resuming, write one config per Go package, modeled on
-`tools/gosig/declarations.json`, and generate stubs in the wave's worktree at the start of the wave, so they match the
-then-current main:
+This plan proposed extending the Go-to-Rust stub generator with configurations for each emit wave, mapping
+transformer structs to arena pointers and recording the host and resolver interfaces needed by each package.
+The port is complete, and the bootstrap generator and its advisory signature files have since been removed.
+The original configurations and instructions remain in Git history.
 
-- `transformers.json` (package `transformers`; outDir `crates/tsrs_transformers/src`), `tstransforms.json`,
-  `moduletransforms.json`, `estransforms.json` (classfields/esdecorator chunked by line range), `jsxtransforms.json`,
-  `inliners.json`, `sourcemap.json`, `printer_emit.json` (factory.go -> `factory_2.rs`, helpers.go ->
-  `helpers_defs.rs`; gosig skips the hand-written functions already in `tsrs_printer`), and later `incremental.json`,
-  `build.json`.
-- Common settings: `resultOnlyPackages` = ast, core, printer, checker, binder, transformers (and declarations for the
-  emitter); `arenaTypes` = every transformer struct (`typeEraserTransformer`, `RuntimeSyntaxTransformer`,
-  `CommonJSModuleTransformer`, `classFieldsTransformer`, `flattener`, `chainedTransformer`, …: they are captured by
-  visitor closures like the declaration transformer); `typeMap` additions: `*transformers.TransformOptions` ->
-  `&TransformOptions`, `*transformers.Transformer` -> `P<Transformer>`, `transformers.TransformerFactory` ->
-  `TransformerFactory` (`fn(&TransformOptions) -> Option<P<Transformer>>`), `printer.EmitResolver` -> `Resolver`,
-  `binder.ReferenceResolver` -> `ReferenceResolverRef` (the emit resolver or a plain `ReferenceResolver`; Go
-  chooses one in `getScriptTransformers`), `*printer.EmitHelper` -> `P<EmitHelper>`, `*sourcemap.Generator` ->
-  `&mut Generator`, plus everything in declarations.json's map. Then run `tools/sigs-from-rust.py` so that
-  `docs/sigs/*.txt` is generated from the sources.
+Current signature indexes are generated from the Rust sources by `python3 tools/sigs-from-rust.py`.
+See [the porting guide](../PORTING.md) for type mappings and [the current emit guide](../EMIT.md) for implementation.
 
 ## 11. Coordination with the LSP port
 

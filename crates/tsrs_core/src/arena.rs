@@ -911,11 +911,6 @@ impl Region {
         self.0.arena.used_ranges().iter().map(|&(_, len)| len).sum()
     }
 
-    /// Number of values waiting to be dropped when the region is freed (diagnostics).
-    pub fn drop_entries(&self) -> usize {
-        self.0.arena.drops.borrow().len()
-    }
-
     /// Forgets the values waiting to be dropped (and frees the list): for a region that will never be freed, whose
     /// values then live for the rest of the process like those of a thread arena. Values allocated afterwards are
     /// tracked again.

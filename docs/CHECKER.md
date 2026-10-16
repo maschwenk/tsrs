@@ -332,10 +332,9 @@ types in checker.rs.
 
 ## Name resolution in module files
 
-The generated checker files started with gosig's prelude (`use crate::*; use tsrs_ast::*; use tsrs_core::*;` plus
-`use tsrs_ast as ast;` and `use tsrs_diagnostics as diagnostics;`); the unused ones have since been removed, so add back
-what a file needs. lib.rs re-exports the data model and most checker modules (`pub(crate) use checker_01::*` …), so
-free functions of those files resolve unqualified elsewhere; a module without the re-export (checker_02.rs,
+Checker files import only what they use. lib.rs re-exports the data model and most checker modules
+(`pub(crate) use checker_01::*` …), so free functions of those files resolve unqualified elsewhere;
+a module without the re-export (checker_02.rs,
 services.rs, …) keeps its free functions to itself. A few checker free functions have the
 same name as a tsrs_ast function (`is_binary_operator`, `is_assignment_operator_or_higher`, `is_type_assertion`,
 `entity_name_to_string`, `is_node_descendant_of`, `is_instantiated_module`, …); an unqualified call from another file is
@@ -351,26 +350,16 @@ Types/symbols/signatures in messages go through `self.type_to_string(t)`, `self.
 
 ## Conventions for nil
 
-`Option<P<Type>>` only where Go can really hold nil. Signatures are generated mechanically from the Go source
-(see `tools/gosig`): a pointer parameter is `Option` iff some call site passes `nil` or the body compares it with `nil`;
-a pointer result is `Option` iff the body can return `nil`. Signatures follow these rules; change one only when it is
-wrong for the Go semantics, and update its callers in the same change.
+Use `Option<P<Type>>` only where Go can really hold nil. Check the Go callers and body for nil parameters and
+results, following [the porting guide](PORTING.md#memory-model-the-important-part). Change a signature only when
+it is wrong for the Go semantics, and update its callers in the same change.
 
-## Generated signatures (`tools/gosig`)
+## Signature indexes
 
-Function signatures for the whole checker package were generated mechanically from the Go source into stub files
-(`todo!()` bodies) before the bodies were ported. All bodies are now ported, so the Rust sources are the reference.
-`docs/sigs/checker.txt` (and the other `docs/sigs/*.txt` without `_advisory`) is a one-line-per-function index generated
-from the Rust sources by `python3 tools/sigs-from-rust.py`; CI does not run it, so run it after changing signatures (or
-grep the sources). The `*_advisory.txt` files are from the original `tools/gosig` run and are not updated.
-Mapping used by the generator (deviations from PORTING.md are deliberate, for determinism):
+The Rust sources are the reference. `docs/sigs/checker.txt` (and the other `docs/sigs/*.txt`) is an index with one
+line per function, generated from the Rust sources by `python3 tools/sigs-from-rust.py`. CI does not run it, so run
+it after changing signatures (or grep the sources). The bootstrap stub generator and its advisory signature files
+have been removed.
 
-- Go `int` -> `i32` always (cast at use sites: `x as usize`, `v.len() as i32`).
-- Go `(T, bool)` / multiple results -> the same tuple `(T, bool)`; no `Option` conversion.
-- `[]T` parameter -> `&[T]`; `[]T` result -> `Vec<T>` (callers needing a stored slice call `alloc_slice`); a result that is
-  `nil`-distinguishable is `Option<Vec<T>>` only if the generator marks it.
-- `string` parameter -> `&str`; `string` result -> `String`.
-- `func(...)` parameter of a `Checker` method -> `impl FnMut(&mut Checker, ...) -> R` (checker first); elsewhere `impl FnMut(...) -> R`.
-- `args ...any` -> `args: &[&dyn std::fmt::Display]`.
-- Each function ported from Go carries a terse origin marker comment (`// checker.go:1234`); keep it. Hand-written
-  helpers have none.
+Use [the porting guide](PORTING.md) for type and callback mappings. Keep each ported function's Go origin marker
+(`// checker.go:1234`); the indexes use it to locate the corresponding Go code. Hand-written helpers have no marker.

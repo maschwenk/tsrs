@@ -12,7 +12,7 @@
 //! - types.rs: the hand-ported data model of all Go files (structs, host trait, constants).
 //! - `Resolver` and `Transformer` come from `tsrs_transformers` (re-exported).
 //! - transform_{1,2,3}.rs (transform.go 1–1339, 1340–2327, 2328–end), diagnostics_.rs, tracker.rs, util.rs,
-//!   supplementalreferences.rs: hand-ported function bodies (scaffolded as stubs by tools/gosig, declarations.json).
+//!   supplementalreferences.rs: hand-ported function bodies.
 
 pub(crate) use std::cell::{Cell, OnceCell, RefCell};
 pub(crate) use std::fmt::Display;

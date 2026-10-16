@@ -4,9 +4,6 @@ use tsrs_core::*;
 use tsrs_ast as ast;
 use std::rc::Rc;
 
-// Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
-// gosig into this directory: it rewrites every file listed in checker.json.
-
 // Non-function declarations in nodecopy.go (hand-ported by printer-foundation in nodebuilder_types.rs):
 //   type recoveryBoundary (nodecopy.go:98)
 //   type originalRecoveryScopeState (nodecopy.go:116)

@@ -2,9 +2,6 @@ use crate::*;
 use tsrs_ast::*;
 use tsrs_ast as ast;
 
-// Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
-// gosig into this directory: it rewrites every file listed in checker.json.
-
 // Non-function declarations in emitresolver.go (hand-ported in nodebuilder_types.rs):
 //   var _ (emitresolver.go:17)
 //   type JSXLinks (emitresolver.go:20)

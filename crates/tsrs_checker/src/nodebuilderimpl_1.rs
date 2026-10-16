@@ -5,9 +5,6 @@ use tsrs_ast as ast;
 use rustc_hash::FxHashMap;
 use std::rc::Rc;
 
-// Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
-// gosig into this directory: it rewrites every file listed in checker.json.
-
 // Non-function declarations in nodebuilderimpl.go:1-1850 (hand-ported by printer-foundation in nodebuilder_types.rs):
 //   type CompositeSymbolIdentity (nodebuilderimpl.go:24)
 //   type TrackedSymbolArgs (nodebuilderimpl.go:30)

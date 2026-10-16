@@ -48,8 +48,9 @@ Variants, all built from the same source:
 ## 1. The training runs of tsrs wrote nothing (fixed in #153 and #155)
 
 Status (2026-10-10): the `_exit` exit path was reverted in #191 (docs/STATUS.md). `crates/tsrs_cli/src/main.rs`
-ends with `std::process::exit`, so the exit handlers that write PGO and BOLT profiles always run; `bolt.sh` and
-`tools/perf/layout-build.sh` keep `MIMALLOC_SHOW_STATS=1` as a leftover. The mechanism below is history.
+ends with `std::process::exit`, so the exit handlers that write PGO and BOLT profiles always run. The obsolete
+`MIMALLOC_SHOW_STATS=1` workaround was removed from `bolt.sh` and `tools/perf/layout-build.sh` in #274.
+The mechanism below is history.
 
 `tsrs` ends a command-line run with `libc::_exit` since #143. Both the LLVM profile runtime and BOLT's
 instrumentation runtime write their data from exit handlers, which `_exit` skips; the LLVM runtime does create the

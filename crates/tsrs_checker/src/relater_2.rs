@@ -5,9 +5,6 @@ use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 use std::fmt::Display;
 
-// Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
-// gosig into this directory: it rewrites every file listed in checker.json.
-
 // Non-function declarations in relater.go:2580-end (not generated; port by hand in this file):
 //   type Relater (relater.go:2580) -- in relater_types.rs
 

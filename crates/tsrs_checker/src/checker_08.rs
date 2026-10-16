@@ -7,9 +7,6 @@ use tsrs_diagnostics::Message;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::fmt::Display;
 
-// Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
-// gosig into this directory: it rewrites every file listed in checker.json.
-
 // Non-function declarations in checker.go:15239-17432 (hand-ported by checker-foundation):
 //   type ExportCollision (checker.go:16464)
 //   type ExportCollisionTable (checker.go:16469)
