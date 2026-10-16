@@ -1,13 +1,11 @@
 // Identifier node data (written by hand; tools/gen-ast/gen-ast.ts skips it).
 //
-// Go's `Identifier` holds `Text` and `FlowNodeBase.FlowNode`. Almost every identifier is made by the parser from a
-// token whose text is the slice of its file's text that ends where the identifier ends (on the private monorepo
-// 7.86M of 8.15M; the rest are missing identifiers, clones and synthesized names). Such an identifier keeps only the
-// text's length and the file's text index (`register_source_text`): the text is `source_text(index)[end - len..end]`
-// with `end` from the node's range. The index sits in the bits of the flow node until the binder sets one; from then
-// on it is read from the flow node (`FlowNode::text_index`: the binder made that flow node for the same file). So
-// flow node and text fit one word, and the node is 32 bytes instead of 40. Every other identifier stores its text
-// after the word (`IdentifierWithText`, 40 bytes as before).
+// Source identifiers can keep their length and file index instead of their text: the text is
+// `source_text(index)[end - len..end]`. The index shares storage with the flow node; after binding it is read from
+// `FlowNode::text_index`. With compressed pointers, the flow/index slot takes four bytes and the node's six spare
+// marker bits hold a four-bit length and two-bit mode. Source names of at most 15 bytes therefore occupy 24 bytes
+// including the header. Other names keep a PackedStr after the slot and occupy 32 bytes; no text interning is needed.
+// Plain pointers retain the previous full-width word, with a 17-bit source-name length.
 //
 // `text()` returns exactly the slice the parser had (same pointer and length), so nothing observable changes. The
 // range end of a compact identifier is fixed when it is created: `Node::set_loc` panics if it would change.
@@ -81,10 +79,11 @@ fn source_text(index: u32) -> &'static str {
     unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(slot.ptr.load(Relaxed), slot.len.load(Relaxed))) }
 }
 
-// The word: bits 0..45 the flow node (`P::pack`, like the node header's parent) or the text index, bits 45..62 the text length, bits 62..64 the mode.
+// Logical word used by the accessors: bits 0..45 are the flow node (P::pack) or text index, bits 45..62 the length,
+// and bits 62..64 the mode. Compressed storage splits it between the payload and the node's marker byte.
 const SLOT_MASK: u64 = (1 << tsrs_core::PACK_BITS) - 1;
 const LEN_SHIFT: u32 = 45;
-const LEN_MAX: u64 = (1 << 17) - 1;
+const LEN_MAX: u64 = if tsrs_core::COMPRESSED_PTRS { 15 } else { (1 << 17) - 1 };
 const MODE_SHIFT: u32 = 62;
 /// Text from the source, no flow node; the slot is the text index.
 const MODE_SOURCE: u64 = 0;
@@ -100,20 +99,36 @@ const MODE_SOURCE_SIDE: u64 = 3;
 static SIDE_FLOW: LazyLock<Mutex<FxHashMap<usize, P<FlowNode>>>> = LazyLock::new(Default::default);
 
 pub struct Identifier {
-    word: OwnedCell<u64>,
+    word: OwnedCell<[u32; if tsrs_core::COMPRESSED_PTRS { 1 } else { 2 }]>,
 }
 
-#[repr(C)]
+// Both identifier forms must have the same alignment: Node::payload<Identifier> also addresses this prefix.
+#[repr(C, packed(4))]
 struct IdentifierWithText {
     identifier: Identifier,
     text: PackedStr,
 }
 
-impl NodePayload for IdentifierWithText {
+impl NodePayload for Identifier {
     const TAG: NodeDataTag = NodeDataTag::Identifier;
+    #[inline]
+    fn initial_markers(&self) -> u8 {
+        // new() temporarily puts the length above the 20-bit source index so it reaches the header before hooks run.
+        if tsrs_core::COMPRESSED_PTRS { ((self.word.get()[0] >> 20) as u8 & 15) << 2 } else { 0 }
+    }
 }
 
-const _: () = assert!(std::mem::size_of::<NodeAlloc<Identifier>>() == 32);
+impl NodePayload for IdentifierWithText {
+    const TAG: NodeDataTag = NodeDataTag::Identifier;
+    #[inline]
+    fn initial_markers(&self) -> u8 {
+        if tsrs_core::COMPRESSED_PTRS { (MODE_TEXT as u8) << 6 } else { 0 }
+    }
+}
+
+const _: () = assert!(std::mem::size_of::<NodeAlloc<Identifier>>() == std::mem::size_of::<Node>() + if tsrs_core::COMPRESSED_PTRS { 4 } else { 8 });
+const _: () = assert!(std::mem::offset_of!(NodeAlloc<Identifier>, data) == std::mem::offset_of!(NodeAlloc<IdentifierWithText>, data));
+const _: () = assert!(SOURCE_TEXTS_CAP <= 1 << 20);
 
 /// TOOL (`--features tsrs_ast/ast-sizing` only): arena bytes of an identifier node with its text stored.
 #[cfg(feature = "ast-sizing")]
@@ -142,6 +157,42 @@ fn slot_flow(word: u64) -> Option<P<FlowNode>> {
 }
 
 impl Identifier {
+    fn new(word: u64) -> Self {
+        debug_assert!(matches!(Self::mode(word), MODE_SOURCE | MODE_TEXT));
+        let mut data = [0; if tsrs_core::COMPRESSED_PTRS { 1 } else { 2 }];
+        data[0] = word as u32;
+        if tsrs_core::COMPRESSED_PTRS {
+            data[0] |= (((word >> LEN_SHIFT) & LEN_MAX) as u32) << 20;
+        } else {
+            *data.last_mut().unwrap() = (word >> 32) as u32;
+        }
+        Identifier { word: OwnedCell::new(data) }
+    }
+
+    #[inline]
+    fn word(&self) -> u64 {
+        let data = self.word.get();
+        if tsrs_core::COMPRESSED_PTRS {
+            let info = self.node().identifier_info();
+            u64::from(data[0]) | (u64::from(info & 15) << LEN_SHIFT) | (u64::from(info >> 4) << MODE_SHIFT)
+        } else {
+            u64::from(data[0]) | (u64::from(*data.last().unwrap()) << 32)
+        }
+    }
+
+    #[inline]
+    fn set_word(&self, word: u64) {
+        let mut data = [0; if tsrs_core::COMPRESSED_PTRS { 1 } else { 2 }];
+        data[0] = word as u32;
+        if tsrs_core::COMPRESSED_PTRS {
+            let info = (((word >> LEN_SHIFT) & LEN_MAX) as u8) | (((word >> MODE_SHIFT) as u8) << 4);
+            self.node().set_identifier_info(info);
+        } else {
+            *data.last_mut().unwrap() = (word >> 32) as u32;
+        }
+        self.word.set(data);
+    }
+
     #[inline]
     fn node(&self) -> &Node {
         // SAFETY: identifiers are created only by `new_node` inside a `NodeAlloc` (`repr(C)`, header first), so the
@@ -160,14 +211,15 @@ impl Identifier {
         if Self::mode(word) == MODE_SOURCE_FLOW {
             slot_flow(word).unwrap().text_index()
         } else {
-            (word & SLOT_MASK) as u32
+            // Before the first flow update, the slot can still contain the initial length above the source index.
+            (word & if tsrs_core::COMPRESSED_PTRS { (1 << 20) - 1 } else { SLOT_MASK }) as u32
         }
     }
 
     #[inline]
     #[expect(clippy::disallowed_methods, reason = "from_utf8 here: +1.6% instructions, one checker (notes/lint-paydown-compiler.md)")]
     pub fn text(&self) -> &'static str {
-        let word = self.word.get();
+        let word = self.word();
         if Self::mode(word) == MODE_TEXT {
             return self.stored_text();
         }
@@ -186,7 +238,7 @@ impl Identifier {
     /// `text().len()`, without forming the text (a compact identifier keeps its length in the word).
     #[inline]
     pub fn text_len(&self) -> usize {
-        let word = self.word.get();
+        let word = self.word();
         if Self::mode(word) == MODE_TEXT {
             return self.stored_text().len();
         }
@@ -196,12 +248,13 @@ impl Identifier {
     #[cold]
     fn stored_text(&self) -> &'static str {
         // SAFETY: identifiers in `MODE_TEXT` were allocated as `IdentifierWithText` (`repr(C)`, identifier first).
-        unsafe { tsrs_core::ptr::arena_neighbor::<_, IdentifierWithText>(self, 0) }.text.as_str()
+        let text = unsafe { tsrs_core::ptr::arena_neighbor::<_, IdentifierWithText>(self, 0) }.text;
+        text.as_str()
     }
 
     #[inline]
     pub fn flow_node(&self) -> Option<P<FlowNode>> {
-        let word = self.word.get();
+        let word = self.word();
         match Self::mode(word) {
             MODE_SOURCE => None,
             MODE_SOURCE_SIDE => self.side_flow(),
@@ -215,10 +268,10 @@ impl Identifier {
     }
 
     pub fn set_flow_node(&self, flow: Option<P<FlowNode>>) {
-        let word = self.word.get();
+        let word = self.word();
         let mode = Self::mode(word);
         if mode == MODE_TEXT {
-            self.word.set(word & !SLOT_MASK | flow_slot(flow));
+            self.set_word(word & !SLOT_MASK | flow_slot(flow));
             return;
         }
         let index = Self::text_index(word);
@@ -239,13 +292,13 @@ impl Identifier {
                 (MODE_SOURCE_SIDE << MODE_SHIFT) | len | index as u64
             }
         };
-        self.word.set(word);
+        self.set_word(word);
     }
 
     /// Whether the text is derived from the node's range (see `Node::set_loc`).
     #[inline]
     pub(crate) fn is_source_text(&self) -> bool {
-        Self::mode(self.word.get()) != MODE_TEXT
+        Self::mode(self.word()) != MODE_TEXT
     }
 
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
@@ -258,7 +311,7 @@ impl NodeFactory {
         self.text_count.set(self.text_count.get() + 1);
         self.new_node(
             Kind::Identifier,
-            IdentifierWithText { identifier: Identifier { word: OwnedCell::new(MODE_TEXT << MODE_SHIFT) }, text: PackedStr::new(text) },
+            IdentifierWithText { identifier: Identifier::new(MODE_TEXT << MODE_SHIFT), text: PackedStr::new(text) },
         )
     }
 
@@ -286,7 +339,7 @@ impl NodeFactory {
         self.text_count.set(self.text_count.get() + 1);
         let node = self.new_node(
             Kind::Identifier,
-            Identifier { word: OwnedCell::new((MODE_SOURCE << MODE_SHIFT) | ((text.len() as u64) << LEN_SHIFT) | text_index as u64) },
+            Identifier::new((MODE_SOURCE << MODE_SHIFT) | ((text.len() as u64) << LEN_SHIFT) | text_index as u64),
         );
         node.loc.set(loc);
         node
@@ -302,4 +355,46 @@ pub(crate) fn check_source_identifier_loc(node: &Node, loc: TextRange) {
         node.end(),
         loc.end()
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{FlowFlags, NodeFlags};
+
+    #[test]
+    fn identifier_storage_boundary_preserves_text_flow_and_node_metadata() {
+        let factory = NodeFactory::default();
+        let parent = factory.new_identifier("parent");
+        let other_index = register_source_text("other");
+        for len in [0, 1, 15, 16, 128, 2048] {
+            let factory = crate::ast::new_node_factory(crate::ast::NodeFactoryHooks {
+                on_create: Some(std::rc::Rc::new(move |node| assert_eq!(node.as_identifier().text_len(), len))),
+                ..Default::default()
+            });
+            let text = tsrs_core::alloc_str(&"x".repeat(len));
+            let index = register_source_text(text);
+            let loc = TextRange::new(0, len as u32);
+            let node = factory.new_source_identifier(text, index, loc);
+            node.set_parent(Some(parent));
+            node.set_flags(NodeFlags::from_bits_retain(u32::MAX));
+            node.mark_trailing_comma();
+            let same_file = P::new(FlowNode::new(FlowFlags::Start, None, None, index));
+            let other_file = P::new(FlowNode::new(FlowFlags::Start, None, None, other_index));
+            for flow in [None, Some(same_file), Some(other_file), Some(same_file), None] {
+                node.set_flow_node(flow);
+                assert_eq!(node.text(), text);
+                assert_eq!(node.text().as_ptr(), text.as_ptr());
+                assert_eq!(node.as_identifier().text_len(), len);
+                assert_eq!(node.flow_node(), flow);
+                assert_eq!(node.loc(), loc);
+                assert_eq!(node.parent(), Some(parent));
+                assert_eq!(node.flags().bits(), u32::MAX);
+                assert!(node.has_trailing_comma_marker());
+            }
+            let cloned = node.clone_node(&factory);
+            assert_eq!(cloned.text(), text);
+            assert_eq!(cloned.loc(), loc);
+        }
+    }
 }

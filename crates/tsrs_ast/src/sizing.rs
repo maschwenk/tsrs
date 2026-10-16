@@ -14,7 +14,6 @@ use std::cell::{Cell, RefCell};
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::mem::{align_of, size_of};
-use std::sync::atomic::Ordering;
 
 use rustc_hash::FxHashSet;
 use tsrs_core::P;
@@ -331,6 +330,7 @@ fn bucket(len: usize) -> usize {
 struct KindRow {
     count: u64,
     bytes: u64,
+    // Legacy TSV column: no node stores an assigned id now, so this remains zero.
     with_id: u64,
     with_rare: u64,
     in_jsdoc: u64,
@@ -347,6 +347,7 @@ struct IdentRow {
     copy_text_bytes: u64,
     text_bytes: u64,
     with_flow: u64,
+    // Legacy TSV column, as in KindRow.
     with_id: u64,
 }
 
@@ -464,13 +465,9 @@ fn walk(c: &mut ClassCounts, stack: &mut Vec<Frame>, seen: &mut Seen, text: &'st
         let kind = n.kind();
         let k = kind as usize;
         let size = alloc_size(&n) as u64;
-        // Relaxed: the walk runs while no checker thread runs (before the pass, or after it joined), and only reads
-        // whether an id was written.
-        let has_id = n.id.load(Ordering::Relaxed) != 0;
         let row = &mut c.kinds[k];
         row.count += 1;
         row.bytes += size;
-        row.with_id += u64::from(has_id);
         row.with_rare += u64::from(n.has_rare_tail());
         row.in_jsdoc += u64::from(f.jsdoc);
         row.with_flags += u64::from(!n.flags.get().is_empty());
@@ -487,7 +484,6 @@ fn walk(c: &mut ClassCounts, stack: &mut Vec<Frame>, seen: &mut Seen, text: &'st
                 ir.count += 1;
                 ir.bytes += size;
                 ir.text_bytes += t.len() as u64;
-                ir.with_id += u64::from(has_id);
                 ir.with_flow += u64::from(id.flow_node().is_some());
                 if id.is_source_text() {
                     ir.compact += 1;

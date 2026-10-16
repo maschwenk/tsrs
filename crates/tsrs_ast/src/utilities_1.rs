@@ -5,9 +5,8 @@ use tsrs_core::{ScriptKind, P};
 
 use crate::*;
 
-// Atomic ids
+// Symbol ids
 
-static NEXT_NODE_ID: AtomicU64 = AtomicU64::new(0);
 static NEXT_SYMBOL_ID: AtomicU64 = AtomicU64::new(0);
 
 /// Ids a thread in id-block mode (`use_id_blocks`) takes from a counter at a time.
@@ -16,12 +15,11 @@ const ID_BLOCK: u64 = 1024;
 thread_local! {
     /// Whether this thread takes ids in blocks (`use_id_blocks`).
     static ID_BLOCK_MODE: Cell<bool> = const { Cell::new(false) };
-    /// Id-block mode: the rest of the thread's current block of node / symbol ids, `(next, end)`.
-    static NODE_ID_BLOCK: Cell<(u64, u64)> = const { Cell::new((0, 0)) };
+    /// Id-block mode: the rest of the thread's current block of symbol ids, `(next, end)`.
     static SYMBOL_ID_BLOCK: Cell<(u64, u64)> = const { Cell::new((0, 0)) };
 }
 
-/// Makes the current thread take node and symbol ids from the process-wide counters in blocks of `ID_BLOCK`.
+/// Makes the current thread take symbol ids from the process-wide counter in blocks of `ID_BLOCK`.
 ///
 /// For the threads of a parallel checker group: their ids interleave in an order that depends on timing
 /// anyway (as Go's do), and one counter that every checker increments is a contended cache line. Each
@@ -51,33 +49,10 @@ fn next_id(counter: &AtomicU64, block: &'static std::thread::LocalKey<Cell<(u64,
     })
 }
 
+/// Identity of a live node. Arenas never move nodes; caches using this id must not outlive the node's allocation.
 #[inline]
 pub fn get_node_id(node: P<Node>) -> NodeId {
-    let id = node.id.load(Ordering::Relaxed);
-    if id != 0 {
-        return NodeId(id as u64);
-    }
-    assign_node_id(node)
-}
-
-/// The node's id if it has one; unlike `get_node_id`, never assigns one.
-#[inline]
-pub fn get_assigned_node_id(node: P<Node>) -> Option<u32> {
-    // Relaxed, as in `get_node_id`: the id is the only data read, and it is written once.
-    let id = node.id.load(Ordering::Relaxed);
-    (id != 0).then_some(id)
-}
-
-#[inline(never)]
-fn assign_node_id(node: P<Node>) -> NodeId {
-    // Worst case, we burn a few ids if we have to CAS.
-    let next = next_id(&NEXT_NODE_ID, &NODE_ID_BLOCK);
-    // Nodes store their id in 32 bits (memory); Go's ids are 64-bit but no program gets near 2^32.
-    let mut id = u32::try_from(next).expect("more than u32::MAX node ids");
-    if node.id.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed).is_err() {
-        id = node.id.load(Ordering::Relaxed);
-    }
-    NodeId(id as u64)
+    NodeId(node.addr() as u64)
 }
 
 #[inline]

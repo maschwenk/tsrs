@@ -368,8 +368,10 @@ real files and symlinks. No Cargo feature is needed. Fixtures and their generato
 - Profiling (`startCPUProfile`, `stopCPUProfile`, `saveHeapProfile`) is not implemented (no pprof
   equivalent). `getCurrentLanguageServerSnapshot` returns Go's standalone-session client error; LSP-attached
   API sessions are not ported.
-- Node index tables are cached per live source file keyed by the file's address (lookups never assign the
-  file's lazy node id) and evicted when the file's region is freed; Go stores them on the file itself.
+- Node ids, including source-file descriptor ids, are allocation addresses, valid for the live node's lifetime.
+  Node index tables are cached per live source file and evicted when its region is freed; Go stores them on the
+  file itself. Table-local comparison ranks preserve Go's repeated-node index selection for fresh trees without
+  depending on address order; they do not reproduce ids previously assigned by a Go checker.
 - Re-entrancy attribution: snapshot builds read files through a `ScopedFs` that enters the creating
   request's transport `RequestScope`, so client callbacks from compiler worker threads are attributed to
   that request; API builds run their tasks on the request thread. Remaining divergence: a request whose own

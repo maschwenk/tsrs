@@ -3,8 +3,8 @@
 //!
 //! - **Free lists** (`free`, `free_slice`, `P::new_recycled`, `alloc_slice_recycled`): a block whose owner proved
 //!   it unreachable goes onto a per-thread list for its size class (8-byte steps up to `MAX_FREE_SIZE`), and the
-//!   recycling allocation sites take blocks from there first. Ids of arena objects never depend on addresses, so
-//!   reuse changes no output.
+//!   recycling allocation sites take blocks from there first. Caches keyed by object addresses must not outlive
+//!   their keys, including node ids, which use allocation addresses.
 //! - **Checkpoints** (`checkpoint`, `rewind`): a speculative parse records the bump position and, when it is rolled
 //!   back, moves it back, discarding everything allocated since. This only happens when nothing could have kept a
 //!   pointer to that memory: same chunk, and no free or `pin` on this thread in between (`pin` is called by code

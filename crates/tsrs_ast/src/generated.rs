@@ -6370,9 +6370,6 @@ pub(crate) enum NodeDataTag {
     FlowReduceLabelData,
 }
 
-impl NodePayload for Identifier {
-    const TAG: NodeDataTag = NodeDataTag::Identifier;
-}
 impl NodePayload for PrivateIdentifier {
     const TAG: NodeDataTag = NodeDataTag::PrivateIdentifier;
 }

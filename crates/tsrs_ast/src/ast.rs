@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::collections::hash_map::Entry;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Once, OnceLock, RwLock};
 
 use rustc_hash::FxHashMap;
@@ -121,11 +121,20 @@ pub fn new_node_factory_ex(hooks: NodeFactoryHooks, scratch: bool) -> NodeFactor
 
 fn node_header(kind: Kind, data_tag: NodeDataTag) -> Node {
     Node {
-        header: OwnedCell::new(NodeHeaderWord::new(kind, data_tag)),
+        kind,
+        data_tag,
+        markers: OwnedCell::new(0),
+        parent: OwnedCell::new(None),
         flags: OwnedCell::new(NodeFlags::None),
-        id: AtomicU32::new(0),
         loc: OwnedCell::new(undefined_text_range()),
     }
+}
+
+#[inline]
+fn node_header_data<T: NodePayload>(kind: Kind, data: &T) -> Node {
+    let header = node_header(kind, T::TAG);
+    header.markers.set(data.initial_markers());
+    header
 }
 
 /// Creates a node whose data struct is `data` (Go: the data struct embeds `NodeBase`, one allocation).
@@ -137,14 +146,14 @@ pub(crate) fn new_node<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryH
 fn new_node_plain<T: NodePayload>(kind: Kind, data: T) -> P<Node> {
     // SAFETY: `NodeAlloc` is `repr(C)` with the header first, so the pointer to the allocation is a pointer to
     // its header; the header is never moved or freed (leak arena).
-    unsafe { P::new(NodeAlloc { node: node_header(kind, T::TAG), data }).cast::<Node>() }
+    unsafe { P::new(NodeAlloc { node: node_header_data(kind, &data), data }).cast::<Node>() }
 }
 
 #[inline]
 fn new_node_hooked<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryHooks) -> P<Node> {
     // SAFETY: `NodeAlloc` is `repr(C)` with the header first, so the pointer to the allocation is a pointer to
     // its header; the header is never moved or freed (leak arena).
-    let n = unsafe { P::new(NodeAlloc { node: node_header(kind, T::TAG), data }).cast::<Node>() };
+    let n = unsafe { P::new(NodeAlloc { node: node_header_data(kind, &data), data }).cast::<Node>() };
     if let Some(on_create) = &hooks.on_create {
         on_create(n);
     }
@@ -154,7 +163,7 @@ fn new_node_hooked<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryHooks
 #[inline]
 fn new_node_scratch<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryHooks) -> P<Node> {
     // SAFETY: as in `new_node_hooked`, but this allocation is owned by the active scratch region.
-    let n = unsafe { P::new_scratch(NodeAlloc { node: node_header(kind, T::TAG), data }).cast::<Node>() };
+    let n = unsafe { P::new_scratch(NodeAlloc { node: node_header_data(kind, &data), data }).cast::<Node>() };
     if let Some(on_create) = &hooks.on_create {
         on_create(n);
     }
@@ -165,8 +174,8 @@ fn new_node_scratch<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryHook
 /// rare bit says the tail is there). The factory uses it when one of the struct's rare fields is set.
 fn new_node_with_rare_hooked<T: NodeRareTail>(kind: Kind, data: T, rare: T::Rare, hooks: &NodeFactoryHooks) -> P<Node> {
     let () = T::SAME_OFFSET;
-    let mut header = node_header(kind, T::TAG);
-    header.header = OwnedCell::new(header.header.get().with_rare_tail());
+    let header = node_header_data(kind, &data);
+    header.markers.set(header.markers.get() | NODE_RARE_TAIL);
     // SAFETY: as in `new_node` (`NodeAllocRare` is `repr(C)` with the header first).
     let n = unsafe { P::new(NodeAllocRare { node: header, data, rare }).cast::<Node>() };
     if let Some(on_create) = &hooks.on_create {
@@ -178,8 +187,8 @@ fn new_node_with_rare_hooked<T: NodeRareTail>(kind: Kind, data: T, rare: T::Rare
 #[inline]
 fn new_node_with_rare_scratch<T: NodeRareTail>(kind: Kind, data: T, rare: T::Rare, hooks: &NodeFactoryHooks) -> P<Node> {
     let () = T::SAME_OFFSET;
-    let mut header = node_header(kind, T::TAG);
-    header.header = OwnedCell::new(header.header.get().with_rare_tail());
+    let header = node_header_data(kind, &data);
+    header.markers.set(header.markers.get() | NODE_RARE_TAIL);
     // SAFETY: as in `new_node_with_rare_hooked`, but this allocation is owned by the active scratch region.
     let n = unsafe { P::new_scratch(NodeAllocRare { node: header, data, rare }).cast::<Node>() };
     if let Some(on_create) = &hooks.on_create {
@@ -191,8 +200,8 @@ fn new_node_with_rare_scratch<T: NodeRareTail>(kind: Kind, data: T, rare: T::Rar
 #[inline]
 fn new_node_with_rare_plain<T: NodeRareTail>(kind: Kind, data: T, rare: T::Rare) -> P<Node> {
     let () = T::SAME_OFFSET;
-    let mut header = node_header(kind, T::TAG);
-    header.header = OwnedCell::new(header.header.get().with_rare_tail());
+    let header = node_header_data(kind, &data);
+    header.markers.set(header.markers.get() | NODE_RARE_TAIL);
     // SAFETY: as in `new_node_plain` (`NodeAllocRare` is `repr(C)` with the header first).
     unsafe { P::new(NodeAllocRare { node: header, data, rare }).cast::<Node>() }
 }
@@ -204,7 +213,7 @@ pub(crate) fn rare_tail<T: NodeRareTail>(data: &T) -> Option<&'static T::Rare> {
     // SAFETY: data structs are created only inside a `NodeAlloc<T>` or `NodeAllocRare<T, _>` (both `repr(C)`, header
     // first, data at the same offset: asserted in `NodeRareTail`), which is never moved or freed while reachable.
     let node: &Node = unsafe { tsrs_core::ptr::arena_neighbor(data, -(std::mem::offset_of!(NodeAlloc<T>, data) as isize)) };
-    if !node.header.get().has_rare_tail() {
+    if node.markers.get() & NODE_RARE_TAIL == 0 {
         return None;
     }
     let off = std::mem::offset_of!(NodeAllocRare<T, T::Rare>, rare) - std::mem::offset_of!(NodeAllocRare<T, T::Rare>, data);
@@ -501,98 +510,36 @@ impl ModifierList {
 /// `NodeData`, `as_*()` and the generated accessors read it in place. Data structs without fields (`Token`,
 /// `KeywordTypeNode`, ...) allocate only the header.
 ///
-/// The header is 24 bytes: the kind, the data tag and the parent pointer share one word (`NodeHeaderWord`),
-/// and the id is stored in 32 bits (ids still come from a 64-bit counter and are returned as `NodeId`; more
-/// than `u32::MAX` node ids panic, like symbol ids). 23M nodes on the private monorepo.
+/// The header is 20 bytes with compressed pointers: kind, data tag and markers take four bytes, parent and
+/// flags take four each, and the source range takes eight. Ordinary fields avoid packed-word operations.
+/// Node identity comes from the allocation's address.
 pub struct Node {
-    header: OwnedCell<NodeHeaderWord>,
+    kind: Kind,
+    data_tag: NodeDataTag,
+    markers: OwnedCell<u8>, // rare tail, trailing comma, and six identifier metadata bits
+    parent: OwnedCell<Option<P<Node>>>,
     pub flags: OwnedCell<NodeFlags>,
-    pub(crate) id: AtomicU32,
     pub(crate) loc: OwnedCell<TextRange>, // set_loc() (compact identifiers derive their text from the end)
 }
 
-const _: () = assert!(std::mem::size_of::<Node>() == 24);
+const _: () = assert!(std::mem::size_of::<Node>() == if std::mem::size_of::<P<Node>>() == 4 { 20 } else { 24 });
 
-/// A node's kind, data tag and parent in one word: the parent in the low 45 bits (`P::pack`), the kind in the next 9 bits, the data
-/// tag in the 8 above, the rare bit (the data struct is followed by its rare tail, `NodeRareTail`) and the
-/// trailing-comma bit. The latter replaces the old `-2` synthetic-position sentinel. Only the parent and
-/// trailing-comma bits change after creation.
-#[derive(Clone, Copy)]
-struct NodeHeaderWord(u64);
-
-impl NodeHeaderWord {
-    const PARENT_BITS: u32 = tsrs_core::PACK_BITS;
-    const PARENT_MASK: u64 = (1 << Self::PARENT_BITS) - 1;
-    const KIND_SHIFT: u32 = Self::PARENT_BITS;
-    const KIND_BITS: u32 = 9;
-    const TAG_SHIFT: u32 = Self::KIND_SHIFT + Self::KIND_BITS;
-    const RARE_BIT: u64 = 1 << (Self::TAG_SHIFT + 8);
-    const TRAILING_COMMA_BIT: u64 = 1 << 63;
-
-    #[inline]
-    fn new(kind: Kind, data_tag: NodeDataTag) -> NodeHeaderWord {
-        NodeHeaderWord(((kind as u16 as u64) << Self::KIND_SHIFT) | ((data_tag as u8 as u64) << Self::TAG_SHIFT))
-    }
-
-    #[inline]
-    fn kind(self) -> Kind {
-        let v = (self.0 >> Self::KIND_SHIFT) as u16 & ((1 << Self::KIND_BITS) - 1);
-        // SAFETY: the bits were stored from a `Kind` (repr(i16), contiguous discriminants 0..=Count < 2^9).
-        unsafe { std::mem::transmute::<i16, Kind>(v as i16) }
-    }
-
-    #[inline]
-    fn with_rare_tail(self) -> NodeHeaderWord {
-        NodeHeaderWord(self.0 | Self::RARE_BIT)
-    }
-
-    #[inline]
-    fn has_rare_tail(self) -> bool {
-        self.0 & Self::RARE_BIT != 0
-    }
-
-    #[inline]
-    fn with_trailing_comma(self) -> NodeHeaderWord {
-        NodeHeaderWord(self.0 | Self::TRAILING_COMMA_BIT)
-    }
-
-    #[inline]
-    fn has_trailing_comma(self) -> bool {
-        self.0 & Self::TRAILING_COMMA_BIT != 0
-    }
-
-    #[inline]
-    fn data_tag(self) -> NodeDataTag {
-        // SAFETY: the bits were stored from a `NodeDataTag` (repr(u8)).
-        unsafe { std::mem::transmute::<u8, NodeDataTag>((self.0 >> Self::TAG_SHIFT) as u8) }
-    }
-
-    #[inline]
-    fn parent(self) -> Option<P<Node>> {
-        // SAFETY: the low bits were stored by `with_parent` from a live `P<Node>` (arena nodes are never freed or moved).
-        unsafe { P::unpack_opt(self.0) }
-    }
-
-    #[inline]
-    fn with_parent(self, parent: Option<P<Node>>) -> NodeHeaderWord {
-        NodeHeaderWord(self.0 & !Self::PARENT_MASK | P::pack_opt(parent))
-    }
-}
-
-const _: () = assert!((Kind::Count as u64) < 1 << NodeHeaderWord::KIND_BITS);
-const _: () = assert!(NodeHeaderWord::TAG_SHIFT + 9 == 63);
+const NODE_RARE_TAIL: u8 = 1;
+const NODE_TRAILING_COMMA: u8 = 2;
 
 /// One arena allocation per node: the header, then the data struct. `repr(C)` puts the header at offset 0 and
-/// the data at `offset_of!(NodeAlloc<T>, data)` (24 for every data struct: none is aligned to more than 8).
+/// the data at `offset_of!(NodeAlloc<T>, data)` (20 or 24 with compressed pointers, depending on data alignment).
 #[repr(C)]
 pub(crate) struct NodeAlloc<T> {
     pub(crate) node: Node,
     pub(crate) data: T,
 }
 
-/// A node data struct with fields, stored after the header of nodes tagged `TAG` (impls are generated).
+/// A node data struct with fields, stored after the header of nodes tagged `TAG` (most impls are generated).
 pub(crate) trait NodePayload: Sized + 'static {
     const TAG: NodeDataTag;
+    /// Identifier mode and short text length; initialized before the factory's creation hook sees the node.
+    fn initial_markers(&self) -> u8 { 0 }
 }
 
 /// `NodeAlloc` for a node with a rare tail: fields that are almost never set (on the private monorepo, e.g. 0.1%
@@ -619,20 +566,33 @@ pub(crate) trait NodeRareTail: NodePayload {
 
 impl Node {
     #[inline]
+    pub(crate) fn identifier_info(&self) -> u8 {
+        debug_assert_eq!(self.data_tag, NodeDataTag::Identifier);
+        self.markers.get() >> 2
+    }
+
+    #[inline]
+    pub(crate) fn set_identifier_info(&self, info: u8) {
+        debug_assert_eq!(self.data_tag, NodeDataTag::Identifier);
+        debug_assert!(info < 64);
+        self.markers.set((self.markers.get() & 3) | (info << 2));
+    }
+
+    #[inline]
     pub fn kind(&self) -> Kind {
-        self.header.get().kind()
+        self.kind
     }
 
     /// Which data struct follows this node's header.
     #[inline]
     pub(crate) fn data_tag(&self) -> NodeDataTag {
-        self.header.get().data_tag()
+        self.data_tag
     }
 
     /// TOOL (`--features tsrs_ast/ast-sizing` only): whether the node was allocated with its rare tail.
     #[cfg(feature = "ast-sizing")]
     pub(crate) fn has_rare_tail(&self) -> bool {
-        self.header.get().has_rare_tail()
+        self.markers.get() & NODE_RARE_TAIL != 0
     }
 
     /// The data struct after this node's header. Callers check `data_tag() == T::TAG` first.
@@ -686,21 +646,21 @@ impl Node {
     }
     #[inline]
     pub fn parent(&self) -> Option<P<Node>> {
-        self.header.get().parent()
+        self.parent.get()
     }
     #[inline]
     pub fn set_parent(&self, parent: Option<P<Node>>) {
-        self.header.set(self.header.get().with_parent(parent));
+        self.parent.set(parent);
     }
 
     #[inline]
     pub fn has_trailing_comma_marker(&self) -> bool {
-        self.header.get().has_trailing_comma()
+        self.markers.get() & NODE_TRAILING_COMMA != 0
     }
 
     #[inline]
     pub fn mark_trailing_comma(&self) {
-        self.header.set(self.header.get().with_trailing_comma());
+        self.markers.set(self.markers.get() | NODE_TRAILING_COMMA);
     }
 
     /// Go `IterChildren`: the children in `for_each_child` order.
@@ -2420,14 +2380,15 @@ impl Node {
     /// `P<FlowReduceLabelData>` for a reduce-label node.
     #[inline]
     pub fn as_flow_reduce_label_data_p(&self) -> P<FlowReduceLabelData> {
-        // SAFETY: as in `as_source_file_p`.
+        // SAFETY: an arena node's payload, explicitly 8-aligned because the checker stores a compressed pointer to it.
         unsafe { P::from_arena(self.as_flow_reduce_label_data()) }
     }
 
     /// `P<SourceFile>` for a `SourceFile` node (Go code that holds `*ast.SourceFile`).
     #[inline]
     pub fn as_source_file_p(&self) -> P<SourceFile> {
-        // SAFETY: the data struct of an arena node (8-aligned: it follows the 24-byte header).
+        const { assert!(std::mem::align_of::<SourceFile>() >= 8) };
+        // SAFETY: the data struct of an arena node; NodeAlloc preserves the payload's alignment.
         unsafe { P::from_arena(self.as_source_file()) }
     }
 }
@@ -3044,11 +3005,32 @@ mod tests {
         assert_eq!(NodeFlags::BlockScoped, NodeFlags::Let | NodeFlags::Const | NodeFlags::Using);
         assert!(SymbolFlags::Value.contains(SymbolFlags::Function));
         assert!(!SymbolFlags::FunctionScopedVariableExcludes.intersects(SymbolFlags::FunctionScopedVariable));
-        assert_eq!(std::mem::size_of::<Node>(), 24);
+        assert_eq!(std::mem::size_of::<Node>(), if std::mem::size_of::<P<Node>>() == 4 { 20 } else { 24 });
     }
 
     #[test]
-    fn node_header_word_keeps_kind_tag_and_parent() {
+    fn node_identity_is_stable_across_threads_and_distinct_for_clones() {
+        let f = NodeFactory::default();
+        let node = f.new_identifier("x");
+        let other = f.new_identifier("x");
+        let cloned = node.clone_node(&f);
+        let id = get_node_id(node);
+        assert_ne!(id, NodeId(0));
+        assert_ne!(id, get_node_id(other));
+        assert_ne!(id, get_node_id(cloned));
+        assert_eq!(id.0, node.addr() as u64);
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                scope.spawn(move || assert_eq!(get_node_id(node), id));
+            }
+        });
+        node.set_parent(Some(other));
+        node.flags.set(NodeFlags::Synthesized);
+        assert_eq!(get_node_id(node), id);
+    }
+
+    #[test]
+    fn node_header_keeps_kind_tag_and_parent() {
         let f = NodeFactory::default();
         let parent = f.new_keyword_expression(Kind::ThisKeyword);
         let child = f.new_token(Kind::Count);

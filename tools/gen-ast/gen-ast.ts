@@ -297,8 +297,8 @@ function w(s = "") {
     out.push(s);
 }
 
-// Node data structs written by hand although ast.json generates them (struct, getters, factory, clone): `Identifier`
-// packs its flow node and its text into one word (crates/tsrs_ast/src/identifier.rs).
+// Node data written by hand although ast.json generates it (struct, payload trait, getters, factory, clone):
+// Identifier shares text metadata with the node header (crates/tsrs_ast/src/identifier.rs).
 const HAND_WRITTEN_DATA = new Set(["Identifier"]);
 
 // Identifier and literal text is stored as a `PackedStr` (8 bytes: pointer and length in one word, tsrs_core::ptr); the getter
@@ -720,7 +720,7 @@ function genNodeDataEnum() {
     w("}");
     w();
     for (const n of nodes) {
-        if (isEmptyLayout(layouts.get(n.name)!)) continue;
+        if (isEmptyLayout(layouts.get(n.name)!) || HAND_WRITTEN_DATA.has(n.name)) continue;
         w(`impl NodePayload for ${n.name} {`);
         w(`    const TAG: NodeDataTag = NodeDataTag::${n.name};`);
         w(`}`);

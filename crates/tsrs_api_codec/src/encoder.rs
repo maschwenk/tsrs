@@ -43,7 +43,12 @@ impl std::error::Error for EncodeError {}
 /// Go `NodeIndexTable`: encoder index → node (index 0 is the nil sentinel, `NodeList` records map to `None`).
 pub struct NodeIndexTable {
     pub nodes: Vec<Option<P<Node>>>,
-    sorted: OnceLock<Vec<u32>>,
+    sorted: OnceLock<NodeIndexOrder>,
+}
+
+struct NodeIndexOrder {
+    indices: Vec<u32>,
+    ranks: FxHashMap<P<Node>, u32>,
 }
 
 impl NodeIndexTable {
@@ -51,30 +56,38 @@ impl NodeIndexTable {
         NodeIndexTable { nodes, sorted: OnceLock::new() }
     }
 
-    /// Go `GetIndex`, ported exactly: on the first call the non-nil indices are sorted by node id with Go's
-    /// `slices.SortFunc` (pdqsort, `tsrs_core::goslices::sort_func`), assigning ids lazily in comparison
-    /// order like `ast.GetNodeId`, then looked up with `core.BinarySearchUniqueFunc`. A node can occur at
+    /// Go `GetIndex`: on the first call the non-nil indices are sorted with Go's `slices.SortFunc` (pdqsort),
+    /// then looked up with `core.BinarySearchUniqueFunc`. A node can occur at
     /// several indices (a `JSDoc` comment hosting `@typedef`/`@callback` is encoded under every declaration
-    /// it is attached to); which of them is returned is decided by that sort and search exactly as in Go, so
-    /// the handles sent to clients match. Returns 0 when the node is not in the table.
+    /// it is attached to). Table-local ranks assigned in comparison order preserve Go's choice of occurrence
+    /// for a fresh tree without depending on allocation addresses or storing numeric ids in the AST.
+    /// Returns 0 when the node is not in the table.
     pub fn get_index(&self, node: P<Node>) -> u32 {
         let sorted = self.sorted.get_or_init(|| {
             let mut idx: Vec<u32> = (0..self.nodes.len() as u32).filter(|&i| self.nodes[i as usize].is_some()).collect();
             let nodes = &self.nodes;
+            let mut ranks = FxHashMap::default();
             sort_func(&mut idx, |&a, &b| {
-                let (ia, ib) = (
-                    get_node_id(nodes[a as usize].unwrap()),
-                    get_node_id(nodes[b as usize].unwrap()),
-                );
+                let next = ranks.len() as u32;
+                let ia = *ranks.entry(nodes[a as usize].unwrap()).or_insert(next);
+                let next = ranks.len() as u32;
+                let ib = *ranks.entry(nodes[b as usize].unwrap()).or_insert(next);
                 ia.cmp(&ib)
             });
-            idx
+            // A singleton table performs no comparisons, so its node still needs a rank for lookup.
+            for &i in &idx {
+                let next = ranks.len() as u32;
+                ranks.entry(nodes[i as usize].unwrap()).or_insert(next);
+            }
+            NodeIndexOrder { indices: idx, ranks }
         });
-        let target = get_node_id(node);
-        let (i, found) = binary_search_unique_func(sorted, |_, &el| {
-            get_node_id(self.nodes[el as usize].unwrap()).cmp(&target)
+        let Some(target) = sorted.ranks.get(&node) else {
+            return 0;
+        };
+        let (i, found) = binary_search_unique_func(&sorted.indices, |_, &el| {
+            sorted.ranks[&self.nodes[el as usize].unwrap()].cmp(target)
         });
-        if found { sorted[i] } else { 0 }
+        if found { sorted.indices[i] } else { 0 }
     }
 
     /// The node at encoder index `index` (`None` for 0, `NodeList` records and out-of-range indices).

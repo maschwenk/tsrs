@@ -4,8 +4,7 @@
 //
 // Node index tables: Go caches one table per AST on the source file itself (`GetOrComputeData`), created
 // either by the first encode or by the first node-handle request. tsrs source files have no per-file data
-// slot, so the session keeps the cache keyed by the file's address. Looking a table up must not assign the
-// file's lazy node id (that would change `NodeIndexTable::get_index` order relative to Go). An entry is
+// slot, so the session keeps the cache keyed by the file's address. An entry is
 // removed when the region owning the file is freed (`Region::on_free` runs before the memory is reused), so a
 // table never outlives the nodes it points to; files outside any region live for the process.
 

@@ -557,7 +557,7 @@ impl Checker {
     /// The symbol an identifier reference resolved to, if it is cached (no side effects), and the identifier is not
     /// `this` in a type query (Go keys and matches those like `this`).
     fn flow_memo_root_symbol(&self, node: P<Node>) -> Option<P<Symbol>> {
-        let symbol = self.symbol_node_links.try_get_if_id_assigned(node).and_then(|links| links.resolved_symbol.get())?;
+        let symbol = self.symbol_node_links.try_get(node).and_then(|links| links.resolved_symbol.get())?;
         if symbol == self.unknown_symbol || node.as_identifier().text() == "this" && ast::is_this_in_type_query(node) {
             return None;
         }

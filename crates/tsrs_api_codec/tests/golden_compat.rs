@@ -46,6 +46,17 @@ fn build_node_index_table_matches_encode() {
 }
 
 #[test]
+fn get_index_handles_empty_and_single_node_tables() {
+    let factory = tsrs_ast::NodeFactory::default();
+    let node = factory.new_token(tsrs_ast::Kind::PlusToken);
+    let absent = factory.new_token(tsrs_ast::Kind::PlusToken);
+    assert_eq!(NodeIndexTable::new(vec![None]).get_index(node), 0);
+    let table = NodeIndexTable::new(vec![None, Some(node), None]);
+    assert_eq!(table.get_index(absent), 0);
+    assert_eq!(table.get_index(node), 1);
+}
+
+#[test]
 fn header_fields() {
     let (_region, file) = parse_like_server("basic.ts", "let x = 1;");
     let (mut bytes, _) = encode_source_file(file.get()).unwrap();
@@ -155,7 +166,7 @@ fn get_index_matches_pinned_go() {
                 repeated += (idx != i) as usize;
             }
         }
-        // A table rebuilt later for the same live file (ids now fixed) and the encoder's own table agree, so a
+        // A table rebuilt later for the same live file and the encoder's own table agree, so a
         // handle produced from any of them names the same record for the file's lifetime.
         let rebuilt = build_node_index_table(file.get());
         let (_, encoded) = encode_source_file(file.get()).unwrap();

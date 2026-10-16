@@ -124,6 +124,8 @@ impl FlowSwitchClauseData {
 
 // FlowReduceLabelData (synthetic AST node for FlowFlagsReduceLabel)
 
+// The checker keeps compressed pointers to this payload, so its position after the node header must be 8-aligned.
+#[repr(align(8))]
 pub struct FlowReduceLabelData {
     pub target: P<FlowLabel>,             // Target label
     pub antecedents: Option<P<FlowList>>, // Temporary antecedent list
@@ -131,4 +133,20 @@ pub struct FlowReduceLabelData {
 
 pub fn new_flow_reduce_label_data(target: P<FlowLabel>, antecedents: Option<P<FlowList>>) -> P<Node> {
     new_node(Kind::Unknown, FlowReduceLabelData { target, antecedents }, &NodeFactoryHooks::default())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reduce_label_payload_retains_its_address_as_a_compressed_pointer() {
+        let target = P::new(FlowNode::new(FlowFlags::BranchLabel, None, None, crate::identifier::NO_SOURCE_TEXT));
+        let node = new_flow_reduce_label_data(target, None);
+        let data = node.as_flow_reduce_label_data();
+        let pointer = node.as_flow_reduce_label_data_p();
+        assert!(std::ptr::eq(data, pointer.get()));
+        assert_eq!(pointer.target, target);
+        assert_eq!(pointer.antecedents, None);
+    }
 }

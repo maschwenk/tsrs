@@ -118,9 +118,10 @@ locality; in the type-check pass a checker that runs out steals unstarted files 
   creates, synthetic nodes and diagnostics a checker creates. Only that checker touches them. Go keeps all
   checker state about shared objects in link stores keyed by the object; so do we. Go clones a symbol before
   mutating it unless it is transient (e.g. `mergeSymbol`); so do we.
-- **Lazily initialized shared data** mirrors Go's synchronization: node/symbol ids are atomics, `SourceFile`
+- **Lazily initialized shared data** mirrors Go's synchronization: symbol ids are atomics, `SourceFile`
   line maps, position maps and identifier sets are `OnceLock`s, binding runs under a `std::sync::Once`
   (Go `bindOnce`), the lazily parsed JSDoc cache is guarded by `jsdoc_mu` (Go `jsdocMu`).
+  Node ids use allocation addresses and need no initialization; caches keyed by them must not outlive the nodes.
 
 Cell types for shared objects (`tsrs_core::frozen`):
 
