@@ -1,10 +1,11 @@
 # Automatically investigates bug reports and can open a pull request with a verified fix.
 # Repository setup required before this job will run:
-#   - TRIAGEBOT_GITHUB_TOKEN: a dedicated bot account's fine-grained PAT with
-#     Contents, Issues, and Pull requests write access.
+#   - Install the oxc-guard GitHub App on this repository with Contents, Issues,
+#     and Pull requests write access.
+#   - APP_ID: the oxc-guard GitHub App's client ID, as a repository secret.
+#   - APP_PRIVATE_KEY: the oxc-guard GitHub App's private key.
 #   - CLOUDFLARE_API_KEY: a Workers AI API token with Workers AI Read and Edit.
 #   - CLOUDFLARE_ACCOUNT_ID: the Workers AI account ID.
-#   - TRIAGEBOT_LOGIN: the dedicated bot account's login, as a repository variable.
 
 name: Issue Triage
 
@@ -24,13 +25,13 @@ concurrency:
 jobs:
   triage:
     if: >-
-      vars.TRIAGEBOT_LOGIN != '' &&
       !github.event.issue.pull_request &&
       (github.event.action != 'created' ||
        (github.event.comment.user.login != 'github-actions[bot]' &&
-        github.event.comment.user.login != vars.TRIAGEBOT_LOGIN))
+        github.event.comment.user.login != 'oxc-guard[bot]'))
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    # GitHub App installation tokens expire after one hour.
+    timeout-minutes: 55
     permissions:
       contents: read
       issues: read
@@ -50,16 +51,29 @@ jobs:
           save-cache: true
           cache-key: triagebot
 
+      - name: Create oxc-guard token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-token
+        with:
+          client-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+
       - name: Configure Git identity
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          bot_user_id="$(gh api 'users/oxc-guard[bot]' --jq .id)"
+          git config user.name "oxc-guard[bot]"
+          git config user.email "${bot_user_id}+oxc-guard[bot]@users.noreply.github.com"
 
       # The pinned action expects its state labels plus at least one "- P" and
       # "pkg:" label, but does not create them itself.
       - name: Create missing triage labels
         env:
-          GH_TOKEN: ${{ secrets.TRIAGEBOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: .github/scripts/setup-triagebot-labels.sh
 
       - name: Triage the issue
@@ -68,7 +82,7 @@ jobs:
         uses: withastro/triagebot-action@51d30da13c0bd571a3822fc56882de40fead0086 # main, 2026-08-28
         with:
           read-token: ${{ github.token }}
-          write-token: ${{ secrets.TRIAGEBOT_GITHUB_TOKEN }}
+          write-token: ${{ steps.app-token.outputs.token }}
           cloudflare-api-key: ${{ secrets.CLOUDFLARE_API_KEY }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           triage-model: cloudflare-workers-ai/@cf/moonshotai/kimi-k2.7-code
@@ -76,4 +90,4 @@ jobs:
           triage-skill: .agents/skills/triage
           pr-skill: .agents/skills/pr-writer
           auto-pr-on-fix: true
-          bot-logins: ${{ vars.TRIAGEBOT_LOGIN }}
+          bot-logins: oxc-guard[bot]
