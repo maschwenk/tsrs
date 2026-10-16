@@ -130,7 +130,7 @@ fn node_header(kind: Kind, data_tag: NodeDataTag) -> Node {
 
 /// Creates a node whose data struct is `data` (Go: the data struct embeds `NodeBase`, one allocation).
 pub(crate) fn new_node<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryHooks) -> P<Node> {
-    new_node_in(kind, data, hooks, false)
+    new_node_hooked(kind, data, hooks)
 }
 
 #[inline]
@@ -141,10 +141,20 @@ fn new_node_plain<T: NodePayload>(kind: Kind, data: T) -> P<Node> {
 }
 
 #[inline]
-fn new_node_in<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryHooks, scratch: bool) -> P<Node> {
+fn new_node_hooked<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryHooks) -> P<Node> {
     // SAFETY: `NodeAlloc` is `repr(C)` with the header first, so the pointer to the allocation is a pointer to
     // its header; the header is never moved or freed (leak arena).
-    let n = unsafe { P::new_in(scratch, NodeAlloc { node: node_header(kind, T::TAG), data }).cast::<Node>() };
+    let n = unsafe { P::new(NodeAlloc { node: node_header(kind, T::TAG), data }).cast::<Node>() };
+    if let Some(on_create) = &hooks.on_create {
+        on_create(n);
+    }
+    n
+}
+
+#[inline]
+fn new_node_scratch<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryHooks) -> P<Node> {
+    // SAFETY: as in `new_node_hooked`, but this allocation is owned by the active scratch region.
+    let n = unsafe { P::new_scratch(NodeAlloc { node: node_header(kind, T::TAG), data }).cast::<Node>() };
     if let Some(on_create) = &hooks.on_create {
         on_create(n);
     }
@@ -153,12 +163,25 @@ fn new_node_in<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryHooks, sc
 
 /// Creates a node whose data struct `data` is followed by its rare tail `rare` (`NodeAllocRare`; the header's
 /// rare bit says the tail is there). The factory uses it when one of the struct's rare fields is set.
-fn new_node_with_rare<T: NodeRareTail>(kind: Kind, data: T, rare: T::Rare, hooks: &NodeFactoryHooks, scratch: bool) -> P<Node> {
+fn new_node_with_rare_hooked<T: NodeRareTail>(kind: Kind, data: T, rare: T::Rare, hooks: &NodeFactoryHooks) -> P<Node> {
     let () = T::SAME_OFFSET;
     let mut header = node_header(kind, T::TAG);
     header.header = OwnedCell::new(header.header.get().with_rare_tail());
     // SAFETY: as in `new_node` (`NodeAllocRare` is `repr(C)` with the header first).
-    let n = unsafe { P::new_in(scratch, NodeAllocRare { node: header, data, rare }).cast::<Node>() };
+    let n = unsafe { P::new(NodeAllocRare { node: header, data, rare }).cast::<Node>() };
+    if let Some(on_create) = &hooks.on_create {
+        on_create(n);
+    }
+    n
+}
+
+#[inline]
+fn new_node_with_rare_scratch<T: NodeRareTail>(kind: Kind, data: T, rare: T::Rare, hooks: &NodeFactoryHooks) -> P<Node> {
+    let () = T::SAME_OFFSET;
+    let mut header = node_header(kind, T::TAG);
+    header.header = OwnedCell::new(header.header.get().with_rare_tail());
+    // SAFETY: as in `new_node_with_rare_hooked`, but this allocation is owned by the active scratch region.
+    let n = unsafe { P::new_scratch(NodeAllocRare { node: header, data, rare }).cast::<Node>() };
     if let Some(on_create) = &hooks.on_create {
         on_create(n);
     }
@@ -190,8 +213,17 @@ pub(crate) fn rare_tail<T: NodeRareTail>(data: &T) -> Option<&'static T::Rare> {
 }
 
 /// Creates a node whose data struct has no fields (`Token`, `KeywordTypeNode`, ...): just the header.
-fn new_empty_node(kind: Kind, data_tag: NodeDataTag, hooks: &NodeFactoryHooks, scratch: bool) -> P<Node> {
-    let n = P::new_in(scratch, node_header(kind, data_tag));
+fn new_empty_node_hooked(kind: Kind, data_tag: NodeDataTag, hooks: &NodeFactoryHooks) -> P<Node> {
+    let n = P::new(node_header(kind, data_tag));
+    if let Some(on_create) = &hooks.on_create {
+        on_create(n);
+    }
+    n
+}
+
+#[inline]
+fn new_empty_node_scratch(kind: Kind, data_tag: NodeDataTag, hooks: &NodeFactoryHooks) -> P<Node> {
+    let n = P::new_scratch(node_header(kind, data_tag));
     if let Some(on_create) = &hooks.on_create {
         on_create(n);
     }
@@ -213,8 +245,10 @@ impl NodeFactory {
         self.node_count.set(self.node_count.get() + 1);
         if self.plain_create {
             new_node_plain(kind, data)
+        } else if self.scratch {
+            new_node_scratch(kind, data, &self.hooks)
         } else {
-            new_node_in(kind, data, &self.hooks, self.scratch)
+            new_node_hooked(kind, data, &self.hooks)
         }
     }
 
@@ -223,8 +257,10 @@ impl NodeFactory {
         self.node_count.set(self.node_count.get() + 1);
         if self.plain_create {
             new_node_with_rare_plain(kind, data, rare)
+        } else if self.scratch {
+            new_node_with_rare_scratch(kind, data, rare, &self.hooks)
         } else {
-            new_node_with_rare(kind, data, rare, &self.hooks, self.scratch)
+            new_node_with_rare_hooked(kind, data, rare, &self.hooks)
         }
     }
 
@@ -233,8 +269,10 @@ impl NodeFactory {
         self.node_count.set(self.node_count.get() + 1);
         if self.plain_create {
             new_empty_node_plain(kind, data_tag)
+        } else if self.scratch {
+            new_empty_node_scratch(kind, data_tag, &self.hooks)
         } else {
-            new_empty_node(kind, data_tag, &self.hooks, self.scratch)
+            new_empty_node_hooked(kind, data_tag, &self.hooks)
         }
     }
 
