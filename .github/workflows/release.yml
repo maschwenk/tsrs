@@ -1,8 +1,8 @@
 # Builds the tsrs binaries and the WebAssembly module and publishes the npm packages (npm/README.md), all at the
 # version npm/build.mjs derives from Cargo.toml. The conformance and fourslash gates run here on the BOLT-optimized
 # GNU binaries (.github/scripts/bolt.sh). The macOS binary gets only the smoke tests below; nothing runs the suites
-# on macOS (.github/workflows/ci.yml, Linux only, gates the source). The WebAssembly differential gate
-# (tools/wasm/gate.sh) runs only in ci.yml.
+# on macOS (.github/workflows/ci.yml, Linux only, gates the source). The broader WebAssembly differential gate
+# (tools/wasm/gate.sh) is preserved in the disabled ci.yml.bak.
 #
 # Setup before the first release:
 #   - npm trusted publishers for `tsrs`, `@tsrs/wasm` and every platform package: GitHub Actions,
@@ -246,7 +246,7 @@ jobs:
           path: out/
           if-no-files-found: error
 
-  # `@tsrs/wasm` (npm/tsrs-wasm, notes/wasm-build.md): the module as ci.yml's wasm job builds it, the
+  # `@tsrs/wasm` (npm/tsrs-wasm, notes/wasm-build.md): the module, the
   # package's tests (they compare against a native release build), the package packed by npm/build.mjs, and that
   # tarball installed and run before it is handed to the publish job.
   wasm:
@@ -263,7 +263,7 @@ jobs:
           restore-cache: false
       - run: rustup target add wasm32-wasip1
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
-      # Same binaryen as ci.yml (the module sizes in notes/wasm-build.md come from version 133).
+      # The module sizes in notes/wasm-build.md come from binaryen version 133.
       - name: Install binaryen 133
         run: |
           curl -sSLf -o "$RUNNER_TEMP/binaryen.tgz" https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz

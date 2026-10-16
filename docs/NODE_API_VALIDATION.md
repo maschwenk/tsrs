@@ -11,7 +11,8 @@ contract itself is `docs/NODE_API.md`; this file covers the independent evidence
 - The client is the pinned upstream client (`ts-ref/packages/typescript/src/api`), unmodified. The harness
   never ships a second client; the shipped SDK (`npm/tsrs`) is a copy of the pinned client, byte for byte
   except two documented patches (`npm/sdk/patches`: async client connection loss, vscode-jsonrpc write
-  error), checked by `node npm/sdk/sync-upstream.mjs --check`; CI separately exercises the packed SDK.
+  error), checked by `node npm/sdk/sync-upstream.mjs --check`; the saved package-validation jobs separately exercise
+  the packed SDK when restored.
 - Tests are the upstream suites (`packages/typescript/test/{sync,async}`) plus harness tests in
   `tools/node-api/tests`, all run by `node --test` against real server processes. Every harness test
   must pass on the Go oracle before it can be used against tsrs.
@@ -127,13 +128,11 @@ temp project outside the repo. It then runs the installed binary through CLI pas
 and async API programs on the OS filesystem (diagnostics plus emit with `TSRS_EMIT` unset), and a nodenext
 typecheck of the published declarations that must report exactly one deliberate error.
 
-`.github/workflows/ci.yml` (GitHub Actions) runs on main pushes, manual dispatch, merge groups, and `pull_request` into
-main, without path filtering. It never uses `pull_request_target`, has read-only permissions and no secrets, and
-never publishes. Fork pull requests follow the repository's approval setting. The `parity` job runs the Go
-oracle (must pass), then tsrs against the same
-suites, then the inventory, uploads the results, and fails on any tsrs failure. The `package` job builds,
-packs and runs `consumer.mjs` on linux-x64 and linux-arm64; `package-macos` runs it on darwin-arm64.
-The former standalone workflow is preserved, disabled, as `.github/workflows/node-api.yml.bak`.
+Full Node API validation is disabled for now. Its jobs are preserved in `.github/workflows/ci.yml.bak` and the
+original standalone `.github/workflows/node-api.yml.bak`; the local tools above remain available.
+The saved `parity` job runs the Go oracle (must pass), then tsrs against the same suites, generates the inventory,
+uploads the results, and fails on any tsrs failure. The saved `package` job builds, packs and runs `consumer.mjs` on
+linux-x64 and linux-arm64; `package-macos` does the same on darwin-arm64. Restore one workflow before using these jobs.
 
 ## Current evidence
 

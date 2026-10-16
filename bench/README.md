@@ -261,8 +261,8 @@ a results file), never cancelled, network steps retried, and the results commit 
 the newest commit's results: a run whose commit is an ancestor of the one the table came from (its last line names
 it) adds its results file and leaves the tables and chart alone. The regression flag compares a run with the nearest
 earlier benchmarked ancestor of its commit, not with the newest file by date. A pull request that changes code must
-not carry a CI-skip marker in its title, body or commit subjects (CI's
-`skip-marker` job, `tools/ci/skip_marker.py`): `gh pr merge --squash` copies them into the commit message, and such a
+not carry a CI-skip marker in its title, body or commit subjects (the disabled `ci.yml.bak` contains the
+`skip-marker` check, `tools/ci/skip_marker.py`): `gh pr merge --squash` copies them into the commit message, and such a
 commit lands without CI and without a results file; notes-only pull requests carry the marker on purpose. A commit
 whose bench was skipped or cancelled (before 2026-10-07, most commits of a burst of merges) is backfilled with `gh workflow run bench.yml --ref main -f commit=<sha>`: the build and measuring jobs check out that commit, the merge job runs the current scripts, the results
 file is committed, and the tables and chart update only when no newer commit's report is there.
@@ -330,15 +330,14 @@ cache for the suite checkout plus the pnpm-installed compilers (`typescript@7.0.
 per cloned project (checkout + `node_modules`) keyed on its pinned commit and install command
 (`bench/run.py --print-cache-keys`), so changing one pin re-installs only that project. Each measuring job restores
 the shared cache and its own project's; the build job restores the two training projects (xstate-main, webpack) and
-saves the shared cache; `ci.yml`'s `check-and-test` job restores the shared cache and four projects (xstate-main, webpack,
+saves the shared cache; `ci.yml.bak`'s `check-and-test` job restores the shared cache and four projects (xstate-main, webpack,
 nuxt, drizzle-orm) for the determinism gate, `tools/ci/determinism.sh` (notes/perf-order-independence.md "Gate"). The
-build job, and `ci.yml`'s `check-and-test` and `arena-safety` jobs, restore the TypeScript
+build job, and `ci.yml.bak`'s `check-and-test` and `arena-safety` jobs, restore the TypeScript
 testdata (`ts-ref/tsc/testdata`, 22 MB compressed) from a cache keyed on the TypeScript commit; on a miss they run the
 sparse checkout and save it. That saves about 4 s per job (2026-10-07: checkout 4.9-5.7 s, restore 1.4 s).
 
-With benchmark automation disabled, correctness CI still restores any available project caches and clones and
-installs missing inputs through its existing setup steps. Benchmark runs no longer warm those caches; cold-cache
-correctness runs may take longer.
+These cache details describe the disabled benchmark workflows and `ci.yml.bak`. The simplified active CI does not
+run benchmark project workloads or restore their caches; it checks out only the pinned TypeScript conformance fixtures.
 
 Historical job duration split, 2026-10-01 (before this migration):
 

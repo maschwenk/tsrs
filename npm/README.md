@@ -162,8 +162,8 @@ Wire contract the server has to speak (from the pinned `tsc/cmd/tsc/api.go`, `ts
    Dry runs skip this check. Releases publish directly, without a staged approval step.
 
 The conformance and fourslash gates run on the GNU Linux release binaries (`bolt.sh`). The macOS binary gets only the
-smoke tests; `ci.yml` (Linux) gates the source, and the WebAssembly differential gate (`tools/wasm/gate.sh`) runs only
-there.
+smoke tests; `ci.yml` (Linux) gates the source. The broader WebAssembly differential gate (`tools/wasm/gate.sh`) is
+preserved in the disabled `ci.yml.bak`; the release's WebAssembly package checks remain active.
 
 `workflow_dispatch` runs the same with `pnpm publish --dry-run` by default.
 
@@ -180,14 +180,12 @@ What maintainers must configure before the first release:
 - GNU binaries are built on Ubuntu 22.04, so they need glibc >= 2.35 at most (a build on Debian 12 needed 2.34).
   Musl binaries are statically linked for Alpine/musl.
 
-`.github/workflows/ci.yml` (GitHub Actions; pushes to main, pull requests into main, merge groups, manual dispatch): `cargo check
---workspace` with warnings denied, `cargo test` for the fast crates, correctness builds, the conformance and fourslash
-gates, the determinism gate, a pnpm install smoke test of the packed tarballs, the WebAssembly build and differential
-gate, the lint ratchet, and the skip-marker, generated-code, arena-safety and ThreadSanitizer jobs. It also runs Node API
-parity and installed-package validation on Linux x64, Linux ARM64 and macOS ARM64.
+`.github/workflows/ci.yml` runs on pushes to main, pull requests into main, merge groups and manual dispatch. Its two
+Linux jobs run Clippy/source checks and Rust checks/unit tests, build the compiler and conformance runner with the dev
+profile, and run compiler conformance in both checker modes plus regression cases.
 
-Only CI, release, security and triage workflows are active. Auxiliary workflows, including benchmarks, parser fuzzing
-and external-repository conformance, are disabled as `.github/workflows/*.yml.bak`; their local tools remain available.
+Only CI and release workflows are active. The full CI, security, triage and all other auxiliary workflows are disabled
+as `.github/workflows/*.yml.bak`; their local tools remain available.
 
 ## Adopting it in a pnpm workspace
 

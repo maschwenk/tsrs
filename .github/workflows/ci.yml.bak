@@ -1,0 +1,783 @@
+# Security: read-only token, no secrets. Runs on pushes to main, on pull requests into main
+# (drafts included), on merge groups, and on manual dispatch by collaborators.
+# Fork pull requests follow the repository's approval setting.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+# A newer commit on the same pull request cancels its older run; every push to main runs to completion (several
+# agents push to main).
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      TSRS_TEST: target/ci/tsrs-test
+      TSRS_FOURSLASH: target/ci/tsrs-fourslash
+    steps:
+      - name: Free disk space for builds and benchmark checkouts
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
+      # The conformance tests and the tsoptions unit tests read the reference baselines from ts-ref/tsc/testdata.
+      # The testdata checkout (~5 s) is cached per TypeScript commit. Restore it alongside the Rust toolchain; the
+      # sparse checkout below runs only on a miss.
+      - name: Restore TypeScript testdata
+        id: ts-ref
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ts-ref/tsc/testdata
+          key: ts-ref-testdata-${{ steps.ts.outputs.commit }}
+
+      # This job warms one cache on main; the other Rust jobs and pull requests only restore it.
+      - name: Set up Rust
+        uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: ${{ github.ref_name == 'main' }}
+          cache-key: warm
+
+      - name: Check out TypeScript testdata
+        if: steps.ts-ref.outputs.cache-hit != 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          sparse-checkout: tsc/testdata
+          persist-credentials: false
+
+      - name: Save TypeScript testdata
+        if: steps.ts-ref.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ts-ref/tsc/testdata
+          key: ${{ steps.ts-ref.outputs.cache-primary-key }}
+
+      - name: cargo check
+        run: cargo check --workspace --exclude tsrs_fourslash --locked --config 'build.warnings="deny"'
+
+      # Feature-only tooling must compile too. Check compressed pointers separately: --workspace --all-features
+      # also enables plain-ptrs, which overrides them.
+      - name: cargo check (feature combinations)
+        env:
+          RUSTFLAGS: -D warnings
+        run: |
+          cargo check --workspace --exclude tsrs_fourslash --all-targets --all-features --locked
+          cargo check -p tsrs_cli -p tsrs_checker --all-features --features tsrs_ast/ast-sizing,tsrs_core/shared-graph,tsrs_core/checked-cells --locked
+
+      - name: Request filesystem Go fixtures
+        run: cargo test --locked -p tsrs_api --test requestfs_differential
+
+      - name: cargo test (fast crates)
+        run: >-
+          cargo test --locked --no-fail-fast
+          -p tsrs_core -p tsrs_spanmap -p tsrs_ipc -p tsrs_contentmapper -p tsrs_contentmappertest -p tsrs_ast -p tsrs_scanner
+          -p tsrs_diagnostics -p tsrs_vfs -p tsrs_module
+          -p tsrs_tsoptions -p tsrs_printer -p tsrs_modulespecifiers -p tsrs_compiler -p tsrs_incremental -p tsrs_execute
+          -p tsrs_testrunner -p tsrs_cli
+
+      # Correctness gates do not need release's fat LTO. ci keeps release optimization but omits LTO, and compiles
+      # the generated fourslash bodies at opt-level 0; release.yml still tests the PGO release binaries.
+      - name: Build correctness binaries
+        run: cargo build --profile ci --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash
+
+      # Errors, .types and .symbols baselines, in tsgo's check history (`--checkerAssignment go`, tsrs_core::compat),
+      # which the reference baselines need for byte-identity.
+      - name: Conformance suite
+        run: .github/scripts/conformance-gate.sh
+
+      # The same suite in the mode tsrs ships by default: canonical check history, 4 checkers per test, work stealing
+      # (notes/perf-order-independence.md, notes/perf-checker-stealing.md). By design one test,
+      # conformance/objectLiteralNormalization, differs from tsgo there in its .types / .symbols.
+      - name: Conformance suite (default checker mode)
+        env:
+          TS_TEST_PROGRAM_SINGLE_THREADED: "false"
+          TSRS_HISTORY: canonical
+          MIN_TYPES: "12778"
+          MIN_SYMBOLS: "12778"
+          TSRS_TEST_RESULTS: ${{ github.workspace }}/target/test-results-default
+        run: .github/scripts/conformance-gate.sh
+
+      # testdata/regressions: bugs found outside the conformance suite, each with tsgo-ref's output.
+      - name: Regression cases
+        run: tools/regressions.sh target/ci/tsrs
+
+      # testdata/contentmapper: projects with a Node content mapper, run through the real process spawner, each with
+      # tsgo's output.
+      - name: Content mapper cases
+        run: tools/contentmapper-e2e.sh target/ci/tsrs
+
+      - name: Fourslash (language service) suite
+        run: .github/scripts/fourslash-gate.sh
+
+      # Node 24 matches release.yml; the build-only TypeScript compiler in npm/package.json needs >=16.20.
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+        with:
+          registry-url: "" # Public benchmark installs use Yarn 1, which rejects an unset NODE_AUTH_TOKEN.
+
+      # npm/build.mjs compiles the unstable/* JS API with the npm workspace's build-only tools.
+      - name: npm packaging smoke test
+        run: |
+          node npm/build.mjs --binary x86_64-unknown-linux-gnu=target/ci/tsrs --pack
+          dir=$(mktemp -d)
+          cd "$dir"
+          printf '{"private":true}\n' > package.json
+          pnpm add --offline "$GITHUB_WORKSPACE"/npm/dist/*.tgz
+          pnpm exec tsrs --version
+          printf 'const x: number = 1;\n' > ok.ts
+          pnpm exec tsrs ok.ts
+          printf 'const x: number = "no";\n' > bad.ts
+          if pnpm exec tsrs bad.ts; then echo "expected a type error"; exit 1; fi
+
+      # tools/ci/determinism.sh: diagnostics must not depend on which checker checks a file or in what order. Four bench
+      # projects (checkouts restored from the bench caches, bench/README.md "CI") and the regression cases, under random
+      # checker assignments and work stealing at 2 and 4 checkers, must print the single-threaded run's bytes.
+      - name: Determinism cache keys
+        id: determinism-keys
+        run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack,nuxt,drizzle-orm | tee -a "$GITHUB_OUTPUT"
+
+      - name: Restore the bench compilers
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.determinism-keys.outputs.shared }}
+
+      - name: Restore xstate-main
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: bench/.work/solutions/xstate-main
+          key: bench-xstate-main-${{ runner.os }}-${{ steps.determinism-keys.outputs['xstate-main'] }}
+
+      - name: Restore webpack
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: bench/.work/solutions/webpack
+          key: bench-webpack-${{ runner.os }}-${{ steps.determinism-keys.outputs['webpack'] }}
+
+      - name: Restore nuxt
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: bench/.work/solutions/nuxt
+          key: bench-nuxt-${{ runner.os }}-${{ steps.determinism-keys.outputs['nuxt'] }}
+
+      - name: Restore drizzle-orm
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: bench/.work/solutions/drizzle-orm
+          key: bench-drizzle-orm-${{ runner.os }}-${{ steps.determinism-keys.outputs['drizzle-orm'] }}
+
+      # A no-op for everything restored above; clones and installs the rest. Benchmark automation is disabled,
+      # so correctness checks must also work without its cached checkouts.
+      - name: Set up the determinism projects
+        run: python3 bench/run.py --setup-only --projects xstate-main,webpack,nuxt,drizzle-orm
+
+      - name: Determinism
+        run: tools/ci/determinism.sh --self-test && tools/ci/determinism.sh target/ci/tsrs
+
+      - name: Upload conformance results
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: conformance-results
+          path: |
+            target/test-results/*.txt
+            target/test-results-default/*.txt
+          if-no-files-found: ignore
+
+  # The WebAssembly build (crates/tsrs_wasm, notes/wasm-build.md): the 32-bit check (a native-only change must not
+  # break it), the module with its path-leak and import checks, the npm package's tests, and tools/wasm/gate.sh, the
+  # differential against native --singleThreaded (regressions, fixtures, the 2,000-case conformance sample on the
+  # node file system and in memory, four bench projects, emit).
+  wasm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Free disk space for builds and benchmark checkouts
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore TypeScript testdata
+        id: ts-ref
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ts-ref/tsc/testdata
+          key: ts-ref-testdata-${{ steps.ts.outputs.commit }}
+
+      - name: Check out TypeScript testdata
+        if: steps.ts-ref.outputs.cache-hit != 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          sparse-checkout: tsc/testdata
+          persist-credentials: false
+
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: false
+          cache-key: warm
+
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+        with:
+          registry-url: "" # Public benchmark installs use Yarn 1, which rejects an unset NODE_AUTH_TOKEN.
+
+      # Ubuntu's binaryen package is older; the module sizes in notes/wasm-build.md come from version 133.
+      - name: Install binaryen 133
+        run: |
+          curl -sSLf -o /tmp/binaryen.tgz https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
+          echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  /tmp/binaryen.tgz" | sha256sum -c -
+          tar xzf /tmp/binaryen.tgz -C /tmp
+          echo /tmp/binaryen-version_133/bin >> "$GITHUB_PATH"
+
+      - name: Install wasm32-wasip1 target
+        run: rustup target add wasm32-wasip1
+
+      - name: Bench cache keys
+        id: bench-keys
+        run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack | tee -a "$GITHUB_OUTPUT"
+
+      # Build sequentially to fit a standard runner's memory. The native reference uses the ci profile (no LTO).
+      - name: cargo check (wasm32-wasip1) and cargo test -p tsrs_wasm
+        run: |
+          cargo check -p tsrs_wasm --target wasm32-wasip1 --locked --config 'build.warnings="deny"'
+          cargo test --locked -p tsrs_wasm
+
+      - name: Build the module
+        run: |
+          mkdir -p target
+          CARGO_TARGET_DIR=target/wasm tools/wasm/build.sh | tee target/wasm-size.txt
+
+      - name: Build native binaries
+        run: CARGO_TARGET_DIR=target/native cargo build --profile ci --locked -p tsrs_cli -p tsrs_testrunner
+
+      - name: Restore the bench compilers
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.bench-keys.outputs.shared }}
+
+      - name: Restore xstate-main
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: bench/.work/solutions/xstate-main
+          key: bench-xstate-main-${{ runner.os }}-${{ steps.bench-keys.outputs['xstate-main'] }}
+
+      - name: Restore webpack
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: bench/.work/solutions/webpack
+          key: bench-webpack-${{ runner.os }}-${{ steps.bench-keys.outputs['webpack'] }}
+
+      - name: pnpm test (npm/tsrs-wasm)
+        run: TSRS_NATIVE=$PWD/target/native/ci/tsrs pnpm --dir npm/tsrs-wasm test
+
+      - name: Set up the bench projects
+        run: python3 bench/run.py --setup-only --projects xstate-main,webpack,Compiler,Compiler-Unions
+
+      - name: Differential gate
+        run: TSRS_TEST=target/native/ci/tsrs-test tools/wasm/gate.sh target/native/ci/tsrs
+
+      - name: Upload the gate results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: wasm-gate
+          path: |
+            target/wasm-size.txt
+            target/wasm-diff/**/summary.json
+            target/wasm-diff/*.log
+            target/wasm-diff/*/fail/**
+            target/wasm-diff/*/*/fail/**
+          if-no-files-found: ignore
+
+  # docs/RUST.md: every enabled Clippy lint is denied across the full workspace, including generated Fourslash fixtures.
+  lint-ratchet:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: false
+          cache-key: warm
+
+      - name: Clippy
+        run: cargo clippy --workspace --locked --all-targets --config 'build.warnings="deny"' -- -D dead-code
+
+      # Unsafe Send/Sync inventory and comments on weakened atomic orderings (docs/RUST.md, "Source checks").
+      - name: Source checks
+        run: python3 tools/lint/source.py --self-test && python3 tools/lint/source.py
+
+  # tools/ci/skip_marker.py: a pull request that changes code must not carry a CI-skip marker in its title, body or
+  # commit subjects, because `gh pr merge --squash` copies them into the commit message and the commit then lands on
+  # main without CI. Notes-only pull requests carry it on purpose.
+  skip-marker:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0 # the base..head subjects and the base...head diff
+          persist-credentials: false
+
+      - name: Write the pull request's title and body
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s' "$TITLE" > /tmp/pr-title.txt
+          printf '%s' "$BODY" > /tmp/pr-body.txt
+
+      - name: Skip marker
+        run: >-
+          python3 tools/ci/skip_marker.py --self-test && python3 tools/ci/skip_marker.py
+          --title-file /tmp/pr-title.txt --body-file /tmp/pr-body.txt
+          --base ${{ github.event.pull_request.base.sha }} --head ${{ github.event.pull_request.head.sha }}
+
+  # tools/gen-check.sh: re-runs the code generators and fails if a generated file differs from its generator's output
+  # (docs/RUST.md, "Generated-code freshness check").
+  generated-code:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      # Node 24 runs the .ts generators directly (type stripping).
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+        with:
+          registry-url: "" # Public benchmark installs use Yarn 1, which rejects an unset NODE_AUTH_TOKEN.
+
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
+      # The generators read ast.json and the Go sources; the fourslash generator also builds the Go packages.
+      - name: Check out TypeScript (generator inputs)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /tools/scripts/tsc/
+            /tsc/
+            !/tsc/testdata/
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: ts-ref/tsc/go.mod
+          cache-dependency-path: ts-ref/tsc/go.sum
+
+      - name: Benchmark reporting tests
+        run: python3 -m unittest discover -s bench -p test_reporting.py
+
+      - name: Generated code is up to date
+        run: tools/gen-check.sh
+
+  # notes/fix-arena-recycle-uaf.md: an arena free of memory that a function held as a reference parameter is undefined
+  # behaviour that LLVM exploited only in `panic = "abort"` builds (every call `nounwind`). Two cheap guards for that
+  # class: Miri on the arena's free-list tests (plus a negative control that Miri must reject), and the conformance
+  # suite on a `panic = "abort"` release build, which crashed on 44 tests before the fix. tools/lint/source.py
+  # (lint job) rejects the direct pattern.
+  arena-safety:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Free disk space for builds and benchmark checkouts
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
+      # The testdata checkout (~5 s) is cached per TypeScript commit; the sparse checkout below runs only on a miss.
+      - name: Restore TypeScript testdata
+        id: ts-ref
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ts-ref/tsc/testdata
+          key: ts-ref-testdata-${{ steps.ts.outputs.commit }}
+
+      - name: Check out TypeScript testdata
+        if: steps.ts-ref.outputs.cache-hit != 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          sparse-checkout: tsc/testdata
+          persist-credentials: false
+
+      - name: Save TypeScript testdata
+        if: steps.ts-ref.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ts-ref/tsc/testdata
+          key: ${{ steps.ts-ref.outputs.cache-primary-key }}
+
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: false
+          cache-key: warm
+
+      # Miri needs a nightly; pinned so that a Miri change cannot turn main red on its own.
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: nightly-2026-10-04
+          components: miri, rust-src
+
+      # plain-ptrs: the compressed handles' 32 GiB PROT_NONE reservation is not supported by Miri.
+      - name: Miri on the arena free-list tests
+        # The arena leaks its chunks by design (nothing is freed at exit), so Miri's leak check is off here.
+        env:
+          MIRIFLAGS: -Zmiri-ignore-leaks
+        run: |
+          cargo +nightly-2026-10-04 miri test --locked -p tsrs_core --features plain-ptrs --lib arena::tests
+          # The negative control frees a reference parameter; Miri must still call that undefined behaviour.
+          if cargo +nightly-2026-10-04 miri test --locked -p tsrs_core --features plain-ptrs --lib \
+              arena::tests::miri_rejects_freeing_a_reference_parameter -- --ignored > miri-negative.log 2>&1; then
+            echo "::error::Miri accepted a free of a protected reference parameter"; exit 1
+          fi
+          grep -q "Undefined Behavior" miri-negative.log
+
+      - name: Conformance suite on a panic = "abort" build
+        env:
+          CARGO_PROFILE_RELEASE_PANIC: abort
+          CARGO_TARGET_DIR: target/abort
+        run: |
+          cargo build --release --locked -p tsrs_testrunner
+          TSRS_TEST=target/abort/release/tsrs-test TSRS_TEST_RESULTS="$PWD/target/abort/test-results" \
+            .github/scripts/conformance-gate.sh
+
+  # tools/ci/tsan.sh: tsrs built with ThreadSanitizer runs the multi-threaded paths (type checks at 2 and 8 checkers,
+  # emit, `-b` on a generated project graph, `--watch` and `-b --watch` with edits, a language-server session) and any
+  # report fails the job. `P<T>` is `Send`/`Sync` by decree, so this is the only check that threads do not race on arena
+  # data (#510 fixed the first race it found). Suppressions, each with its reason, are in tools/ci/tsan.supp.
+  thread-sanitizer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Free disk space for builds and benchmark checkouts
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+        with:
+          registry-url: "" # Public benchmark installs use Yarn 1, which rejects an unset NODE_AUTH_TOKEN.
+
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: ${{ github.ref_name == 'main' }}
+          cache-key: tsan
+
+      # ThreadSanitizer needs a nightly (-Zsanitizer, -Zbuild-std); pinned like the Miri job's.
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: nightly-2026-10-04
+          components: rust-src
+
+      # ThreadSanitizer's fixed memory layout fails with the 32 bits of mmap randomization Ubuntu 24.04 kernels use
+      # ("unexpected memory mapping"); the watch workloads need more inotify watches than the default.
+      - name: Kernel settings
+        run: |
+          sudo sysctl -w vm.mmap_rnd_bits=28
+          sudo sysctl -w fs.inotify.max_user_watches=524288 fs.inotify.max_user_instances=1024
+
+      - name: Bench cache keys
+        id: tsan-keys
+        run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack | tee -a "$GITHUB_OUTPUT"
+
+      - name: Restore the bench compilers
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.tsan-keys.outputs.shared }}
+
+      - name: Restore xstate-main
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: bench/.work/solutions/xstate-main
+          key: bench-xstate-main-${{ runner.os }}-${{ steps.tsan-keys.outputs['xstate-main'] }}
+
+      - name: Restore webpack
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: bench/.work/solutions/webpack
+          key: bench-webpack-${{ runner.os }}-${{ steps.tsan-keys.outputs['webpack'] }}
+
+      # Plain pointers: ThreadSanitizer's shadow memory takes the compressed handles' address range. The system
+      # allocator: ThreadSanitizer cannot see mimalloc's reuse of memory across threads (false races).
+      - name: Build tsrs with ThreadSanitizer
+        env:
+          RUSTFLAGS: -Zsanitizer=thread
+          CARGO_PROFILE_RELEASE_STRIP: "false"
+          CARGO_PROFILE_RELEASE_DEBUG: line-tables-only
+          CARGO_TARGET_DIR: target/tsan
+        run: >-
+          cargo +nightly-2026-10-04 build --release --locked -p tsrs_cli -Zbuild-std
+          --features tsrs_core/plain-ptrs,tsrs_cli/system-alloc --target x86_64-unknown-linux-gnu
+
+      - name: Set up the bench projects
+        run: python3 bench/run.py --setup-only --projects xstate-main,webpack
+
+      - name: ThreadSanitizer
+        env:
+          TMPDIR: ${{ runner.temp }}/tsan
+        run: |
+          mkdir -p "$TMPDIR"
+          tools/ci/tsan.sh target/tsan/x86_64-unknown-linux-gnu/release/tsrs --projects xstate-main,webpack
+
+      - name: Upload ThreadSanitizer logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tsan-logs
+          path: ${{ runner.temp }}/tsan
+          if-no-files-found: ignore
+
+  # Pinned upstream client + upstream sync/async suites + tools/node-api/tests, first against the Go server built
+  # from ts-ref (must be all green), then against tsrs. The tsrs result and the per-method inventory are uploaded;
+  # the job fails if any tsrs test fails, so partial support is never reported as green.
+  parity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out TypeScript at the pinned commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+
+      # setup-node saves its pnpm store after the repository install; cache this later upstream install separately.
+      - name: Restore Node API harness dependencies
+        id: harness-deps
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ts-ref/node_modules
+            ts-ref/packages/typescript/node_modules
+            ts-ref/pnpm-lock.yaml
+            ts-ref/pnpm-workspace.yaml
+          key: node-api-harness-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.node-version', 'pnpm-lock.yaml') }}-${{ steps.ts.outputs.commit }}
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: ts-ref/tsc/go.mod
+          cache-dependency-path: ts-ref/tsc/go.sum
+
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: true
+          cache-key: node-api-parity
+
+      - name: Harness setup (pnpm install in ts-ref, Go oracle from ts-ref/tsc)
+        run: tools/node-api/setup.sh
+
+      - name: Save Node API harness dependencies
+        if: steps.harness-deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ts-ref/node_modules
+            ts-ref/packages/typescript/node_modules
+            ts-ref/pnpm-lock.yaml
+            ts-ref/pnpm-workspace.yaml
+          key: ${{ steps.harness-deps.outputs.cache-primary-key }}
+
+      - name: Go oracle (must pass)
+        run: node tools/node-api/run-upstream.mjs --binary tools/node-api/.work/oracle/tsc --label go-oracle
+
+      - name: Build tsrs
+        run: cargo build --release --locked -p tsrs_cli
+
+      - name: tsrs against the same suites
+        id: tsrs
+        continue-on-error: true
+        run: node tools/node-api/run-upstream.mjs --binary target/release/tsrs --label tsrs
+
+      - name: Per-method inventory
+        if: always()
+        run: |
+          node tools/node-api/inventory.mjs --oracle go-oracle --candidate tsrs \
+            --md tools/node-api/.work/inventory.md --json tools/node-api/.work/inventory.json
+          head -n 12 tools/node-api/.work/inventory.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Evidence lives under tools/node-api/.work, a dot-directory that upload-artifact skips by default; only the
+      # listed result files are uploaded (no work trees, binaries or traces).
+      - name: Check evidence exists
+        if: always()
+        run: |
+          missing=0
+          for f in tools/node-api/.work/go-oracle/summary.json tools/node-api/.work/go-oracle/results.jsonl \
+                   tools/node-api/.work/tsrs/summary.json tools/node-api/.work/tsrs/results.jsonl \
+                   tools/node-api/.work/inventory.md tools/node-api/.work/inventory.json; do
+            if [ ! -s "$f" ]; then echo "missing evidence: $f"; missing=1; fi
+          done
+          exit $missing
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: node-api-parity
+          include-hidden-files: true
+          if-no-files-found: error
+          path: |
+            tools/node-api/.work/go-oracle/summary.json
+            tools/node-api/.work/go-oracle/results.jsonl
+            tools/node-api/.work/go-oracle/run.tap
+            tools/node-api/.work/go-oracle/meta.json
+            tools/node-api/.work/go-oracle/evidence/*.json
+            tools/node-api/.work/tsrs/summary.json
+            tools/node-api/.work/tsrs/results.jsonl
+            tools/node-api/.work/tsrs/run.tap
+            tools/node-api/.work/tsrs/meta.json
+            tools/node-api/.work/tsrs/evidence/*.json
+            tools/node-api/.work/inventory.md
+            tools/node-api/.work/inventory.json
+          retention-days: 14
+
+      - name: Fail on tsrs failures
+        if: steps.tsrs.outcome != 'success'
+        run: |
+          echo "tsrs did not pass the API suites; see the node-api-parity artifact"
+          exit 1
+
+  # Pack tsrs exactly as a release would (without publishing), install the tarballs into a project outside the
+  # repository and drive the installed binary through the CLI, unstable/sync, unstable/async and the published
+  # declarations, on each Linux platform the release workflow builds (macOS is validated below).
+  package:
+    name: package ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-24.04 }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm }
+    steps:
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: true
+          cache-key: node-api-${{ matrix.target }}
+
+      - name: Build tsrs
+        run: cargo build --release --locked -p tsrs_cli
+
+      - name: Pack (no publish)
+        run: node npm/build.mjs --binary ${{ matrix.target }}=target/release/tsrs --out "$RUNNER_TEMP/pack" --pack
+
+      - name: Installed-package smoke (CLI, sync, async, declarations)
+        run: node tools/node-api/consumer.mjs --dist "$RUNNER_TEMP/pack"
+
+  # Native macOS packaging uses the same installed-consumer validation as Linux.
+  package-macos:
+    name: package ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: aarch64-apple-darwin, os: macos-14 }
+    steps:
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - name: Set up Node
+        uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+
+      - name: Set up Rust
+        uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: true
+          cache-key: node-api-${{ matrix.target }}
+
+      # Keep resource diagnostics for a slow build and stop the monitor on both success and failure.
+      - name: Build tsrs
+        run: |
+          (
+            while true; do
+              date -u
+              vm_stat
+              top -l 1 -n 10 -o cpu -stats pid,cpu,mem,command
+              sleep 60
+            done
+          ) &
+          monitor=$!
+          trap 'kill "$monitor" 2>/dev/null || true' EXIT
+          cargo build --release --locked -p tsrs_cli
+
+      - name: Pack (no publish)
+        run: node npm/build.mjs --binary ${{ matrix.target }}=target/release/tsrs --out "$RUNNER_TEMP/pack" --pack
+
+      - name: Installed-package smoke (CLI, sync, async, declarations)
+        run: node tools/node-api/consumer.mjs --dist "$RUNNER_TEMP/pack"

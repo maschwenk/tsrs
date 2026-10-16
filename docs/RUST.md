@@ -18,7 +18,7 @@ cargo clippy --workspace --locked --all-targets --config 'build.warnings="deny"'
 
 `[workspace.lints.clippy]` in `Cargo.toml` and `clippy.toml` turn on the oxc baseline and the project-specific strict
 lints. The command promotes warnings to errors, and CI also denies ordinary compiler warnings. There is no findings
-baseline: the command above must be clean before a change lands (CI runs it in the `lint-ratchet` job).
+baseline: the command above must be clean before a change lands (CI runs it in the `lint` job).
 
 When it fails:
 
@@ -58,7 +58,7 @@ An upgrade is a pull request of its own:
 
 ## Source checks
 
-`tools/lint/source.py` (CI: the `lint-ratchet` job; after Bun's `test/internal/source-lints/`) checks three things
+`tools/lint/source.py` (CI: the `lint` job; after Bun's `test/internal/source-lints/`) checks three things
 clippy cannot express:
 
 - **`unsafe impl Send` / `Sync`.** `tools/lint/send_sync.tsv` lists all of them (31 on 2026-10-10). Adding or removing
@@ -74,8 +74,8 @@ clippy cannot express:
   a protected borrow for the whole call (`noalias readonly`), so writing the free-list link into it is undefined
   behaviour; LLVM deleted that write in `panic = "abort"` builds and every such build crashed
   (`notes/fix-arena-recycle-uaf.md`). Take the block as a `P<T>`, an address or a raw slice (`*const [T]`). No
-  baseline. The CI job `arena-safety` adds Miri on the arena tests and the conformance suite on a `panic = "abort"`
-  build for the forms a source check cannot see.
+  baseline. The `arena-safety` job saved in `.github/workflows/ci.yml.bak` adds Miri on the arena tests and conformance on a
+  `panic = "abort"` build for the forms a source check cannot see; that job is disabled for now.
 
 Test files, the generated fourslash crate and generated files are not scanned.
 
@@ -153,7 +153,7 @@ In place:
 | Lazy members, line maps and rare-field tails | `notes/lazy-members.md`, `notes/mem-lazy.md` | |
 | `#[cold]` slow-path splits | `notes/perf-parse.md` changes 6 to 8: parse instructions 16.66 G -> 15.07 G | oxc, Bun |
 | Instruction counts and peak memory, with regression reporting (automation disabled) | `bench/README.md` "Regression flag": single-threaded tsrs repeats to about 0.001% (instructions) and under 0.4% (peak RSS); the local tools remain available, but the saved `.yml.bak` workflows do not measure commits or comment on PRs | CodSpeed in oxc, Rolldown, Ruff, Biome, swc (simulated counts); Ruff's PR memory report |
-| Generated-code freshness check | `tools/gen-check.sh` (CI job `generated-code`) re-runs the eight generators and fails on a diff; it found two hand edits the generators no longer reproduced | oxc, Ruff, rust-analyzer |
+| Generated-code freshness check | `tools/gen-check.sh` (the `generated-code` job is disabled in `.github/workflows/ci.yml.bak`) re-runs the eight generators and fails on a diff; it found two hand edits the generators no longer reproduced | oxc, Ruff, rust-analyzer |
 | Differential parser fuzzing | `tools/fuzz/parser.py` mutates conformance files and compares the AST hashes of the Go and Rust oracles (`tools/oracle/ast`); the nightly 200,000-mutant workflow is disabled as [fuzz.yml.bak](../.github/workflows/fuzz.yml.bak), while the local tool remains available. First 320,000 mutants: no divergence, no crash (inputs kept valid UTF-8; invalid UTF-8 is read lossily on purpose) | Ruff (`cargo fuzz` on its parser) |
 | Frame pointers for profiling | `docs/DEBUGGING.md` "Profiling": a `dist` build with `-C force-frame-pointers=yes` for samply / `perf` on Linux (Apple arm64 always keeps them) | Bun |
 | Transparent huge pages for the arena on Linux: large thread-arena chunks 2 MiB-aligned and advised with `MADV_HUGEPAGE`. The mimalloc heap is not advised (the CLI builds mimalloc with `no_thp`): with the advice every partly filled thread-local mimalloc page was resident as a whole 2 MiB page | `notes/linux-x86-round.md`: 2-6% less wall time, 21-48x fewer page faults; `notes/linux-perf.md`: THP off costs 11-12%; `notes/mem-no-thp.md`: no advice on the heap, -25 to -33% peak RSS at 4-64 checkers on 64 vCPUs for +4-9% wall time against `bun check` on the same runner (parse +30%, check +1-5%) | mimalloc (advises its own OS memory unless built with `no_thp`) |
@@ -186,7 +186,7 @@ Not tried. Each needs a measurement before it is adopted; none is applied yet:
 | Candidate | Who does it | What it would give | What it needs |
 | --- | --- | --- | --- |
 | Allocation-count snapshot gate | oxc `tasks/track_memory_allocations` (`cargo allocs`, then `git diff --exit-code` in CI), Rolldown | A stray heap allocation on a hot path becomes a diff in a checked-in snapshot. Counts are exact on one thread. | A fixed corpus, one checker, and a new allocation-counting tool. |
-| Miri on all of `tsrs_core` | oxc (strict provenance, allocator and AST crates), rust-analyzer (`intern`), Bun (tree borrows, 17 crates) | Soundness of the handle and region code, where a third of the `unsafe` is. The arena free-list tests already run under Miri in CI (`arena-safety`, `notes/fix-arena-recycle-uaf.md`). | Nightly and `--features plain-ptrs` (Miri does not support the compressed handles' `PROT_NONE` reservation). |
+| Miri on all of `tsrs_core` | oxc (strict provenance, allocator and AST crates), rust-analyzer (`intern`), Bun (tree borrows, 17 crates) | Soundness of the handle and region code, where a third of the `unsafe` is. The arena free-list Miri job is preserved, disabled, in `.github/workflows/ci.yml.bak` (`arena-safety`, `notes/fix-arena-recycle-uaf.md`). | Nightly and `--features plain-ptrs` (Miri does not support the compressed handles' `PROT_NONE` reservation). |
 | Conformance with `debug-assertions` and `overflow-checks` in an optimized profile | oxc `[profile.coverage]` | Overflow and failed debug assertions that release builds skip. | A profile and a second conformance run. |
 | A symbol order file at link time | Bun (order file from a function-entry trace) | Part of BOLT's gain without a post-link step, on every platform. | A function-entry trace and `-Wl,--symbol-ordering-file` / `-order_file`. |
 | Arena-backed temporaries | oxc (arena `Vec` and `HashMap`), Bun (hashbrown on its arenas through `allocator-api2`, the stable stand-in for the nightly `Allocator` API) | Scratch vectors and maps skip malloc and free. | A scratch allocator whose reset point is provable; scope regions were rejected (above), so per-call scratch is the experiment. |

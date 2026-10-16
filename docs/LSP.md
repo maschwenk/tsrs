@@ -251,7 +251,7 @@ Recorded result: **4,066 pass, 63 fail and 417 skip**, out of 4,546 generated te
 
 Skips: 386 known failing in Go (registry) + 31 `SkipUnsupportedCompilerOptions` (module UMD/System, moduleResolution
 node10/classic, `esModuleInterop`/`allowSyntheticDefaultImports` false, `baseUrl`, ES5 target, `alwaysStrict` false).
-Failures (63, the CI gate's maximum in `.github/scripts/fourslash-gate.sh`): 55 content-mapper tests (out of scope)
+Failures (63, the gate's maximum in `.github/scripts/fourslash-gate.sh`; still enforced on GNU Linux releases): 55 content-mapper tests (out of scope)
 and 8 tests with `@tsc` command lines (not ported yet); see [known gaps](#known-gaps). These 63 fail before the session starts, so
 with the gate green no failure is a divergence in a ported feature.
 

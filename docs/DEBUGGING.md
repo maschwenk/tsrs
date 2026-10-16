@@ -423,7 +423,8 @@ against tsgo-ref's output.
 ## Data races: ThreadSanitizer (`tools/ci/tsan.sh`)
 
 `P<T>` is `Send`/`Sync` by decree (`tsrs_core::ptr`): nothing in the type system stops two threads from writing the same
-arena value. CI's `thread-sanitizer` job builds tsrs with ThreadSanitizer and runs `tools/ci/tsan.sh`, which fails on
+arena value. The `thread-sanitizer` job, now disabled in `.github/workflows/ci.yml.bak`, builds tsrs with
+ThreadSanitizer and runs `tools/ci/tsan.sh`, which fails on
 any report: type checks at 2 and 8 checkers, emit, `-b` on a generated graph of 12 projects, `--watch` and `-b --watch`
 with edits, and a language-server session. To run it locally (about 2 minutes on an M3 Max after a 2.5-minute build):
 
