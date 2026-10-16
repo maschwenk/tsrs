@@ -29,6 +29,7 @@ pub mod flow_types;
 pub mod inference_types;
 pub mod jsx_types;
 pub mod links;
+pub mod merged_symbols;
 pub mod mapper;
 pub mod nodebuilder_types;
 pub mod printer_types;
