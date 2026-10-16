@@ -81,8 +81,12 @@ For a bug outside the suite, add a reproduction under `testdata/regressions/<nam
 ## Landing changes
 
 - Changes target `main`. CI (`.github/workflows/ci.yml`, on GitHub Actions) runs on pushes
-  to `main`, on pull requests into `main` (drafts too) and by manual dispatch, and must pass. Fork pull requests
+  to `main`, on pull requests into `main` (drafts too), on merge groups and by manual dispatch, and must pass. Fork pull requests
   follow the repository's approval setting, run with read-only tokens and never get repository secrets.
+- CI includes Node API parity and installed-package validation on Linux x64, Linux ARM64 and macOS ARM64.
+  Only CI, release, security and triage workflows are active. Other workflow definitions are preserved as
+  `.github/workflows/*.yml.bak`; they do not run automatically or by manual dispatch. Restore the original `.yml`
+  filename to re-enable one. Node API checks already run in CI, so restoring its backup would duplicate them.
 - Maintainers land small commits directly on `main` (rebase onto `origin/main`, `cargo check --workspace`, re-run the
   affected tests and the full suite, then `git push origin HEAD:main`; never force-push). See `docs/DEBUGGING.md`.
 - Commit messages: `<area>: <what and why>`, plus the conformance totals when they change.

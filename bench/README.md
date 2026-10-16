@@ -4,9 +4,10 @@
 ([microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), `cases/`) and eleven
 open-source applications and libraries (see "Application projects") with tsrs, with tsgo 7.0.2 (npm `typescript@7.0.2`) and, where a
 Bun binary is given, with `bun check`, and reports wall time, peak memory and the error count of each.
-The GitHub Actions workflow `.github/workflows/bench.yml` is temporarily manual-only while CPU and memory
-measurements are not working. It measures every project on GitHub-hosted `ubuntu-24.04` runners in four modes and in four more
-with bun check; `bench/results/<date>-<commit>.md` has every table. [The latest results](RESULTS.md) show the
+Benchmark automation is disabled; its workflow is preserved as
+[`.github/workflows/bench.yml.bak`](../.github/workflows/bench.yml.bak). The local commands below remain available.
+The saved workflow measures every project on GitHub-hosted `ubuntu-24.04` runners in four modes and in four more
+with bun check; `bench/results/<date>-<commit>.md` has every table. [The latest recorded results](RESULTS.md) show the
 Bun comparison tables, with tsgo, tsrs and bun check side by side: the default mode (each compiler at its own
 thread count) and both compilers at `--checkers` 4 (tsgo's default), 8 and 16.
 
@@ -244,9 +245,15 @@ the small projects move by a few hundred KiB), so peak memory is flagged when it
 
 ## CI
 
-The benchmark is a GitHub Actions workflow, `.github/workflows/bench.yml`. Automatic CPU and memory measurements
-are temporarily paused in both this workflow and `pr-verify.yml`; only `workflow_dispatch` remains enabled.
-Nobody waits on it, so it is built for unattended runs: one run per measured commit (the concurrency group is the commit, so a dispatch for another commit
+Benchmark automation is disabled, including manual dispatch. The definitions are preserved under `.github/workflows/`
+as `bench.yml.bak`, `bench-compare.yml.bak`, `codspeed.yml.bak`, `pr-verify.yml.bak`, `perf-probe.yml.bak` and
+`perf-layout-probe.yml.bak`. Local measurement tools and recorded results remain available.
+
+The workflow descriptions and dispatch commands in this section document the saved definitions. Restore the
+corresponding original `.yml` filename before using any `gh workflow run` command. No automated measurements,
+regression comments or result/chart updates run while the workflows are disabled.
+
+The saved benchmark workflow is built for unattended runs: one run per measured commit (the concurrency group is the commit, so a dispatch for another commit
 starts its own run on its own machines and only a re-dispatch of the same commit replaces a queued twin; until
 2026-10-07 one shared group let a later push replace the queued bench, and bursts of merges left most commits without
 a results file), never cancelled, network steps retried, and the results commit re-created on top of the latest
@@ -329,6 +336,10 @@ build job, and `ci.yml`'s `check-and-test` and `arena-safety` jobs, restore the 
 testdata (`ts-ref/tsc/testdata`, 22 MB compressed) from a cache keyed on the TypeScript commit; on a miss they run the
 sparse checkout and save it. That saves about 4 s per job (2026-10-07: checkout 4.9-5.7 s, restore 1.4 s).
 
+With benchmark automation disabled, correctness CI still restores any available project caches and clones and
+installs missing inputs through its existing setup steps. Benchmark runs no longer warm those caches; cold-cache
+correctness runs may take longer.
+
 Historical job duration split, 2026-10-01 (before this migration):
 
 | | GitHub-hosted `ubuntu-24.04` (2 vCPU / 7 GB), before | Depot CI `depot-ubuntu-24.04-8`, all caches warm |
@@ -380,7 +391,7 @@ them 64 vCPU, sat idle through the 7-minute build.
 
 ## Verifying a branch
 
-`.github/workflows/pr-verify.yml` answers the two questions a performance or refactoring branch has to answer before it
+The disabled [`.github/workflows/pr-verify.yml.bak`](../.github/workflows/pr-verify.yml.bak) answers the two questions a performance or refactoring branch has to answer before it
 lands: does it still print exactly what main prints, and what did it do to time and memory? It runs on one
 GitHub-hosted Linux x64 runner (`ubuntu-24.04` by default, configurable with `-f runner=<label>`) and compares two `cargo build --release` binaries (not the PGO build:
 relative comparisons only): the branch, and its merge base with `base` (default `main`), so commits that landed on
@@ -400,7 +411,7 @@ lines, in order) or their exit codes differ, in any run, including the single-th
 that crashes. Timing and memory never fail it: wall time moves 2-4% between identical runs, and the instruction count
 and single-threaded peak RSS are the numbers to quote in a pull request.
 
-How to run it:
+To run the saved workflow, first restore its original `pr-verify.yml` filename and push that change:
 
 ```sh
 gh workflow run pr-verify.yml --ref <pushed-branch> \
@@ -408,9 +419,9 @@ gh workflow run pr-verify.yml --ref <pushed-branch> \
 gh run download <run-id> -n pr-verify
 ```
 
-Automatic pull request runs, including the `verify` label trigger, are temporarily paused while CPU and memory
-measurements are not working. Dispatches require a pushed ref; uncommitted local changes are not uploaded.
-All runs restore the caches `bench.yml` saves.
+Both automatic runs and manual dispatch are disabled while the filename ends in `.bak`. The saved definition is
+manual-only if restored. Dispatches require a pushed ref; uncommitted local changes are not uploaded.
+Runs restore available benchmark caches and install missing inputs; the disabled benchmark workflow no longer warms them.
 
 Historical duration on 64 vCPU (10 projects x 4 checker counts x 3 reps, poison on), Depot run `8fp8bp2jk1`
 (2026-10-07, `depot ci run`, so no caches): 10 min 44 s for the job, of which setup and project clone + install
@@ -447,8 +458,9 @@ python3 bench/compare.py --tsrs target/release/tsrs --bun ~/.bun/bin/bun --proje
 python3 bench/compare.py --tsrs ... --bun ... --projects Compiler --threads default,4 --reps 2   # smoke test
 ```
 
-The GitHub Actions workflow `.github/workflows/bench-compare.yml` (manual dispatch only) defaults to `ubuntu-24.04`.
-Run `gh workflow run bench-compare.yml --ref <branch>`; use `-f runner=<label>` for a configured larger GitHub-hosted
+The disabled [`.github/workflows/bench-compare.yml.bak`](../.github/workflows/bench-compare.yml.bak) defaults to `ubuntu-24.04`.
+After restoring its original `bench-compare.yml` filename, run `gh workflow run bench-compare.yml --ref <branch>`;
+use `-f runner=<label>` for a configured larger GitHub-hosted
 Linux x64 runner. It uses the PGO `dist` build of the commit (built and trained as in `bench.yml`) and Bun canary, and uploads
 `bench/results/compare/<date>-<commit>-<threads>t.{json,md}` plus the logs as the `bench-compare` artifact.
 

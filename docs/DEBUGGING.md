@@ -224,7 +224,8 @@ heap and other anonymous memory, and file-backed pages, with a one-line split `a
 heap live + heap retained (in pages, outside pages) | stacks | file` (`crates/tsrs_core/src/memsplit.rs`,
 notes/mem-linux-residency-32.md). `TSRS_MEM_SPLIT=purge` also has mimalloc purge its freed memory after `check end`
 (`mi_collect(true)`) and prints the split again. `tools/perf/slackprobe.sh` runs it on the selected GitHub-hosted runner
-(`.github/workflows/perf-probe.yml`, `ubuntu-24.04` by default) with interleaved timed reps.
+with interleaved timed reps when the disabled `.github/workflows/perf-probe.yml.bak` is restored to `perf-probe.yml`
+(`ubuntu-24.04` by default).
 
 ## Optional build features
 
@@ -457,7 +458,8 @@ on Linux (single-threaded, with `--singleThreaded` and `RAYON_NUM_THREADS=1`, co
 `/usr/bin/time -l` on macOS. Per-function counts: `valgrind --tool=callgrind --callgrind-out-file=cg.out <tsrs command>`
 on a `--release` build with symbols (`CARGO_PROFILE_RELEASE_STRIP=none`), then
 `callgrind_annotate --inclusive=no --tree=none cg.out` (`--tree=none`, or call-graph lines are counted twice). The
-bench flags regressions on main by itself (`bench/README.md`, "Regression flag").
+benchmark regression tools remain available locally (`bench/README.md`, "Regression flag"); automatic measurement
+and reporting are disabled in the saved `.yml.bak` workflows.
 
 ## Where Go reports an error: an instrumented reference with `go build -overlay`
 

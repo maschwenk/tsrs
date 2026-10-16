@@ -1,6 +1,10 @@
 # Top repository conformance
 
-The [GitHub Actions workflow](../../.github/workflows/repo-conformance.yml) compares tsrs with tsgo built from the
+The [GitHub Actions workflow](../../.github/workflows/repo-conformance.yml.bak) is disabled. Its definition and local
+tools are preserved. The workflow behavior and dispatch instructions below apply only after restoring the filename
+to `repo-conformance.yml`; the local commands at the end remain available.
+
+The workflow compares tsrs with tsgo built from the
 TypeScript commit pinned in `Cargo.toml`, following TypeScript's
 [`test top400`](https://github.com/microsoft/TypeScript/wiki/Triggering-TypeScript-Bot).
 It selects 400 TypeScript repos by stars after compiler changes merge into `main`, and 20 for harness PRs, excluding

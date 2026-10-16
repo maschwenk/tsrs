@@ -1,5 +1,5 @@
 # Security: read-only token, no secrets. Runs on pushes to main, on pull requests into main
-# (drafts included, so a branch gets feedback as soon as it is pushed), and on manual dispatch by collaborators.
+# (drafts included), on merge groups, and on manual dispatch by collaborators.
 # Fork pull requests follow the repository's approval setting.
 
 name: CI
@@ -9,6 +9,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  merge_group:
   workflow_dispatch:
 
 # A newer commit on the same pull request cancels its older run; every push to main runs to completion (several
@@ -192,8 +193,8 @@ jobs:
           path: bench/.work/solutions/drizzle-orm
           key: bench-drizzle-orm-${{ runner.os }}-${{ steps.determinism-keys.outputs['drizzle-orm'] }}
 
-      # A no-op for everything restored above; clones and installs the rest (the bench workflow saves these caches on
-      # every push to main, so a miss means a changed pin or an evicted cache).
+      # A no-op for everything restored above; clones and installs the rest. Benchmark automation is disabled,
+      # so correctness checks must also work without its cached checkouts.
       - name: Set up the determinism projects
         run: python3 bench/run.py --setup-only --projects xstate-main,webpack,nuxt,drizzle-orm
 
@@ -348,7 +349,7 @@ jobs:
 
   # tools/ci/skip_marker.py: a pull request that changes code must not carry a CI-skip marker in its title, body or
   # commit subjects, because `gh pr merge --squash` copies them into the commit message and the commit then lands on
-  # main without CI and without a bench run (bench/README.md "CI"). Notes-only pull requests carry it on purpose.
+  # main without CI. Notes-only pull requests carry it on purpose.
   skip-marker:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
@@ -586,3 +587,205 @@ jobs:
           name: tsan-logs
           path: ${{ runner.temp }}/tsan
           if-no-files-found: ignore
+
+  # Pinned upstream client + upstream sync/async suites + tools/node-api/tests, first against the Go server built
+  # from ts-ref (must be all green), then against tsrs. The tsrs result and the per-method inventory are uploaded;
+  # the job fails if any tsrs test fails, so partial support is never reported as green.
+  parity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out TypeScript at the pinned commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+
+      # setup-node saves its pnpm store after the repository install; cache this later upstream install separately.
+      - name: Restore Node API harness dependencies
+        id: harness-deps
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ts-ref/node_modules
+            ts-ref/packages/typescript/node_modules
+            ts-ref/pnpm-lock.yaml
+            ts-ref/pnpm-workspace.yaml
+          key: node-api-harness-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.node-version', 'pnpm-lock.yaml') }}-${{ steps.ts.outputs.commit }}
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: ts-ref/tsc/go.mod
+          cache-dependency-path: ts-ref/tsc/go.sum
+
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: true
+          cache-key: node-api-parity
+
+      - name: Harness setup (pnpm install in ts-ref, Go oracle from ts-ref/tsc)
+        run: tools/node-api/setup.sh
+
+      - name: Save Node API harness dependencies
+        if: steps.harness-deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ts-ref/node_modules
+            ts-ref/packages/typescript/node_modules
+            ts-ref/pnpm-lock.yaml
+            ts-ref/pnpm-workspace.yaml
+          key: ${{ steps.harness-deps.outputs.cache-primary-key }}
+
+      - name: Go oracle (must pass)
+        run: node tools/node-api/run-upstream.mjs --binary tools/node-api/.work/oracle/tsc --label go-oracle
+
+      - name: Build tsrs
+        run: cargo build --release --locked -p tsrs_cli
+
+      - name: tsrs against the same suites
+        id: tsrs
+        continue-on-error: true
+        run: node tools/node-api/run-upstream.mjs --binary target/release/tsrs --label tsrs
+
+      - name: Per-method inventory
+        if: always()
+        run: |
+          node tools/node-api/inventory.mjs --oracle go-oracle --candidate tsrs \
+            --md tools/node-api/.work/inventory.md --json tools/node-api/.work/inventory.json
+          head -n 12 tools/node-api/.work/inventory.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Evidence lives under tools/node-api/.work, a dot-directory that upload-artifact skips by default; only the
+      # listed result files are uploaded (no work trees, binaries or traces).
+      - name: Check evidence exists
+        if: always()
+        run: |
+          missing=0
+          for f in tools/node-api/.work/go-oracle/summary.json tools/node-api/.work/go-oracle/results.jsonl \
+                   tools/node-api/.work/tsrs/summary.json tools/node-api/.work/tsrs/results.jsonl \
+                   tools/node-api/.work/inventory.md tools/node-api/.work/inventory.json; do
+            if [ ! -s "$f" ]; then echo "missing evidence: $f"; missing=1; fi
+          done
+          exit $missing
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: node-api-parity
+          include-hidden-files: true
+          if-no-files-found: error
+          path: |
+            tools/node-api/.work/go-oracle/summary.json
+            tools/node-api/.work/go-oracle/results.jsonl
+            tools/node-api/.work/go-oracle/run.tap
+            tools/node-api/.work/go-oracle/meta.json
+            tools/node-api/.work/go-oracle/evidence/*.json
+            tools/node-api/.work/tsrs/summary.json
+            tools/node-api/.work/tsrs/results.jsonl
+            tools/node-api/.work/tsrs/run.tap
+            tools/node-api/.work/tsrs/meta.json
+            tools/node-api/.work/tsrs/evidence/*.json
+            tools/node-api/.work/inventory.md
+            tools/node-api/.work/inventory.json
+          retention-days: 14
+
+      - name: Fail on tsrs failures
+        if: steps.tsrs.outcome != 'success'
+        run: |
+          echo "tsrs did not pass the API suites; see the node-api-parity artifact"
+          exit 1
+
+  # Pack tsrs exactly as a release would (without publishing), install the tarballs into a project outside the
+  # repository and drive the installed binary through the CLI, unstable/sync, unstable/async and the published
+  # declarations, on each Linux platform the release workflow builds (macOS is validated below).
+  package:
+    name: package ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-24.04 }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm }
+    steps:
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: true
+          cache-key: node-api-${{ matrix.target }}
+
+      - name: Build tsrs
+        run: cargo build --release --locked -p tsrs_cli
+
+      - name: Pack (no publish)
+        run: node npm/build.mjs --binary ${{ matrix.target }}=target/release/tsrs --out "$RUNNER_TEMP/pack" --pack
+
+      - name: Installed-package smoke (CLI, sync, async, declarations)
+        run: node tools/node-api/consumer.mjs --dist "$RUNNER_TEMP/pack"
+
+  # Native macOS packaging uses the same installed-consumer validation as Linux.
+  package-macos:
+    name: package ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: aarch64-apple-darwin, os: macos-14 }
+    steps:
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
+        id: rust
+        shell: bash
+        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ steps.rust.outputs.toolchain }}
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: node-api-${{ matrix.target }}
+
+      # Keep resource diagnostics for a slow build and stop the monitor on both success and failure.
+      - name: Build tsrs
+        run: |
+          (
+            while true; do
+              date -u
+              vm_stat
+              top -l 1 -n 10 -o cpu -stats pid,cpu,mem,command
+              sleep 60
+            done
+          ) &
+          monitor=$!
+          trap 'kill "$monitor" 2>/dev/null || true' EXIT
+          cargo build --release --locked -p tsrs_cli
+
+      - name: Pack (no publish)
+        run: node npm/build.mjs --binary ${{ matrix.target }}=target/release/tsrs --out "$RUNNER_TEMP/pack" --pack
+
+      - name: Installed-package smoke (CLI, sync, async, declarations)
+        run: node tools/node-api/consumer.mjs --dist "$RUNNER_TEMP/pack"
