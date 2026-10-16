@@ -10,6 +10,10 @@ see the [compatibility table](COMPATIBILITY.md); detailed investigations are ind
 Removed the `alloc-profile` build feature, its counting allocator, heap sampler and reachability census.
 The remaining memory reports and arena recycling checks are documented in the [debugging guide](DEBUGGING.md).
 
+CI now runs upstream dtslint's diagnostic and `$ExpectType` checks on every DefinitelyTyped package against both
+pinned tsgo and tsrs, in one isolated container. DefinitelyTyped moved out of top-repository selection; that suite
+continues to cover 400 other repositories.
+
 ## 2026-10-14: 0.15.0 release
 
 All seven packages use `0.15.0-ts7.1.0-dev.20260929`. The TypeScript pin is unchanged (`b85298b6`, 7.1.0-dev.20260929).

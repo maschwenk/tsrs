@@ -34,8 +34,9 @@ launcher and the JS API on each given Node; 16.20.0, 18, 20, 22 and 24 pass.)
    exit code are the binary's own). On older Node and on Windows it spawns the binary, forwards SIGINT/SIGTERM/SIGHUP/
    SIGQUIT/SIGBREAK, and exits with the binary's code or re-raises its terminating signal.
 
-`require("tsrs")` returns `{ version, typescriptVersion, typescriptCommit }` (TypeScript's
-`lib/version.cjs` pattern).
+`require("tsrs")` returns `{ version, versionMajorMinor, typescriptVersion, typescriptCommit }` (TypeScript's
+`lib/version.cjs` pattern). `versionMajorMinor` is the compatible TypeScript API version (`7.1`), while `version`
+is the tsrs npm package version.
 
 ## Versions
 

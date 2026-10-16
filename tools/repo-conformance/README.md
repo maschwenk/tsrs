@@ -4,8 +4,10 @@ The [GitHub Actions workflow](../../.github/workflows/repo-conformance.yml) comp
 TypeScript commit pinned in `Cargo.toml`, following TypeScript's
 [`test top400`](https://github.com/microsoft/TypeScript/wiki/Triggering-TypeScript-Bot).
 It selects 400 TypeScript repos by stars after compiler changes merge into `main`, and 20 for harness PRs, excluding
-forks and archived repos. Manual dispatch accepts 1-400. Both compilers are built once; 20 shards run at most eight at a
-time. Pushes share one concurrency group: a run already in progress finishes, and only the newest pending push waits.
+forks, archived repos and DefinitelyTyped. The dedicated [DefinitelyTyped suite](../dt-conformance/README.md) checks
+all of that repository's packages, so the popular-repository list takes the next repository and remains at 400.
+Manual dispatch accepts 1-400. Both compilers are built once; 20 shards run at most eight at a time. Pushes share one
+concurrency group: a run already in progress finishes, and only the newest pending push waits.
 
 The plan pins each repo's default-branch commit, and shards check out exactly that commit. Root dependencies are
 installed with the declared package manager (`packageManager`, or an exact `devEngines.packageManager`) unless only

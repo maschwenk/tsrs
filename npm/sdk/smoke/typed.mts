@@ -1,6 +1,6 @@
 // Type-only check of the published declarations from a nodenext consumer: compiled with `tsrs -p` in the temp
 // consumer (see ../smoke-consumer.mjs), never run.
-import { typescriptCommit, version } from "tsrs";
+import { typescriptCommit, version, versionMajorMinor } from "tsrs";
 import { API as AsyncAPI } from "tsrs/unstable/async";
 import { type Node, type SourceFile, SyntaxKind } from "tsrs/unstable/ast";
 import { isIdentifier } from "tsrs/unstable/ast/is";
@@ -19,5 +19,5 @@ const isId: boolean = first !== undefined && isIdentifier(first);
 const kind: SyntaxKind = SyntaxKind.Identifier;
 const asyncApi = new AsyncAPI({ cwd: "/" });
 const closed: Promise<void> = asyncApi.close();
-const strings: string[] = [version, typescriptCommit];
+const strings: string[] = [version, versionMajorMinor, typescriptCommit];
 export { closed, requestFileSystem, diagnostics, isId, kind, strings };

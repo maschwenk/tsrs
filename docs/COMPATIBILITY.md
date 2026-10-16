@@ -15,6 +15,10 @@ monorepo. See the [status log](STATUS.md) for conformance details.
 [Top repository conformance](../tools/repo-conformance/README.md) compares diagnostics against pinned tsgo on 400
 popular TypeScript repositories after compiler changes merge into main. Actions reports include diffs and coverage.
 
+[DefinitelyTyped conformance](../tools/dt-conformance/README.md) runs every package and its declared config matrix
+through upstream dtslint against pinned tsgo and tsrs. Relevant pull requests and nightly runs fail on any package
+result or failure-text difference.
+
 ## What it does and doesn't do
 
 <!--
@@ -47,7 +51,7 @@ Updating this table (../AGENTS.md says when; commands and paths below are relati
 | Allocation profiling (`alloc-profile` build) | no | the counting allocator, heap sampler and reachability census have been removed; `TSRS_MEM_SPLIT`, `TSRS_HEAP_CENSUS` and `TSRS_ARENA_POISON` remain ([debugging](DEBUGGING.md)) |
 | Automatic type acquisition, telemetry, profiling (language server) | no | not ported |
 | Node API server (`--api`) | yes, with gaps | upstream client test suites pass; request-filesystem Go fixtures exercise the production implementation in default tests; no profiling requests, no Windows named pipes ([Node API](NODE_API.md)) |
-| npm packages (`tsrs`, `@ts-rs/<os>-<arch>[-<libc>]`) | yes | 0.14.0: macOS arm64 and Linux x64/arm64 GNU/musl, selected by libc; earlier Linux packages used unsuffixed GNU names, and releases before 0.12.0 used `@maschwenk`. 0.14.1: the platform packages ship the default libraries next to the binary, which reads them from there like the npm tsgo, so `--listFiles`, diagnostics and tsbuildinfo name real lib paths instead of `bundled:///libs/...`. The binaries report TypeScript's version as the npm nightly built from the pinned commit (7.1.0-dev.20260930.4; 0.14.0 reports `7.1.0-dev`), so tsbuildinfo files, `typesVersions` and `--version` agree with that tsgo |
+| npm packages (`tsrs`, `@ts-rs/<os>-<arch>[-<libc>]`) | yes | 0.14.0: macOS arm64 and Linux x64/arm64 GNU/musl, selected by libc; earlier Linux packages used unsuffixed GNU names, and releases before 0.12.0 used `@maschwenk`. 0.14.1: the platform packages ship the default libraries next to the binary, which reads them from there like the npm tsgo, so `--listFiles`, diagnostics and tsbuildinfo name real lib paths instead of `bundled:///libs/...`. The binaries report TypeScript's version as the npm nightly built from the pinned commit (7.1.0-dev.20260930.4; 0.14.0 reports `7.1.0-dev`), so tsbuildinfo files, `typesVersions` and `--version` agree with that tsgo. The root CommonJS export reports `versionMajorMinor` for TypeScript API consumers in addition to the package and pinned TypeScript versions |
 | WebAssembly (`@ts-rs/wasm`) | yes | single-threaded; renamed in 0.12.0; byte-identical to native `--singleThreaded` on a 2,000-case conformance sample ([experiment note](../notes/wasm-build.md)) |
 | Browser playground | local/static build | [vendored official TypeScript Playground page and styles](../playground/README.md): tsrs WASM checking and emit, virtual files, errors, JS/declarations, examples, Run/Logs, share links and compatible plugins; pinned visual-source integrity, native-equivalence integration checks and production browser checks. Basic editing only: no semantic autocomplete/hover, AST/type inspection, inlay hints, or automatic package type acquisition |
 | Options TypeScript 7 removed (ES5 target, AMD/UMD/System, `baseUrl`, …) | rejected, as in tsgo | same TS5102 / TS5108 errors |
