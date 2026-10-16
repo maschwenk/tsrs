@@ -331,10 +331,11 @@ impl Parser {
         self.parse_union_or_intersection_type(Kind::AmpersandToken, Parser::parse_type_operator_or_higher)
     }
 
+    // Specialize the two constituent parsers so type parsing does not dispatch through a function pointer.
     pub(crate) fn parse_union_or_intersection_type(
         &mut self,
         operator: Kind,
-        parse_constituent_type: fn(&mut Parser) -> P<Node>,
+        parse_constituent_type: impl Fn(&mut Parser) -> P<Node> + Copy,
     ) -> P<Node> {
         let pos = self.node_pos();
         let is_union_type = operator == Kind::BarToken;
@@ -1697,7 +1698,7 @@ impl Parser {
     pub(crate) fn parse_function_or_constructor_type_to_error(
         &mut self,
         is_in_union_type: bool,
-        parse_constituent_type: fn(&mut Parser) -> P<Node>,
+        parse_constituent_type: impl Fn(&mut Parser) -> P<Node> + Copy,
     ) -> P<Node> {
         // the function type and constructor type shorthand notation
         // are not allowed directly in unions and intersections, but we'll
@@ -1821,7 +1822,22 @@ impl Parser {
         self.parse_modifiers_ex(false, false, false)
     }
 
+    // Keep speculative modifier parsing and list construction out of the empty-list path.
+    #[inline]
     pub(crate) fn parse_modifiers_ex(
+        &mut self,
+        allow_decorators: bool,
+        permit_const_as_modifier: bool,
+        stop_on_start_of_class_static_block: bool,
+    ) -> Option<P<ModifierList>> {
+        if !(ast::is_modifier_kind(self.token) || allow_decorators && self.token == Kind::AtToken) {
+            return None;
+        }
+        self.parse_modifiers_worker(allow_decorators, permit_const_as_modifier, stop_on_start_of_class_static_block)
+    }
+
+    #[inline(never)]
+    fn parse_modifiers_worker(
         &mut self,
         allow_decorators: bool,
         permit_const_as_modifier: bool,
@@ -1915,9 +1931,19 @@ impl Parser {
         Some(self.finish_node(node, pos))
     }
 
+    #[inline]
     pub(crate) fn parse_contextual_modifier(&mut self, t: Kind) -> bool {
+        // A nonmatching token would only mark and rewind unchanged parser state.
+        if self.token != t {
+            return false;
+        }
+        self.parse_contextual_modifier_worker()
+    }
+
+    #[inline(never)]
+    fn parse_contextual_modifier_worker(&mut self) -> bool {
         let state = self.mark();
-        if self.token == t && self.next_token_can_follow_modifier() {
+        if self.next_token_can_follow_modifier() {
             return true;
         }
         self.rewind(state);

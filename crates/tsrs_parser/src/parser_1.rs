@@ -502,6 +502,7 @@ impl Parser {
         }
     }
 
+    #[cold]
     pub(crate) fn parse_error_at(
         &mut self,
         pos: u32,
@@ -512,11 +513,13 @@ impl Parser {
         self.parse_error_at_range(new_text_range(pos, end), message, args)
     }
 
+    #[cold]
     pub(crate) fn parse_error_at_current_token(&mut self, message: &'static Message, args: &[&dyn Display]) -> Option<P<Diagnostic>> {
         let loc = self.scanner.token_range();
         self.parse_error_at_range(loc, message, args)
     }
 
+    #[cold]
     pub(crate) fn parse_error_at_range(&mut self, loc: TextRange, message: &'static Message, args: &[&dyn Display]) -> Option<P<Diagnostic>> {
         // Don't report another error if it would just be at the same location as the last error
         let mut result = None;
@@ -585,6 +588,8 @@ impl Parser {
         self.has_parse_error = state.has_parse_error;
     }
 
+    // Keep speculative scanner snapshots and rollback bookkeeping out of callers' common-path frames.
+    #[inline(never)]
     pub(crate) fn look_ahead(&mut self, callback: impl FnOnce(&mut Parser) -> bool) -> bool {
         let state = self.mark();
         let result = callback(self);
@@ -1378,6 +1383,7 @@ impl Parser {
         false
     }
 
+    #[inline]
     pub(crate) fn parse_expected_matching_brackets(
         &mut self,
         open_kind: Kind,
@@ -1389,6 +1395,11 @@ impl Parser {
             self.next_token();
             return;
         }
+        self.report_unmatched_bracket(open_kind, close_kind, open_parsed, open_position);
+    }
+
+    #[cold]
+    fn report_unmatched_bracket(&mut self, open_kind: Kind, close_kind: Kind, open_parsed: bool, open_position: u32) {
         let last_error = self.parse_error_at_current_token(&diagnostics::X_0_expected, &[&scanner::token_to_string(close_kind)]);
         if !open_parsed {
             return;

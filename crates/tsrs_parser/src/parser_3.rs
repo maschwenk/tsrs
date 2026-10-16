@@ -258,7 +258,17 @@ impl Parser {
         }
     }
 
+    #[inline]
     pub(crate) fn try_parse_parenthesized_arrow_function_expression(&mut self, allow_return_type_in_arrow_function: bool) -> Option<P<Node>> {
+        // Keep the speculative snapshot in the worker, including standalone `=>` for error recovery.
+        if !matches!(self.token, Kind::OpenParenToken | Kind::LessThanToken | Kind::AsyncKeyword | Kind::EqualsGreaterThanToken) {
+            return None;
+        }
+        self.try_parse_parenthesized_arrow_function_expression_worker(allow_return_type_in_arrow_function)
+    }
+
+    #[inline(never)]
+    fn try_parse_parenthesized_arrow_function_expression_worker(&mut self, allow_return_type_in_arrow_function: bool) -> Option<P<Node>> {
         let tristate = self.is_parenthesized_arrow_function_expression();
         if tristate == Tristate::False {
             // It's definitely not a parenthesized arrow function expression.
@@ -656,6 +666,7 @@ impl Parser {
         self.finish_node(node, pos)
     }
 
+    #[inline]
     pub(crate) fn parse_unary_expression_or_higher(&mut self) -> P<Node> {
         // ES7 UpdateExpression:
         //      1) LeftHandSideExpression[?Yield]
@@ -683,23 +694,28 @@ impl Parser {
         let unary_operator = self.token;
         let simple_unary_expression = self.parse_simple_unary_expression();
         if self.token == Kind::AsteriskAsteriskToken {
-            let pos = scanner::skip_trivia(
-                self.source_text,
-                simple_unary_expression
-                    .pos()
-                    .expect_source("parsed nodes have source positions"),
-            );
-            let end = simple_unary_expression
-                .end()
-                .expect_source("parsed nodes have source positions");
-            if simple_unary_expression.kind() == Kind::TypeAssertionExpression {
-                self.parse_error_at(pos, end, &diagnostics::A_type_assertion_expression_is_not_allowed_in_the_left_hand_side_of_an_exponentiation_expression_Consider_enclosing_the_expression_in_parentheses, &[]);
-            } else {
-                assert!(is_keyword_or_punctuation(unary_operator));
-                self.parse_error_at(pos, end, &diagnostics::An_unary_expression_with_the_0_operator_is_not_allowed_in_the_left_hand_side_of_an_exponentiation_expression_Consider_enclosing_the_expression_in_parentheses, &[&scanner::token_to_string(unary_operator)]);
-            }
+            self.report_invalid_exponentiation_operand(simple_unary_expression, unary_operator);
         }
         simple_unary_expression
+    }
+
+    #[cold]
+    fn report_invalid_exponentiation_operand(&mut self, simple_unary_expression: P<Node>, unary_operator: Kind) {
+        let pos = scanner::skip_trivia(
+            self.source_text,
+            simple_unary_expression
+                .pos()
+                .expect_source("parsed nodes have source positions"),
+        );
+        let end = simple_unary_expression
+            .end()
+            .expect_source("parsed nodes have source positions");
+        if simple_unary_expression.kind() == Kind::TypeAssertionExpression {
+            self.parse_error_at(pos, end, &diagnostics::A_type_assertion_expression_is_not_allowed_in_the_left_hand_side_of_an_exponentiation_expression_Consider_enclosing_the_expression_in_parentheses, &[]);
+        } else {
+            assert!(is_keyword_or_punctuation(unary_operator));
+            self.parse_error_at(pos, end, &diagnostics::An_unary_expression_with_the_0_operator_is_not_allowed_in_the_left_hand_side_of_an_exponentiation_expression_Consider_enclosing_the_expression_in_parentheses, &[&scanner::token_to_string(unary_operator)]);
+        }
     }
 
     pub(crate) fn is_update_expression(&self) -> bool {
@@ -710,14 +726,13 @@ impl Parser {
         }
     }
 
+    // Outlining ++/-- leaves a small common path; forcing it inline saves instructions in the parser corpora.
+    #[expect(clippy::inline_always, reason = "Measured on the Compiler, VS Code, and t3code parser corpora after outlining update operators")]
+    #[inline(always)]
     pub(crate) fn parse_update_expression(&mut self) -> P<Node> {
         let pos = self.node_pos();
         if self.token == Kind::PlusPlusToken || self.token == Kind::MinusMinusToken {
-            let operator = self.token;
-            self.next_token();
-            let operand = self.parse_left_hand_side_expression_or_higher();
-            let node = self.factory.new_prefix_unary_expression(operator, operand);
-            return self.finish_node(node, pos);
+            return self.parse_prefix_update_expression(pos);
         } else if self.language_variant == LanguageVariant::JSX && self.token == Kind::LessThanToken && self.look_ahead(Parser::next_token_is_identifier_or_keyword_or_greater_than) {
             // JSXElement is part of primaryExpression
             return self.parse_jsx_element_or_self_closing_element_or_fragment(
@@ -729,12 +744,26 @@ impl Parser {
         }
         let expression = self.parse_left_hand_side_expression_or_higher();
         if (self.token == Kind::PlusPlusToken || self.token == Kind::MinusMinusToken) && !self.has_preceding_line_break() {
-            let operator = self.token;
-            self.next_token();
-            let node = self.factory.new_postfix_unary_expression(expression, operator);
-            return self.finish_node(node, pos);
+            return self.parse_postfix_update_expression(pos, expression);
         }
         expression
+    }
+
+    #[inline(never)]
+    fn parse_prefix_update_expression(&mut self, pos: u32) -> P<Node> {
+        let operator = self.token;
+        self.next_token();
+        let operand = self.parse_left_hand_side_expression_or_higher();
+        let node = self.factory.new_prefix_unary_expression(operator, operand);
+        self.finish_node(node, pos)
+    }
+
+    #[inline(never)]
+    fn parse_postfix_update_expression(&mut self, pos: u32, expression: P<Node>) -> P<Node> {
+        let operator = self.token;
+        self.next_token();
+        let node = self.factory.new_postfix_unary_expression(expression, operator);
+        self.finish_node(node, pos)
     }
 
     pub(crate) fn parse_jsx_element_or_self_closing_element_or_fragment(
@@ -1260,6 +1289,7 @@ impl Parser {
         self.finish_node(node, pos)
     }
 
+    #[inline]
     pub(crate) fn parse_left_hand_side_expression_or_higher(&mut self) -> P<Node> {
         // Original Ecma:
         // LeftHandSideExpression: See 11.2
@@ -1293,42 +1323,48 @@ impl Parser {
         // 3)we have a MemberExpression which either completes the LeftHandSideExpression,
         // or starts the beginning of the first four CallExpression productions.
         let pos = self.node_pos();
-        let expression: P<Node>;
-        if self.token == Kind::ImportKeyword {
-            if self.look_ahead(Parser::next_token_is_open_paren_or_less_than) {
-                // We don't want to eagerly consume all import keyword as import call expression so we look ahead to find "("
-                // For example:
-                //      var foo3 = require("subfolder
-                //      import * as foo1 from "module-from-node
-                // We want this import to be a statement rather than import call expression
-                self.source_flags |= NodeFlags::PossiblyContainsDynamicImport;
-                expression = self.parse_keyword_expression();
-            } else if self.look_ahead(Parser::next_token_is_dot) {
-                // This is an 'import.*' metaproperty (i.e. 'import.meta')
-                self.next_token(); // advance past the 'import'
-                self.next_token(); // advance past the dot
-                let name = self.parse_identifier_name();
-                let node = self.factory.new_meta_property(Kind::ImportKeyword, name);
-                expression = self.finish_node(node, pos);
-                if expression.text() == "defer" {
-                    if self.token == Kind::OpenParenToken || self.token == Kind::LessThanToken {
-                        self.source_flags |= NodeFlags::PossiblyContainsDynamicImport;
-                    }
-                } else {
-                    self.source_flags |= NodeFlags::PossiblyContainsImportMeta;
-                }
-            } else {
-                expression = self.parse_member_expression_or_higher();
-            }
+        let expression = if self.token == Kind::ImportKeyword {
+            self.parse_import_expression(pos)
         } else if self.token == Kind::SuperKeyword {
-            expression = self.parse_super_expression();
+            self.parse_super_expression()
         } else {
-            expression = self.parse_member_expression_or_higher();
-        }
+            self.parse_member_expression_or_higher()
+        };
         // Now, we *may* be complete.  However, we might have consumed the start of a
         // CallExpression or OptionalExpression.  As such, we need to consume the rest
         // of it here to be complete.
         self.parse_call_expression_rest(pos, expression)
+    }
+
+    #[inline(never)]
+    fn parse_import_expression(&mut self, pos: u32) -> P<Node> {
+        let expression: P<Node>;
+        if self.look_ahead(Parser::next_token_is_open_paren_or_less_than) {
+            // We don't want to eagerly consume all import keyword as import call expression so we look ahead to find "("
+            // For example:
+            //      var foo3 = require("subfolder
+            //      import * as foo1 from "module-from-node
+            // We want this import to be a statement rather than import call expression
+            self.source_flags |= NodeFlags::PossiblyContainsDynamicImport;
+            expression = self.parse_keyword_expression();
+        } else if self.look_ahead(Parser::next_token_is_dot) {
+            // This is an 'import.*' metaproperty (i.e. 'import.meta')
+            self.next_token(); // advance past the 'import'
+            self.next_token(); // advance past the dot
+            let name = self.parse_identifier_name();
+            let node = self.factory.new_meta_property(Kind::ImportKeyword, name);
+            expression = self.finish_node(node, pos);
+            if expression.text() == "defer" {
+                if self.token == Kind::OpenParenToken || self.token == Kind::LessThanToken {
+                    self.source_flags |= NodeFlags::PossiblyContainsDynamicImport;
+                }
+            } else {
+                self.source_flags |= NodeFlags::PossiblyContainsImportMeta;
+            }
+        } else {
+            expression = self.parse_member_expression_or_higher();
+        }
+        expression
     }
 
     pub(crate) fn next_token_is_dot(&mut self) -> bool {
@@ -1470,7 +1506,31 @@ impl Parser {
         self.parse_member_expression_rest(pos, expression, true /*allowOptionalChain*/)
     }
 
+    #[inline]
     pub(crate) fn parse_member_expression_rest(
+        &mut self,
+        pos: u32,
+        expression: P<Node>,
+        allow_optional_chain: bool,
+    ) -> P<Node> {
+        // Every other token leaves the expression unchanged without scanning or allocating. Keep that
+        // return outside the worker's frame, which also contains node construction and error recovery.
+        if !self.is_start_of_member_expression_rest() {
+            return expression;
+        }
+        self.parse_member_expression_rest_worker(pos, expression, allow_optional_chain)
+    }
+
+    #[inline]
+    fn is_start_of_member_expression_rest(&self) -> bool {
+        matches!(self.token,
+            Kind::DotToken | Kind::QuestionDotToken | Kind::OpenBracketToken
+                | Kind::NoSubstitutionTemplateLiteral | Kind::TemplateHead | Kind::ExclamationToken
+                | Kind::LessThanToken | Kind::LessThanLessThanToken)
+    }
+
+    #[inline(never)]
+    fn parse_member_expression_rest_worker(
         &mut self,
         pos: u32,
         expression: P<Node>,
@@ -1630,7 +1690,16 @@ impl Parser {
         self.finish_node(node, pos)
     }
 
+    #[inline]
     pub(crate) fn parse_call_expression_rest(&mut self, pos: u32, expression: P<Node>) -> P<Node> {
+        if self.token != Kind::OpenParenToken && !self.is_start_of_member_expression_rest() {
+            return expression;
+        }
+        self.parse_call_expression_rest_worker(pos, expression)
+    }
+
+    #[inline(never)]
+    fn parse_call_expression_rest_worker(&mut self, pos: u32, expression: P<Node>) -> P<Node> {
         let mut expression = expression;
         loop {
             expression = self.parse_member_expression_rest(pos, expression, true /*allowOptionalChain*/);
@@ -1752,7 +1821,17 @@ impl Parser {
         self.finish_node(node, pos)
     }
 
+    // Identifiers avoid the larger frame needed by the other primary expressions.
+    #[inline]
     pub(crate) fn parse_primary_expression(&mut self) -> P<Node> {
+        if self.token == Kind::Identifier {
+            return self.parse_identifier_with_diagnostic(Some(&diagnostics::Expression_expected), None);
+        }
+        self.parse_primary_expression_worker()
+    }
+
+    #[inline(never)]
+    fn parse_primary_expression_worker(&mut self) -> P<Node> {
         let token = self.token;
         match token {
             Kind::NoSubstitutionTemplateLiteral | Kind::NumericLiteral | Kind::BigIntLiteral | Kind::StringLiteral => {
