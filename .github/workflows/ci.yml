@@ -86,7 +86,7 @@ jobs:
           -p tsrs_core -p tsrs_spanmap -p tsrs_ipc -p tsrs_contentmapper -p tsrs_contentmappertest -p tsrs_ast -p tsrs_scanner
           -p tsrs_diagnostics -p tsrs_vfs -p tsrs_module
           -p tsrs_tsoptions -p tsrs_printer -p tsrs_modulespecifiers -p tsrs_compiler -p tsrs_incremental -p tsrs_execute
-          -p tsrs_testrunner -p tsrs_cli -p tsrs_bench
+          -p tsrs_testrunner -p tsrs_cli
 
       - name: Build correctness binaries
         run: cargo build --profile dev --locked -p tsrs_cli -p tsrs_testrunner

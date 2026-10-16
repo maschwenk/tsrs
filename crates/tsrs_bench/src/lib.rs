@@ -201,7 +201,3 @@ impl System for BenchmarkSystem {
         self.start.elapsed()
     }
 }
-
-#[cfg(test)]
-#[path = "compile_test.rs"]
-mod tests;

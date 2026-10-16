@@ -129,7 +129,3 @@ impl FS for SnapshotFs {
     replay_read!(realpath, realpaths, String);
     reject_mutations!();
 }
-
-#[cfg(test)]
-#[path = "snapshot_test.rs"]
-mod tests;

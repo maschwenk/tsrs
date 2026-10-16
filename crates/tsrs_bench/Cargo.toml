@@ -19,7 +19,6 @@ rustc-hash.workspace = true
 [dev-dependencies]
 criterion2.workspace = true
 mimalloc-safe.workspace = true
-tempfile = "3"
 
 [features]
 codspeed = ["criterion2/codspeed"]
