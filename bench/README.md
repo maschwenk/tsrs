@@ -255,6 +255,43 @@ The workflow descriptions and dispatch commands in this section document the sav
 corresponding original `.yml` filename before using any `gh workflow run` command. No automated measurements,
 regression comments or result/chart updates run while the workflows are disabled.
 
+### CodSpeed simulation
+
+The saved `.github/workflows/codspeed.yml.bak` defines measurements for full, single-threaded compilations of Compiler-Unions, xstate-main,
+webpack, and drizzle-orm using Criterion2's built-in CodSpeed support. `tsrs_bench` first runs an unmeasured
+compilation that records filesystem responses: source and config text, package metadata, directory listings,
+negative probes, realpaths, and case sensitivity. Subsequent compilations read only that immutable snapshot;
+an unrecorded request or a filesystem mutation fails the benchmark rather than falling back to disk.
+
+Only `runner.run(...)` inside `iter_with_setup_wrapper` is measured. It parses configuration, resolves modules,
+parses, binds, checks, and formats diagnostics into memory using fresh compiler state. Setup and comparison of
+the output and exit status with the capture are outside measurement. Compiler diagnostics are valid outcomes;
+crashes, missing project configs, and mismatched results fail. Statistics are disabled because they read process
+memory information from the OS and contain nondeterministic timings.
+Compiler environment overrides (`TSRS_*`, except `TSRS_BENCH_PROJECT`) are rejected, including profiling switches
+that could bypass the filesystem interface.
+
+Criterion2 3.0.4 runs five unmeasured warmups and one measured compilation. Each project runs in its own process
+with `RAYON_NUM_THREADS=1` and the CLI's large stack; process exit reclaims its seven compilations' arenas.
+`TSRS_BENCH_PROJECT` is required because Criterion2's CodSpeed adapter does not implement benchmark filters.
+The target requires the `codspeed` feature: ordinary Criterion calibration would accumulate arena allocations.
+The `compile_in_memory` identities start a new baseline, distinct from the former disk-backed CLI measurements.
+
+From the repository root:
+
+```sh
+cargo install cargo-codspeed --version 5.0.3 --locked
+python3 bench/run.py --setup-only --projects Compiler-Unions,xstate-main,webpack,drizzle-orm
+cargo codspeed build -p tsrs_bench --bench compiler --features codspeed --profile release --locked -m simulation
+RAYON_NUM_THREADS=1 TSRS_BENCH_PROJECT=Compiler-Unions cargo codspeed run -p tsrs_bench --bench compiler -m simulation
+```
+
+Outside CodSpeed's Linux instrumentation, the last command exercises capture, warmups, replay, and output
+verification without reporting performance measurements. Use `--profile dev` when building for local correctness
+checks. The workflow uses the release profile without PGO, with debug symbols retained by cargo-codspeed.
+
+### Published benchmarks
+
 The saved benchmark workflow is built for unattended runs: one run per measured commit (the concurrency group is the commit, so a dispatch for another commit
 starts its own run on its own machines and only a re-dispatch of the same commit replaces a queued twin; until
 2026-10-07 one shared group let a later push replace the queued bench, and bursts of merges left most commits without

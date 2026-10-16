@@ -1,7 +1,7 @@
-# CodSpeed (https://codspeed.io): bench/codspeed.yml type-checks a few bench projects single-threaded under CodSpeed's
-# CPU simulation, which counts instructions and simulated cache misses in one run, so the result does not depend on the
-# machine. Runs on GitHub-hosted runners (free for public repositories); CodSpeed comments on pull requests with the
-# change against main. The wall-time benchmark runs separately in .github/workflows/bench.yml.
+# CodSpeed (https://codspeed.io): full compilations against an in-memory filesystem, single-threaded under CPU
+# simulation. tsrs_bench captures the project's filesystem before measurement, then Criterion2 measures a fresh
+# compilation. Each project gets a separate process to reclaim compiler arenas and isolate process-wide settings.
+# The wall-time benchmark runs separately in .github/workflows/bench.yml.bak.
 # Security: read-only GITHUB_TOKEN plus an OIDC token for the CodSpeed upload, no secrets.
 
 name: CodSpeed
@@ -26,7 +26,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
-  # The projects of bench/codspeed.yml, set up by bench/run.py.
+  # The projects of tsrs_bench, set up by bench/run.py.
   PROJECTS: Compiler-Unions,xstate-main,webpack,drizzle-orm
 
 jobs:
@@ -62,13 +62,12 @@ jobs:
         with:
           save-cache: ${{ github.ref_name == 'main' }}
           cache-key: codspeed
+          tools: cargo-codspeed@5.0.3
 
       # The release profile without the PGO training of the npm binaries, whose profile changes with every build and
       # would move the counts. Symbols kept for CodSpeed's flame graphs.
-      - name: Build tsrs
-        env:
-          CARGO_PROFILE_RELEASE_STRIP: none
-        run: cargo build --release --locked -p tsrs_cli
+      - name: Build benchmarks
+        run: cargo codspeed build -p tsrs_bench --bench compiler --features codspeed --profile release --locked -m simulation
 
       - name: Run the benchmarks
         uses: CodSpeedHQ/action@f842b9a3ffe213dbb81768fd7f7eeb4dfcf1c369 # v5.4.2
@@ -76,5 +75,8 @@ jobs:
           RAYON_NUM_THREADS: "1"
         with:
           mode: simulation
-          config: bench/codspeed.yml
-          simulation-track-subprocess: true
+          run: |
+            set -e
+            for project in $(printf '%s' "$PROJECTS" | tr ',' ' '); do
+              TSRS_BENCH_PROJECT="$project" cargo codspeed run -p tsrs_bench --bench compiler -m simulation
+            done

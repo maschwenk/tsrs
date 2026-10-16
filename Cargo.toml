@@ -21,6 +21,7 @@ commit = "b85298b6a81f772d080b0455de0ca9d744cd6fd6"
 nightly = "7.1.0-dev.20260930.4"
 
 [workspace.dependencies]
+criterion2 = { version = "3.0.4", default-features = false } # Benchmarking
 base64 = { version = "0.23.1", default-features = false, features = ["std"] }
 rustc-hash = "2"
 indexmap = "2"

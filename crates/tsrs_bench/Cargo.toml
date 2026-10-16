@@ -1,0 +1,32 @@
+[package]
+name = "tsrs_bench"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+autobenches = false
+
+[lints]
+workspace = true
+
+[dependencies]
+tsrs_core.workspace = true
+tsrs_execute = { path = "../tsrs_execute" }
+tsrs_vfs.workspace = true
+rustc-hash.workspace = true
+
+[dev-dependencies]
+criterion2.workspace = true
+mimalloc-safe.workspace = true
+tempfile = "3"
+
+[features]
+codspeed = ["criterion2/codspeed"]
+
+[[bench]]
+name = "compiler"
+harness = false
+# A CLI compilation keeps its arenas until exit. CodSpeed runs a bounded number of iterations;
+# ordinary Criterion calibration would keep allocating programs until the process runs out of memory.
+required-features = ["codspeed"]
