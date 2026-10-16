@@ -5,10 +5,31 @@ change are identified separately from measurements of the packaged release. For 
 see the [compatibility table](COMPATIBILITY.md); detailed investigations are indexed in the
 [engineering notes](../notes/README.md). The early development log follows the release entries.
 
-## Unreleased
+## 0.16.0 release preparation
+
+All seven packages use `0.16.0-ts7.1.0-dev.20260929`. The TypeScript pin remains `b85298b6a81f`; release binaries
+report the matching nightly `7.1.0-dev.20260930.4`.
+
+Scoped packages move from `@ts-rs` to `@tsrs` (#512). The main package remains `tsrs` and selects its platform
+package automatically. Update direct platform and WebAssembly dependencies to the new scope.
+
+Parser, binder, AST and checker optimizations reduce redundant work (#532, #533, #535, #547, #548, #549, #552,
+#554, #557). These changes have individual measurements; no new packaged-release performance comparison is claimed.
 
 Removed the `alloc-profile` build feature, its counting allocator, heap sampler and reachability census.
 The remaining memory reports and arena recycling checks are documented in the [debugging guide](DEBUGGING.md).
+
+Verification on macOS arm64: workspace/WASI checks, Clippy, source checks and all eight generators pass; both
+compiler conformance gates meet their thresholds (13,458 error baselines; 12,779 type and symbol baselines in
+Go-history mode, 12,778 in default mode). Emit matches all 13,392 `.js`, 149 `.js.map` and 156 `.sourcemap.txt`
+baselines. Fourslash remains at 4,066 passes,
+63 known failures and 417 skips. All 36 regression cases, Rust unit/integration checks (including all 16 macOS watch
+cases), all 906 upstream JS API checks and the 24 installed-package CLI/API smoke steps pass. The SDK copy matches
+the pinned upstream sources. The watch checks require FSEvents access outside the sandbox. The cross-platform
+release dry run on `d5682df5` (before the version bump)
+[passed](https://github.com/oxc-project/tsrs/actions/runs/38918398638): all five native targets, WebAssembly and the
+packaging/publish dry run. The local 0.16.0 binary was rebuilt with the nightly stamp; both conformance gates and
+the packed CLI/API smoke pass with no lost passing baselines. Nothing has been published for 0.16.0 yet.
 
 ## 2026-10-14: 0.15.0 release
 
@@ -67,8 +88,8 @@ without new release measurements.
 ## 2026-10-11: 0.14.0 release
 
 Linux x64/arm64 packages gain explicit `-gnu` and `-musl` suffixes, static musl builds and libc-aware binary selection
-(#312). All seven packages (`tsrs`, `@tsrs/darwin-arm64`, `@tsrs/linux-x64-gnu`, `@tsrs/linux-arm64-gnu`,
-`@tsrs/linux-x64-musl`, `@tsrs/linux-arm64-musl` and `@tsrs/wasm`) use `0.14.0-ts7.1.0-dev.20260929`.
+(#312). All seven packages (`tsrs`, `@ts-rs/darwin-arm64`, `@ts-rs/linux-x64-gnu`, `@ts-rs/linux-arm64-gnu`,
+`@ts-rs/linux-x64-musl`, `@ts-rs/linux-arm64-musl` and `@ts-rs/wasm`) use `0.14.0-ts7.1.0-dev.20260929`.
 Install with `pnpm add -D tsrs`; direct Linux platform-package dependencies need the appropriate libc suffix.
 The TypeScript source pin remains `b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929).
 
@@ -103,15 +124,15 @@ validation preserved the conformance pass lists, passed all 29 regression cases,
 in all 102 public-project verification cells.
 
 Release tooling now uses pinned pnpm 12.10.1 for installation, packing and direct OIDC publication (#295).
-All five packages (`tsrs`, `@tsrs/darwin-arm64`, `@tsrs/linux-x64`, `@tsrs/linux-arm64` and `@tsrs/wasm`)
+All five packages (`tsrs`, `@ts-rs/darwin-arm64`, `@ts-rs/linux-x64`, `@ts-rs/linux-arm64` and `@ts-rs/wasm`)
 use `0.13.0-ts7.1.0-dev.20260929`. The TypeScript source pin remains
 `b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929). The shared checker seed still requires
 the `tsrs_core/shared-graph` Cargo feature and `TSRS_SHARED_GRAPH=1`; npm binaries use the default Cargo features.
 
 ## 2026-10-10: 0.12.0 release
 
-The native compiler and JS API move to `tsrs`, the native binaries to `@tsrs/darwin-arm64`, `@tsrs/linux-x64`
-and `@tsrs/linux-arm64`, and WebAssembly to `@tsrs/wasm` (#288). All five packages use
+The native compiler and JS API move to `tsrs`, the native binaries to `@ts-rs/darwin-arm64`, `@ts-rs/linux-x64`
+and `@ts-rs/linux-arm64`, and WebAssembly to `@ts-rs/wasm` (#288). All five packages use
 `0.12.0-ts7.1.0-dev.20260929`, published directly by the release workflow using npm trusted publishing (OIDC).
 Install with `pnpm add -D tsrs`; JS API consumers change imports from `@maschwenk/tsrs/unstable/*` to
 `tsrs/unstable/*`. Earlier releases remain under `@maschwenk`. The TypeScript source pin remains
