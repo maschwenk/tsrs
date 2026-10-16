@@ -83,7 +83,7 @@ For a bug outside the suite, add a reproduction under `testdata/regressions/<nam
 - Changes target `main`. CI (`.github/workflows/ci.yml`, on GitHub Actions) runs on pushes
   to `main`, on pull requests into `main` (drafts too), on merge groups and by manual dispatch, and must pass. Fork pull requests
   follow the repository's approval setting, run with read-only tokens and never get repository secrets.
-- Only CI and release workflows are active. CI has two Linux jobs: `lint` runs Clippy and source checks; `test`
+- Only CI, release, security and triage workflows are active. CI has two Linux jobs: `lint` runs Clippy and source checks; `test`
   runs Rust checks and unit tests, compiler conformance in both checker modes, and regressions.
   The full CI and other workflow definitions are preserved as `.github/workflows/*.yml.bak`; they do not run
   automatically or by manual dispatch. Restore the original `.yml` filename to re-enable one.

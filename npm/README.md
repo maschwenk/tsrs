@@ -184,7 +184,7 @@ What maintainers must configure before the first release:
 Linux jobs run Clippy/source checks and Rust checks/unit tests, build the compiler and conformance runner with the dev
 profile, and run compiler conformance in both checker modes plus regression cases.
 
-Only CI and release workflows are active. The full CI, security, triage and all other auxiliary workflows are disabled
+Only CI, release, security and triage workflows are active. The full CI and other auxiliary workflows are disabled
 as `.github/workflows/*.yml.bak`; their local tools remain available.
 
 ## Adopting it in a pnpm workspace
