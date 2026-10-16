@@ -86,6 +86,8 @@ jobs:
           fi
 
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+        with:
+          registry-url: "" # Public benchmark installs use Yarn 1, which rejects an unset NODE_AUTH_TOKEN.
 
       # The conformance suite (part of the PGO training workload) reads its tests from ts-ref/tsc/testdata.
       - name: Read TypeScript reference commit
@@ -294,6 +296,8 @@ jobs:
           fi
 
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+        with:
+          registry-url: "" # Public benchmark installs use Yarn 1, which rejects an unset NODE_AUTH_TOKEN.
 
       # `shared` is the suite + compilers cache; `project` is this project's (none for the two suite-only projects,
       # Compiler and Compiler-Unions, which live in the suite checkout).
@@ -402,6 +406,8 @@ jobs:
           fi
 
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+        with:
+          registry-url: "" # Public benchmark installs use Yarn 1, which rejects an unset NODE_AUTH_TOKEN.
 
       - name: Projects of this shard
         id: shard
@@ -617,6 +623,8 @@ jobs:
           sysctl fs.inotify.max_user_watches fs.inotify.max_user_instances
 
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+        with:
+          registry-url: "" # Public benchmark installs use Yarn 1, which rejects an unset NODE_AUTH_TOKEN.
 
       - name: Cache keys
         id: keys

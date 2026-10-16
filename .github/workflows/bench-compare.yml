@@ -55,6 +55,8 @@ jobs:
           fi
 
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+        with:
+          registry-url: "" # Public benchmark installs use Yarn 1, which rejects an unset NODE_AUTH_TOKEN.
 
       - name: Install Bun (${{ env.BUN_VERSION }})
         run: |
