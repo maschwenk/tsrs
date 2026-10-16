@@ -282,84 +282,7 @@ impl Binder {
                             // Assignment declarations are allowed to merge with variables, no matter what other flags they have.
                             // Report errors every position with duplicate declaration
                             // Report errors on previous encountered declarations
-                            let mut message: &'static Message = if symbol.flags.get().intersects(SymbolFlags::BlockScopedVariable) {
-                                &diagnostics::Cannot_redeclare_block_scoped_variable_0
-                            } else {
-                                &diagnostics::Duplicate_identifier_0
-                            };
-                            let mut message_needs_name = true;
-                            if symbol.flags.get().intersects(SymbolFlags::Enum) || includes.intersects(SymbolFlags::Enum) {
-                                message = &diagnostics::Enum_declarations_can_only_merge_with_namespace_or_other_enum_declarations;
-                                message_needs_name = false;
-                            }
-                            let mut multiple_default_exports = false;
-                            let declarations_len = symbol.declarations().len();
-                            if declarations_len != 0 {
-                                // If the current node is a default export of some sort, then check if
-                                // there are any other default exports that we need to error on.
-                                // We'll know whether we have other default exports depending on if `symbol` already has a declaration list set.
-                                if is_default_export {
-                                    message = &diagnostics::A_module_cannot_have_multiple_default_exports;
-                                    message_needs_name = false;
-                                    multiple_default_exports = true;
-                                } else {
-                                    // This is to properly report an error in the case "export default { }" is after export default of class declaration or function declaration.
-                                    // Error on multiple export default in the following case:
-                                    // 1. multiple export default of class declaration or function declaration by checking NodeFlags.Default
-                                    // 2. multiple export default of export assignment. This one doesn't have NodeFlags.Default on (as export default doesn't considered as modifiers)
-                                    if declarations_len != 0 && ast::is_export_assignment(node) && !node.as_export_assignment().is_export_equals() {
-                                        message = &diagnostics::A_module_cannot_have_multiple_default_exports;
-                                        message_needs_name = false;
-                                        multiple_default_exports = true;
-                                    }
-                                }
-                            }
-                            let declaration_name = ast::get_name_of_declaration(Some(node)).unwrap_or(node);
-                            let diag = if message_needs_name {
-                                let display_name = Self::get_display_name(node);
-                                self.create_diagnostic_for_node(declaration_name, message, &[&display_name])
-                            } else {
-                                self.create_diagnostic_for_node(declaration_name, message, &[])
-                            };
-                            if ast::is_type_alias_declaration(node)
-                                && ast::node_is_missing(node.type_node())
-                                && ast::has_syntactic_modifier(node, ModifierFlags::Export)
-                                && symbol.flags.get().intersects(SymbolFlags::Alias | SymbolFlags::Type | SymbolFlags::Namespace)
-                            {
-                                // export type T; - may have meant export type { T }?
-                                let suggestion = format!("export type {{ {} }}", node.name().unwrap().text());
-                                diag.add_related_info(self.create_diagnostic_for_node(node, &diagnostics::Did_you_mean_0, &[&suggestion]));
-                            }
-                            let declarations = symbol.declarations();
-                            for (index, declaration) in declarations.iter().copied().enumerate() {
-                                let decl = ast::get_name_of_declaration(Some(declaration)).unwrap_or(declaration);
-                                let d = if message_needs_name {
-                                    let display_name = Self::get_display_name(declaration);
-                                    self.create_diagnostic_for_node(decl, message, &[&display_name])
-                                } else {
-                                    self.create_diagnostic_for_node(decl, message, &[])
-                                };
-                                if multiple_default_exports {
-                                    let related_message: &'static Message =
-                                        if index == 0 { &diagnostics::Another_export_default_is_here } else { &diagnostics::X_and_here };
-                                    d.add_related_info(self.create_diagnostic_for_node(declaration_name, related_message, &[]));
-                                }
-                                self.add_diagnostic(d);
-                                if multiple_default_exports {
-                                    diag.add_related_info(self.create_diagnostic_for_node(decl, &diagnostics::The_first_export_default_is_here, &[]));
-                                }
-                            }
-                            self.add_diagnostic(diag);
-                            // When get or set accessor conflicts with a non-accessor or an accessor of a different kind, we mark
-                            // the symbol as a full accessor such that all subsequent declarations are considered conflicting. This
-                            // for example ensures that a get accessor followed by a non-accessor followed by a set accessor with the
-                            // same name are all marked as duplicates.
-                            if symbol.flags.get().intersects(SymbolFlags::Accessor)
-                                && (symbol.flags.get() & SymbolFlags::Accessor) != (includes & SymbolFlags::Accessor)
-                            {
-                                symbol.flags.set(symbol.flags.get() | SymbolFlags::Accessor);
-                            }
-                            symbol = self.new_symbol(SymbolFlags::None, name);
+                            symbol = self.report_duplicate_declaration(node, symbol, includes, name, is_default_export);
                         }
                     }
                 }
@@ -373,6 +296,88 @@ impl Binder {
             }
         }
         symbol
+    }
+
+    #[cold]
+    fn report_duplicate_declaration(&mut self, node: P<Node>, symbol: P<Symbol>, includes: SymbolFlags, name: &'static str, is_default_export: bool) -> P<Symbol> {
+        let mut message: &'static Message = if symbol.flags.get().intersects(SymbolFlags::BlockScopedVariable) {
+            &diagnostics::Cannot_redeclare_block_scoped_variable_0
+        } else {
+            &diagnostics::Duplicate_identifier_0
+        };
+        let mut message_needs_name = true;
+        if symbol.flags.get().intersects(SymbolFlags::Enum) || includes.intersects(SymbolFlags::Enum) {
+            message = &diagnostics::Enum_declarations_can_only_merge_with_namespace_or_other_enum_declarations;
+            message_needs_name = false;
+        }
+        let mut multiple_default_exports = false;
+        let declarations_len = symbol.declarations().len();
+        if declarations_len != 0 {
+            // If the current node is a default export of some sort, then check if
+            // there are any other default exports that we need to error on.
+            // We'll know whether we have other default exports depending on if `symbol` already has a declaration list set.
+            if is_default_export {
+                message = &diagnostics::A_module_cannot_have_multiple_default_exports;
+                message_needs_name = false;
+                multiple_default_exports = true;
+            } else {
+                // This is to properly report an error in the case "export default { }" is after export default of class declaration or function declaration.
+                // Error on multiple export default in the following case:
+                // 1. multiple export default of class declaration or function declaration by checking NodeFlags.Default
+                // 2. multiple export default of export assignment. This one doesn't have NodeFlags.Default on (as export default doesn't considered as modifiers)
+                if declarations_len != 0 && ast::is_export_assignment(node) && !node.as_export_assignment().is_export_equals() {
+                    message = &diagnostics::A_module_cannot_have_multiple_default_exports;
+                    message_needs_name = false;
+                    multiple_default_exports = true;
+                }
+            }
+        }
+        let declaration_name = ast::get_name_of_declaration(Some(node)).unwrap_or(node);
+        let diag = if message_needs_name {
+            let display_name = Self::get_display_name(node);
+            self.create_diagnostic_for_node(declaration_name, message, &[&display_name])
+        } else {
+            self.create_diagnostic_for_node(declaration_name, message, &[])
+        };
+        if ast::is_type_alias_declaration(node)
+            && ast::node_is_missing(node.type_node())
+            && ast::has_syntactic_modifier(node, ModifierFlags::Export)
+            && symbol.flags.get().intersects(SymbolFlags::Alias | SymbolFlags::Type | SymbolFlags::Namespace)
+        {
+            // export type T; - may have meant export type { T }?
+            let suggestion = format!("export type {{ {} }}", node.name().unwrap().text());
+            diag.add_related_info(self.create_diagnostic_for_node(node, &diagnostics::Did_you_mean_0, &[&suggestion]));
+        }
+        let declarations = symbol.declarations();
+        for (index, declaration) in declarations.iter().copied().enumerate() {
+            let decl = ast::get_name_of_declaration(Some(declaration)).unwrap_or(declaration);
+            let d = if message_needs_name {
+                let display_name = Self::get_display_name(declaration);
+                self.create_diagnostic_for_node(decl, message, &[&display_name])
+            } else {
+                self.create_diagnostic_for_node(decl, message, &[])
+            };
+            if multiple_default_exports {
+                let related_message: &'static Message =
+                    if index == 0 { &diagnostics::Another_export_default_is_here } else { &diagnostics::X_and_here };
+                d.add_related_info(self.create_diagnostic_for_node(declaration_name, related_message, &[]));
+            }
+            self.add_diagnostic(d);
+            if multiple_default_exports {
+                diag.add_related_info(self.create_diagnostic_for_node(decl, &diagnostics::The_first_export_default_is_here, &[]));
+            }
+        }
+        self.add_diagnostic(diag);
+        // When get or set accessor conflicts with a non-accessor or an accessor of a different kind, we mark
+        // the symbol as a full accessor such that all subsequent declarations are considered conflicting. This
+        // for example ensures that a get accessor followed by a non-accessor followed by a set accessor with the
+        // same name are all marked as duplicates.
+        if symbol.flags.get().intersects(SymbolFlags::Accessor)
+            && (symbol.flags.get() & SymbolFlags::Accessor) != (includes & SymbolFlags::Accessor)
+        {
+            symbol.flags.set(symbol.flags.get() | SymbolFlags::Accessor);
+        }
+        self.new_symbol(SymbolFlags::None, name)
     }
 
     // Should not be called on a declaration with a computed property name,
@@ -3032,6 +3037,8 @@ pub fn set_value_declaration(symbol: P<Symbol>, node: P<Node>) {
     }
 }
 
+#[expect(clippy::inline_always, reason = "Measured fewer binder instructions by inlining container classification")]
+#[inline(always)]
 pub fn get_container_flags(node: P<Node>) -> ContainerFlags {
     match node.kind() {
         Kind::ClassExpression
