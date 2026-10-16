@@ -1,0 +1,19 @@
+use super::rangetable::{Range16, Range32, RangeTable};
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[repr(u8)]
+pub(crate) enum SpecialCasingCondition {
+    None,
+    FinalSigma,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SpecialCasingMapping {
+    pub offsets: [u16; 3],
+    pub lengths: [u8; 3],
+    pub condition: SpecialCasingCondition,
+}
+
+const _: () = assert!(std::mem::size_of::<(u32, SpecialCasingMapping)>() == 16);
+
+// UTF-8 byte offsets and lengths, in lower / upper / conditional-lower order.

@@ -1,11 +1,32 @@
 use super::js_case_generated::{
-    SpecialCasingCondition, SpecialCasingMapping, SPECIAL_CASING_MAPPINGS, UNICODE_CASED_RANGES, UNICODE_CASE_IGNORABLE_RANGES,
+    SpecialCasingCondition, SpecialCasingMapping, CASING_STRINGS, SPECIAL_CASING_MAPPINGS, UNICODE_CASED_RANGES, UNICODE_CASE_IGNORABLE_RANGES,
 };
 use super::rangetable::{push_rune, unicode_is, Rune};
 use super::util::{decode_js_string_rune_bytes, encode_js_string_rune, is_surrogate};
 
 fn special_casing_mapping(r: Rune) -> Option<&'static SpecialCasingMapping> {
     SPECIAL_CASING_MAPPINGS.binary_search_by_key(&r, |(k, _)| *k).ok().map(|i| &SPECIAL_CASING_MAPPINGS[i].1)
+}
+
+impl SpecialCasingMapping {
+    fn lower(&self) -> &'static [u8] {
+        self.text(0)
+    }
+
+    fn upper(&self) -> &'static [u8] {
+        self.text(1)
+    }
+
+    fn conditional_lower(&self) -> &'static [u8] {
+        self.text(2)
+    }
+
+    fn text(&self, index: usize) -> &'static [u8] {
+        let start = usize::from(self.offsets[index]);
+        // Generation validates whole UTF-8 strings; byte slicing keeps the bounds check without
+        // repeating UTF-8 boundary checks for every mapped character.
+        &CASING_STRINGS.as_bytes()[start..start + usize::from(self.lengths[index])]
+    }
 }
 
 /// Appends raw bytes that are known to be (possibly WTF-8) slices of a string.
@@ -36,9 +57,9 @@ pub fn to_lower_js(str: &str) -> String {
             push_bytes(&mut builder, encode_js_string_rune(r).as_bytes());
         } else if let Some(mapping) = special_casing_mapping(r) {
             if mapping.condition == SpecialCasingCondition::FinalSigma && is_final_sigma_context(cased_before, bytes, i) {
-                builder.push_str(mapping.conditional_lower);
+                push_bytes(&mut builder, mapping.conditional_lower());
             } else {
-                builder.push_str(mapping.lower);
+                push_bytes(&mut builder, mapping.lower());
             }
         } else {
             push_rune(&mut builder, r);
@@ -66,7 +87,7 @@ pub fn to_upper_js(str: &str) -> String {
             // WriteRune would re-encode the surrogate as U+FFFD.
             push_bytes(&mut builder, &bytes[i..i + size]);
         } else if let Some(mapping) = special_casing_mapping(r) {
-            builder.push_str(mapping.upper);
+            push_bytes(&mut builder, mapping.upper());
         } else {
             push_rune(&mut builder, r);
         }
@@ -154,10 +175,14 @@ mod tests {
             ("sigma before immediate latin letter", to_lower_js("ΣA"), "σa".into()),
             ("sigma before immediate roman numeral letter", to_lower_js("ΣⅠ"), "σⅰ".into()),
             ("sigma before case ignorable then latin letter", to_lower_js("ΣͅA"), "σͅa".into()),
+            ("final sigma before trailing case ignorable", to_lower_js("AΣͅ"), "aςͅ".into()),
+            ("non-final sigma before case ignorable then latin letter", to_lower_js("AΣͅA"), "aσͅa".into()),
+            ("supplementary case mapping", to_lower_js("𐐀Σ"), "𐐨ς".into()),
             ("uppercase lone surrogate", to_upper_js(&e(0xD800)), e(0xD800)),
             ("lowercase lone surrogate", to_lower_js(&("A".to_string() + &e(0xD800) + "B")), "a".to_string() + &e(0xD800) + "b"),
             ("uppercase lone low surrogate with text", to_upper_js(&(e(0xDC00) + "x")), e(0xDC00) + "X"),
             ("lowercase lone surrogate before sigma", to_lower_js(&(e(0xD800) + "Σ")), e(0xD800) + "σ"),
+            ("final sigma before lone surrogate", to_lower_js(&("AΣ".to_string() + &e(0xD800))), "aς".to_string() + &e(0xD800)),
         ];
         for (name, got, want) in tests {
             assert!(got.as_bytes() == want.as_bytes(), "{name}: got {:?}, want {:?}", got.as_bytes(), want.as_bytes());

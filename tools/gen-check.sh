@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Re-runs the code generators and fails if any checked-in output differs: a hand edit to a generated file would be
 # lost at the next regeneration. Needs node >= 22.18 or 23.6 (runs the .ts generators directly, with type stripping
-# on by default; CI uses 24), python3, Go (the fourslash generator type-checks the Go tests with `go list -export` in
+# on by default; CI uses 24), Rust, curl (for the pinned Unicode inputs), python3, Go (the fourslash generator
+# type-checks the Go tests with `go list -export` in
 # ts-ref/tsc; GOTOOLCHAIN=auto fetches the version go.mod asks for), and ts-ref at the commit in Cargo.toml
 # ([workspace.metadata.typescript]). CI runs it as the `generated-code` job.
 #
@@ -18,7 +19,7 @@ generators=(
   "node tools/gen-ast/gen-ast.ts"
   "node tools/gen-ast/gen-flags.ts"
   "node crates/tsrs_api_codec/gen/gen-codec.ts"
-  "python3 tools/gen/stringutil_tables.py"
+  "cargo run --quiet --locked -p tsrs_gen_stringutil -- --verify-go ts-ref/tsc/internal/stringutil/js_case_generated.go"
   "python3 tools/gen-diagnostics/gen.py"
   "python3 tools/gen-libs/gen.py"
   "node tools/gen-lsproto/generate.mts"
