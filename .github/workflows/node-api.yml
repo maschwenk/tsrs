@@ -75,7 +75,7 @@ jobs:
       # setup-node saves its pnpm store after the repository install; cache this later upstream install separately.
       - name: Restore Node API harness dependencies
         id: harness-deps
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ts-ref/node_modules
@@ -99,7 +99,7 @@ jobs:
 
       - name: Save Node API harness dependencies
         if: steps.harness-deps.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ts-ref/node_modules

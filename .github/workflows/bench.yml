@@ -95,7 +95,7 @@ jobs:
       # The testdata checkout (~5 s) is cached per TypeScript commit; the sparse checkout below runs only on a miss.
       - name: Restore TypeScript testdata
         id: ts-ref
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ts-ref/tsc/testdata
           key: ts-ref-testdata-${{ steps.ts.outputs.commit }}
@@ -113,7 +113,7 @@ jobs:
 
       - name: Save TypeScript testdata
         if: steps.ts-ref.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ts-ref/tsc/testdata
           key: ${{ steps.ts-ref.outputs.cache-primary-key }}
@@ -138,7 +138,7 @@ jobs:
 
       - name: Restore suite and compilers
         id: cache-shared
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             bench/.work/suite
@@ -147,14 +147,14 @@ jobs:
 
       - name: Restore xstate-main
         id: cache-xstate
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/xstate-main
           key: bench-xstate-main-${{ runner.os }}-${{ steps.keys.outputs['xstate-main'] }}
 
       - name: Restore webpack
         id: cache-webpack
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/webpack
           key: bench-webpack-${{ runner.os }}-${{ steps.keys.outputs['webpack'] }}
@@ -165,7 +165,7 @@ jobs:
 
       - name: Save suite and compilers
         if: steps.cache-shared.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             bench/.work/suite
@@ -174,14 +174,14 @@ jobs:
 
       - name: Save xstate-main
         if: steps.cache-xstate.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/xstate-main
           key: ${{ steps.cache-xstate.outputs.cache-primary-key }}
 
       - name: Save webpack
         if: steps.cache-webpack.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/webpack
           key: ${{ steps.cache-webpack.outputs.cache-primary-key }}
@@ -303,7 +303,7 @@ jobs:
 
       # Saved by the build job (restore only; a miss installs the compilers again, ~30 s).
       - name: Restore suite and compilers
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             bench/.work/suite
@@ -313,7 +313,7 @@ jobs:
       - name: Restore ${{ matrix.project }}
         if: steps.keys.outputs.project != ''
         id: cache-project
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/${{ matrix.project }}
           key: bench-${{ matrix.project }}-${{ runner.os }}-${{ steps.keys.outputs.project }}
@@ -324,7 +324,7 @@ jobs:
 
       - name: Save ${{ matrix.project }}
         if: steps.keys.outputs.project != '' && steps.cache-project.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/${{ matrix.project }}
           key: ${{ steps.cache-project.outputs.cache-primary-key }}
@@ -416,7 +416,7 @@ jobs:
       # Restore only: the fixed-spec jobs save these. A project added to bench/projects.json needs a step here too;
       # without one it is cloned and installed by every run of this job.
       - name: Restore suite and compilers
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             bench/.work/suite
@@ -425,105 +425,105 @@ jobs:
 
       - name: Restore vscode
         if: steps.keys.outputs['vscode'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/vscode
           key: bench-vscode-${{ runner.os }}-${{ steps.keys.outputs['vscode'] }}
 
       - name: Restore xstate-main
         if: steps.keys.outputs['xstate-main'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/xstate-main
           key: bench-xstate-main-${{ runner.os }}-${{ steps.keys.outputs['xstate-main'] }}
 
       - name: Restore webpack
         if: steps.keys.outputs['webpack'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/webpack
           key: bench-webpack-${{ runner.os }}-${{ steps.keys.outputs['webpack'] }}
 
       - name: Restore mui-docs
         if: steps.keys.outputs['mui-docs'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/mui-docs
           key: bench-mui-docs-${{ runner.os }}-${{ steps.keys.outputs['mui-docs'] }}
 
       - name: Restore cal-diy
         if: steps.keys.outputs['cal-diy'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/cal-diy
           key: bench-cal-diy-${{ runner.os }}-${{ steps.keys.outputs['cal-diy'] }}
 
       - name: Restore formbricks-web
         if: steps.keys.outputs['formbricks-web'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/formbricks-web
           key: bench-formbricks-web-${{ runner.os }}-${{ steps.keys.outputs['formbricks-web'] }}
 
       - name: Restore supabase-studio
         if: steps.keys.outputs['supabase-studio'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/supabase-studio
           key: bench-supabase-studio-${{ runner.os }}-${{ steps.keys.outputs['supabase-studio'] }}
 
       - name: Restore t3code-server
         if: steps.keys.outputs['t3code-server'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/t3code-server
           key: bench-t3code-server-${{ runner.os }}-${{ steps.keys.outputs['t3code-server'] }}
 
       - name: Restore mikro-orm
         if: steps.keys.outputs['mikro-orm'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/mikro-orm
           key: bench-mikro-orm-${{ runner.os }}-${{ steps.keys.outputs['mikro-orm'] }}
 
       - name: Restore next-packages-next
         if: steps.keys.outputs['next-packages-next'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/next-packages-next
           key: bench-next-packages-next-${{ runner.os }}-${{ steps.keys.outputs['next-packages-next'] }}
 
       - name: Restore next-root
         if: steps.keys.outputs['next-root'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/next-root
           key: bench-next-root-${{ runner.os }}-${{ steps.keys.outputs['next-root'] }}
 
       - name: Restore storybook
         if: steps.keys.outputs['storybook'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/storybook
           key: bench-storybook-${{ runner.os }}-${{ steps.keys.outputs['storybook'] }}
 
       - name: Restore nuxt
         if: steps.keys.outputs['nuxt'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/nuxt
           key: bench-nuxt-${{ runner.os }}-${{ steps.keys.outputs['nuxt'] }}
 
       - name: Restore playwright
         if: steps.keys.outputs['playwright'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/playwright
           key: bench-playwright-${{ runner.os }}-${{ steps.keys.outputs['playwright'] }}
 
       - name: Restore drizzle-orm
         if: steps.keys.outputs['drizzle-orm'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/drizzle-orm
           key: bench-drizzle-orm-${{ runner.os }}-${{ steps.keys.outputs['drizzle-orm'] }}
@@ -623,7 +623,7 @@ jobs:
         run: python3 bench/run.py --print-cache-keys --projects vscode | tee -a "$GITHUB_OUTPUT"
 
       - name: Restore suite and compilers
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             bench/.work/suite
@@ -632,7 +632,7 @@ jobs:
 
       # Saved by the vscode `measure` job.
       - name: Restore vscode
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/vscode
           key: bench-vscode-${{ runner.os }}-${{ steps.keys.outputs.vscode }}
@@ -692,6 +692,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0 # full history: regressions.py lists the merges since the previous run; the results commit goes on the latest main
+          persist-credentials: false
 
       - name: Download the per-project results
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -740,7 +741,10 @@ jobs:
 
       - name: Commit results
         if: steps.publish.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          gh auth setup-git
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # The measured commit: the ref's head on a push, the `commit` input on a backfill dispatch.

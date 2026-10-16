@@ -82,7 +82,7 @@ jobs:
         run: python3 bench/run.py --print-cache-keys --projects "$PROBE_PROJECTS" | tee -a "$GITHUB_OUTPUT"
 
       - name: Restore suite and compilers
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             bench/.work/suite
@@ -91,35 +91,35 @@ jobs:
 
       - name: Restore vscode
         if: steps.keys.outputs['vscode'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/vscode
           key: bench-vscode-${{ runner.os }}-${{ steps.keys.outputs['vscode'] }}
 
       - name: Restore formbricks-web
         if: steps.keys.outputs['formbricks-web'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/formbricks-web
           key: bench-formbricks-web-${{ runner.os }}-${{ steps.keys.outputs['formbricks-web'] }}
 
       - name: Restore xstate-main
         if: steps.keys.outputs['xstate-main'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/xstate-main
           key: bench-xstate-main-${{ runner.os }}-${{ steps.keys.outputs['xstate-main'] }}
 
       - name: Restore supabase-studio
         if: steps.keys.outputs['supabase-studio'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/supabase-studio
           key: bench-supabase-studio-${{ runner.os }}-${{ steps.keys.outputs['supabase-studio'] }}
 
       - name: Restore t3code-server
         if: steps.keys.outputs['t3code-server'] != ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/t3code-server
           key: bench-t3code-server-${{ runner.os }}-${{ steps.keys.outputs['t3code-server'] }}

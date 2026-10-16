@@ -47,7 +47,7 @@ jobs:
       # sparse checkout below runs only on a miss.
       - name: Restore TypeScript testdata
         id: ts-ref
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ts-ref/tsc/testdata
           key: ts-ref-testdata-${{ steps.ts.outputs.commit }}
@@ -72,7 +72,7 @@ jobs:
 
       - name: Save TypeScript testdata
         if: steps.ts-ref.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ts-ref/tsc/testdata
           key: ${{ steps.ts-ref.outputs.cache-primary-key }}
@@ -159,7 +159,7 @@ jobs:
         run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack,nuxt,drizzle-orm | tee -a "$GITHUB_OUTPUT"
 
       - name: Restore the bench compilers
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             bench/.work/suite
@@ -167,25 +167,25 @@ jobs:
           key: bench-shared-${{ runner.os }}-${{ steps.determinism-keys.outputs.shared }}
 
       - name: Restore xstate-main
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/xstate-main
           key: bench-xstate-main-${{ runner.os }}-${{ steps.determinism-keys.outputs['xstate-main'] }}
 
       - name: Restore webpack
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/webpack
           key: bench-webpack-${{ runner.os }}-${{ steps.determinism-keys.outputs['webpack'] }}
 
       - name: Restore nuxt
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/nuxt
           key: bench-nuxt-${{ runner.os }}-${{ steps.determinism-keys.outputs['nuxt'] }}
 
       - name: Restore drizzle-orm
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/drizzle-orm
           key: bench-drizzle-orm-${{ runner.os }}-${{ steps.determinism-keys.outputs['drizzle-orm'] }}
@@ -229,7 +229,7 @@ jobs:
 
       - name: Restore TypeScript testdata
         id: ts-ref
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ts-ref/tsc/testdata
           key: ts-ref-testdata-${{ steps.ts.outputs.commit }}
@@ -282,7 +282,7 @@ jobs:
         run: CARGO_TARGET_DIR=target/native cargo build --profile ci --locked -p tsrs_cli -p tsrs_testrunner
 
       - name: Restore the bench compilers
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             bench/.work/suite
@@ -290,13 +290,13 @@ jobs:
           key: bench-shared-${{ runner.os }}-${{ steps.bench-keys.outputs.shared }}
 
       - name: Restore xstate-main
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/xstate-main
           key: bench-xstate-main-${{ runner.os }}-${{ steps.bench-keys.outputs['xstate-main'] }}
 
       - name: Restore webpack
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/webpack
           key: bench-webpack-${{ runner.os }}-${{ steps.bench-keys.outputs['webpack'] }}
@@ -433,7 +433,7 @@ jobs:
       # The testdata checkout (~5 s) is cached per TypeScript commit; the sparse checkout below runs only on a miss.
       - name: Restore TypeScript testdata
         id: ts-ref
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ts-ref/tsc/testdata
           key: ts-ref-testdata-${{ steps.ts.outputs.commit }}
@@ -451,7 +451,7 @@ jobs:
 
       - name: Save TypeScript testdata
         if: steps.ts-ref.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ts-ref/tsc/testdata
           key: ${{ steps.ts-ref.outputs.cache-primary-key }}
@@ -530,7 +530,7 @@ jobs:
         run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack | tee -a "$GITHUB_OUTPUT"
 
       - name: Restore the bench compilers
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             bench/.work/suite
@@ -538,13 +538,13 @@ jobs:
           key: bench-shared-${{ runner.os }}-${{ steps.tsan-keys.outputs.shared }}
 
       - name: Restore xstate-main
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/xstate-main
           key: bench-xstate-main-${{ runner.os }}-${{ steps.tsan-keys.outputs['xstate-main'] }}
 
       - name: Restore webpack
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: bench/.work/solutions/webpack
           key: bench-webpack-${{ runner.os }}-${{ steps.tsan-keys.outputs['webpack'] }}
