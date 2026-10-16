@@ -42,8 +42,6 @@ for supported features and known gaps.
 [`@tsrs/wasm`](https://github.com/oxc-project/tsrs/blob/main/npm/tsrs-wasm/README.md) provides WebAssembly support
 targeting `wasm32-wasip1` (WASI Preview 1).
 
-Starting with 0.16.0, platform and WebAssembly packages use the `@tsrs` scope (previously `@ts-rs`).
-
 ## Learn more
 
 - [CLI usage and memory tuning](https://github.com/oxc-project/tsrs/blob/main/docs/USAGE.md)

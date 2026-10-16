@@ -8,9 +8,6 @@ tsrs ships on npm the way TypeScript 7 ships its native compiler (`typescript@7`
 | `@tsrs/<os>-<arch>[-<libc>]` | the `tsrs` binary and default TypeScript libraries for one platform, with `os`/`cpu` (and `libc: glibc` or `musl` on Linux) so package managers install only the matching one |
 | `@tsrs/wasm` | the WebAssembly module (`npm/tsrs-wasm`, notes/wasm-build.md): a `tsrs-wasm` command and a `tsc()` API for Node 22+ and browsers, single-threaded; no platform packages |
 
-Starting with 0.16.0, scoped packages move from `@ts-rs` to `@tsrs`. The main package remains `tsrs` and selects the
-new platform package automatically; direct platform and WebAssembly dependencies need the new scope.
-
 Platforms since 0.14.0: `darwin-arm64`, `linux-x64-gnu`, `linux-arm64-gnu`, `linux-x64-musl` and `linux-arm64-musl`
 (earlier releases use unsuffixed GNU names; `darwin-x64` was published up to 0.2.1). `npm/build.mjs` and the launcher
 also know `win32-x64` (see TODO).
