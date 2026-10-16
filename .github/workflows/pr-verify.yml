@@ -5,9 +5,9 @@
 # one single-threaded run, and one run with poisoned arenas. The run fails when any diagnostic differs, so its status
 # answers "is this branch exact". The table is the `pr-verify` artifact (verify-out/) and the job summary.
 #
-# Start with `gh workflow run pr-verify.yml --ref <pushed-branch> -f projects=vscode`, or open a pull request into
-# main that changes crates/. Other pull requests opt in with the verify label. Runs restore bench.yml's caches.
-# Same-repository pull requests receive a result comment; fork pull requests retain the artifact and job summary.
+# Automatic CPU and memory measurements are temporarily paused because they are not working.
+# Start manually with `gh workflow run pr-verify.yml --ref <pushed-branch> -f projects=vscode`.
+# Runs restore bench.yml's caches.
 
 name: PR verify
 
@@ -34,10 +34,6 @@ on:
         type: choice
         options: ["true", "false"]
         default: "true"
-  # The gate job decides which pull requests run it (a change under crates/, or the `verify` label).
-  pull_request:
-    branches: [main]
-    types: [opened, reopened, synchronize, labeled]
 
 # A newer push to a pull request cancels its older run. A label event does not cancel anything: opening a labelled
 # pull request sends `opened` and `labeled` together, and the `labeled` run, which the gate may decide not to run,

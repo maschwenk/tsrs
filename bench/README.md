@@ -4,8 +4,8 @@
 ([microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), `cases/`) and eleven
 open-source applications and libraries (see "Application projects") with tsrs, with tsgo 7.0.2 (npm `typescript@7.0.2`) and, where a
 Bun binary is given, with `bun check`, and reports wall time, peak memory and the error count of each.
-The GitHub Actions workflow `.github/workflows/bench.yml` runs it after pushes to `main` that change the Rust source or build
-inputs. It measures every project on GitHub-hosted `ubuntu-24.04` runners in four modes and in four more
+The GitHub Actions workflow `.github/workflows/bench.yml` is temporarily manual-only while CPU and memory
+measurements are not working. It measures every project on GitHub-hosted `ubuntu-24.04` runners in four modes and in four more
 with bun check; `bench/results/<date>-<commit>.md` has every table. [The latest results](RESULTS.md) show the
 Bun comparison tables, with tsgo, tsrs and bun check side by side: the default mode (each compiler at its own
 thread count) and both compilers at `--checkers` 4 (tsgo's default), 8 and 16.
@@ -244,9 +244,9 @@ the small projects move by a few hundred KiB), so peak memory is flagged when it
 
 ## CI
 
-The benchmark is a GitHub Actions workflow, `.github/workflows/bench.yml`. It runs on pushes to
-`main` that touch `crates/**`, `Cargo.toml`, `Cargo.lock` or `rust-toolchain.toml`, and on `workflow_dispatch`.
-Nobody waits on it, so it is built for unattended runs: one run per push (the concurrency group is the commit, so a push during a run
+The benchmark is a GitHub Actions workflow, `.github/workflows/bench.yml`. Automatic CPU and memory measurements
+are temporarily paused in both this workflow and `pr-verify.yml`; only `workflow_dispatch` remains enabled.
+Nobody waits on it, so it is built for unattended runs: one run per measured commit (the concurrency group is the commit, so a dispatch for another commit
 starts its own run on its own machines and only a re-dispatch of the same commit replaces a queued twin; until
 2026-10-07 one shared group let a later push replace the queued bench, and bursts of merges left most commits without
 a results file), never cancelled, network steps retried, and the results commit re-created on top of the latest
@@ -267,7 +267,7 @@ the deterministic measure (repeats to 0.001%). The `measure` jobs run 5 reps and
 [The historical 64-vCPU comparison](RESULTS.md#historical-comparison-on-64-vcpus) uses the 20-run mean of
 `bench-compare.yml`. The README chart updates with the latest tables.
 
-All automatic jobs use standard GitHub-hosted `ubuntu-24.04` runners. Manual comparison, verification and general
+All benchmark jobs use standard GitHub-hosted `ubuntu-24.04` runners. Manual comparison, verification and general
 probe workflows accept a `runner` label (default `ubuntu-24.04`) for a larger GitHub-hosted Linux x64 runner if one
 is configured. Runner vCPUs and checker threads are separate: 16 checker threads on a 4-vCPU runner oversubscribe it.
 Historical Depot results retain their original hardware labels. History starts a new baseline when hardware or
@@ -408,10 +408,8 @@ gh workflow run pr-verify.yml --ref <pushed-branch> \
 gh run download <run-id> -n pr-verify
 ```
 
-or open a pull request into main that changes `crates/`: it then runs on every push to that pull request and keeps one
-comment with the table up to date. A pull request that changes nothing under `crates/` (a `Cargo.lock` bump, the bench
-harness) runs it only with the `verify` label. Fork pull requests receive the artifact and job summary, without a
-comment because their token is read-only. Dispatches require a pushed ref; uncommitted local changes are not uploaded.
+Automatic pull request runs, including the `verify` label trigger, are temporarily paused while CPU and memory
+measurements are not working. Dispatches require a pushed ref; uncommitted local changes are not uploaded.
 All runs restore the caches `bench.yml` saves.
 
 Historical duration on 64 vCPU (10 projects x 4 checker counts x 3 reps, poison on), Depot run `8fp8bp2jk1`
