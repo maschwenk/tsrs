@@ -4,14 +4,14 @@
 ([microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), `cases/`) and eleven
 open-source applications and libraries (see "Application projects") with tsrs, with tsgo 7.0.2 (npm `typescript@7.0.2`) and, where a
 Bun binary is given, with `bun check`, and reports wall time, peak memory and the error count of each.
-The Depot CI workflow `.depot/workflows/bench.yml` runs it after pushes to `main` that change the Rust source or build
-inputs. It measures every project on the fixed-spec 8-vCPU machine in four modes and on 16-vCPU machines in four
-(with bun check); `bench/results/<date>-<commit>.md` has every table. [The latest results](RESULTS.md) show the
-16-vCPU machines' tables, with tsgo, tsrs and bun check side by side: the default mode (each compiler at its own
-thread count) and both compilers at `--checkers` 4 (tsgo's default), 8 and 16 (tsrs's default there).
+The GitHub Actions workflow `.github/workflows/bench.yml` runs it after pushes to `main` that change the Rust source or build
+inputs. It measures every project on GitHub-hosted `ubuntu-24.04` runners in four modes and in four more
+with bun check; `bench/results/<date>-<commit>.md` has every table. [The latest results](RESULTS.md) show the
+Bun comparison tables, with tsgo, tsrs and bun check side by side: the default mode (each compiler at its own
+thread count) and both compilers at `--checkers` 4 (tsgo's default), 8 and 16.
 
 The [README chart](large-projects.svg) sums the check time and peak memory of every project for tsrs, bun check and
-tsgo from the 16-vCPU equal-thread measurements of the PGO-optimized `dist` build: two panels of three bars, with
+tsgo from the equal-thread measurements of the PGO-optimized `dist` build: two panels of three bars, with
 each total and its multiple of tsgo's. It uses the fewest threads every project was measured at: 4 (`wide-checkers4`,
 tsgo's default), or 16 (`checkers16`) for results older than that mode. Bun check is drawn when every project has it.
 A sum weights the large projects most: they are where the wait is. The results commit step runs `bench/publish.py`
@@ -142,19 +142,16 @@ tsrs's errors (the table's errors paragraph names such projects).
 
 - Invocation, identical for both: `-p <project> --noEmit --incremental false --extendedDiagnostics --pretty false`,
   in the default mode (no thread flag: tsgo uses 4 checker threads; tsrs every core up to 16, then half the cores,
-  from 4 to 32, lowered toward 4 for programs with fewer than 32 type-checked files per checker, so 8 on the 8-vCPU
-  machine and 16 on the 16-vCPU one, but fewer on small or mid-size projects (Compiler and Compiler-Unions get 4, xstate-main fewer than 8); tsrs additionally resolves members lazily, its default), with `--singleThreaded`, with
-  `--checkers 4` (the `checkers4` mode: both compilers at tsgo's default of 4 checker threads), with `--checkers 8`
-  (the `checkers8` mode: both compilers at 8 checker threads, tsrs's default on the 8-vCPU machine), and on a 16-vCPU
-  machine (see "CI") in the default mode again (the `wide` mode: the same flags as `default`, kept apart so that one
-  result can hold both machines) and with `--checkers` 4, 8 and 16 (the `wide-checkers4`, `wide-checkers8` and
-  `checkers16` modes: how each scales on a wide machine, the README chart's points; 16 is tsrs's count in `wide` there,
-  except on the projects the file-count rule gives fewer). Select modes with `--modes` (default `default,single,checkers4,checkers8`; flags in `MODE_FLAGS`
-  in `run.py`). `--checkers` sets only the checker threads; parsing and binding still use every core, so `checkers4`
-  is 4 checker threads on the 8-vCPU machine, not a 4-vCPU machine.
+  from 4 to 32, lowered toward 4 for programs with fewer than 32 type-checked files per checker; the standard
+  4-vCPU runner uses 4). Other modes set `--singleThreaded`, `--checkers 4` or `--checkers 8`.
+  The Bun comparison jobs run default mode again (`wide`) and `--checkers` 4, 8 and 16 (`wide-checkers4`,
+  `wide-checkers8` and `checkers16`). These historical mode names remain so old and new reports use the same
+  schema; the reports record the actual machine for every cell. Select modes with `--modes` (default
+  `default,single,checkers4,checkers8`; flags in `MODE_FLAGS` in `run.py`). `--checkers` sets only checker threads;
+  parsing and binding still use every core. Counts above the runner's CPU count oversubscribe it.
 - `bun check` (`--bun <binary>`, Bun 1.4.3 canary or later) is a third column in every mode it is measured in: `bun check
   -p <project> --no-pretty --all`, with `--threads N` where tsgo and tsrs get `--checkers N` (bun's only thread knob,
-  and it caps every thread). CI measures it on the 16-vCPU machine. Its error count is recorded, not compared: bun check
+  and it caps every thread). CI measures it on the same standard GitHub runner size. Its error count is recorded, not compared: bun check
   follows TypeScript 7.0 (on vscode its errors equal tsgo 7.0.2's line for line), tsrs the 7.1-dev commit it ports.
   `--noEmit` instead of the suite's `--outdir` keeps the measurement to type checking; `--pretty
   false` makes the error lines parseable.
@@ -247,9 +244,7 @@ the small projects move by a few hundred KiB), so peak memory is flagged when it
 
 ## CI
 
-The benchmark is a [Depot CI](https://depot.dev/docs/ci/overview) workflow, `.depot/workflows/bench.yml` (this
-repository is connected to Depot CI; Depot's runners for GitHub Actions only serve organization-owned repositories, and
-a probe of `depot-ubuntu-*` / `depot-macos-latest` labels from GitHub Actions stayed queued). It runs on pushes to
+The benchmark is a GitHub Actions workflow, `.github/workflows/bench.yml`. It runs on pushes to
 `main` that touch `crates/**`, `Cargo.toml`, `Cargo.lock` or `rust-toolchain.toml`, and on `workflow_dispatch`.
 Nobody waits on it, so it is built for unattended runs: one run per push (the concurrency group is the commit, so a push during a run
 starts its own run on its own machines and only a re-dispatch of the same commit replaces a queued twin; until
@@ -262,8 +257,7 @@ earlier benchmarked ancestor of its commit, not with the newest file by date. A 
 not carry a CI-skip marker in its title, body or commit subjects (CI's
 `skip-marker` job, `tools/ci/skip_marker.py`): `gh pr merge --squash` copies them into the commit message, and such a
 commit lands without CI and without a results file; notes-only pull requests carry the marker on purpose. A commit
-whose bench was skipped or cancelled (before 2026-10-07, most commits of a burst of merges) is backfilled with `depot ci dispatch --repo oxc-project/tsrs --workflow bench.yml --ref main --input
-commit=<sha>`: the build and measuring jobs check out that commit, the merge job runs the current scripts, the results
+whose bench was skipped or cancelled (before 2026-10-07, most commits of a burst of merges) is backfilled with `gh workflow run bench.yml --ref main -f commit=<sha>`: the build and measuring jobs check out that commit, the merge job runs the current scripts, the results
 file is committed, and the tables and chart update only when no newer commit's report is there.
 
 **Noise**: the benchmark machines are shared cloud VMs. Historically, between publishes of the same code vscode's
@@ -273,13 +267,11 @@ the deterministic measure (repeats to 0.001%). The `measure` jobs run 5 reps and
 [The historical 64-vCPU comparison](RESULTS.md#historical-comparison-on-64-vcpus) uses the 20-run mean of
 `bench-compare.yml`. The README chart updates with the latest tables.
 
-The Bun comparison uses 16 vCPU by default; 32 and 64 vCPU remain explicit choices in `bench-compare.yml`.
-Runner vCPUs and checker threads are separate: `cpus=16` with `threads=64` runs 64 software workers on
-16 vCPUs. This oversubscription is supported for experiments, including PR verification (`cpus=16`,
-`checkers=1,16,32,64`), but does not provide 64 cores of compute.
-The 8-vCPU instruction regression jobs retain their existing hardware. Historical 64-vCPU results keep their original
-labels; history starts a new baseline when a cell's hardware or build setup changes. Backfills of commits whose
-`run.py` predates a 16-vCPU mode measure the others on the 16-vCPU runners.
+All automatic jobs use standard GitHub-hosted `ubuntu-24.04` runners. Manual comparison, verification and general
+probe workflows accept a `runner` label (default `ubuntu-24.04`) for a larger GitHub-hosted Linux x64 runner if one
+is configured. Runner vCPUs and checker threads are separate: 16 checker threads on a 4-vCPU runner oversubscribe it.
+Historical Depot results retain their original hardware labels. History starts a new baseline when hardware or
+build setup changes; the migration does not rewrite measured results. Backfills measure on the current runners.
 
 **History**: `bench/history.py` prints one table per metric over `bench/results/*.json` in `main`'s first-parent
 order, a column per project, each cell with its change against the previous benchmarked commit (with one run per
@@ -297,15 +289,12 @@ once the four application projects were in; `measure-watch` since 2026-10-13):
    project gets a job without a workflow change), each on its own machine of the fixed spec: it restores the project's
    cache, downloads the binary and runs `bench/run.py --projects <name> --out-dir <dir>`. The result is the
    `bench-partial-<name>` artifact, the compiler output `bench-logs-<name>`. The jobs run at the same time but never
-   share a machine, so a measurement is what it was in the sequential run: one project on an idle 8-vCPU machine.
-3. `measure-wide`, two jobs on `depot-ubuntu-24.04-16` (16 vCPU), each with every other project of
-   `bench/projects.json`, so each project's four 16-vCPU modes come from one machine: the default mode (`wide`: each
-   compiler at its own thread count, tsrs 16 checkers there, fewer on small projects) and both compilers at
-   `--checkers` 4, 8 and 16 (`bench/run.py --modes wide,wide-checkers4,wide-checkers8,checkers16`), each with `bun
-   check` from Bun canary as a third column (`--bun`). 16 checker threads would oversubscribe the fixed-spec machine.
-   The jobs run while the `measure` jobs do. They restore the caches the `measure` jobs save (a project added to
-   `projects.json` needs a restore step in them too). If either fails, the results file has only the other's 16-vCPU
-   cells and the tables and chart stay unchanged (`bench/publish.py` needs every project's).
+   share a machine, so a measurement is what it was in the sequential run: one project on an idle runner.
+3. `measure-wide`, two jobs on `ubuntu-24.04`, each with every other project of `bench/projects.json`, so each
+   project's Bun comparison modes come from one machine: default mode (`wide`) and `--checkers` 4, 8 and 16
+   (`wide-checkers4`, `wide-checkers8`, `checkers16`), with `bun check` from Bun canary as a third column (`--bun`).
+   The jobs restore the caches the `measure` jobs save. If either fails, the result contains only the other's
+   cells and the tables and chart stay unchanged (`bench/publish.py` requires every project).
 4. `measure-watch`, one job on a machine of the fixed spec: `bench/watch.py` on vscode ("Watch mode" below). It restores
    the vscode cache the `measure` job saves and raises the inotify watch limit. If it fails, the results have no
    watch table.
@@ -315,19 +304,18 @@ once the four application projects were in; `measure-watch` since 2026-10-13):
    (project, mode) is measured twice; then the regression flag and the results commit. The `Commit results` step
    runs `bench/publish.py` after fetching main on every push retry to keep the tables and chart current together.
    Of the fixed-spec partials' machines, the one that measured the most cells is the run's; a cell measured on another
-   records its own `machine`. All 16-vCPU cells do, and the table names their machine. A fixed-spec project measured on a different CPU model or C library
-   (so far every `depot-ubuntu-24.04-8` has been the same model) is noted under the table, and the regression flag
+   records its own `machine`. All Bun comparison cells do, and the table names their machine. A fixed-spec project measured on a different CPU model or C library
+   is noted under the table, and the regression flag
    compares that project only with runs on the same model. A run started from a branch
-   (`depot ci run --workflow .depot/workflows/bench.yml`) ends with the `bench-result` artifact: nothing is committed
+   (`gh workflow run bench.yml --ref <branch>`) ends with the `bench-result` artifact: nothing is committed
    or commented.
 
-**Fixed machine spec**: `depot-ubuntu-24.04-8`, 8 vCPU, 32 GB RAM, Linux x86_64, for every run, so numbers are
-comparable over time (the 16-vCPU sections: `depot-ubuntu-24.04-16`, 16 vCPU, checked by their own jobs). Sizing: the largest peak measured is tsgo's default mode on vscode and mui-docs (7.5 GiB on an
-18-core Mac, 6.9 GiB on Linux); 32 GB leaves 4x headroom, and 8 vCPUs cover tsrs's default 8 checker threads (tsgo's 4)
-plus parallel parsing. The first step fails the job if `nproc`/`MemTotal`/arch differ; there is no fallback runner. (On GitHub's
-standard 2 vCPU / 7 GB runner tsgo swapped on vscode: 146 s wall for a 50 s check.)
+**Fixed machine spec**: GitHub-hosted `ubuntu-24.04`, 4 vCPU, 16 GB RAM, Linux x86_64 for this public repository
+([runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)). The hardware
+step checks CPU count, memory and architecture. CPU models can differ; results record the actual machine and the
+regression/history tools compare compatible measurements. The 8- and 16-checker modes oversubscribe these runners.
 
-Caching (Depot Cache serves the `actions/cache` API on Depot CI, no special configuration): `Swatinem/rust-cache` for
+Caching uses GitHub's `actions/cache` service and the Rust setup action for
 `~/.cargo` and the dependency part of `target/`, which holds the PGO-instrumented build (workspace crates are
 rebuilt: they are what is being measured). The final PGO build is not cached: its RUSTFLAGS contain the profile's
 hash, which changes every run, so cargo rebuilds all of it anyway (as in the release workflow); one
@@ -341,7 +329,7 @@ build job, and `ci.yml`'s `check-and-test` and `arena-safety` jobs, restore the 
 testdata (`ts-ref/tsc/testdata`, 22 MB compressed) from a cache keyed on the TypeScript commit; on a miss they run the
 sparse checkout and save it. That saves about 4 s per job (2026-10-07: checkout 4.9-5.7 s, restore 1.4 s).
 
-Job duration split, 2026-10-01:
+Historical job duration split, 2026-10-01 (before this migration):
 
 | | GitHub-hosted `ubuntu-24.04` (2 vCPU / 7 GB), before | Depot CI `depot-ubuntu-24.04-8`, all caches warm |
 | --- | --- | --- |
@@ -392,9 +380,9 @@ them 64 vCPU, sat idle through the 7-minute build.
 
 ## Verifying a branch
 
-`.depot/workflows/pr-verify.yml` answers the two questions a performance or refactoring branch has to answer before it
+`.github/workflows/pr-verify.yml` answers the two questions a performance or refactoring branch has to answer before it
 lands: does it still print exactly what main prints, and what did it do to time and memory? It runs on one
-`depot-ubuntu-24.04-32` machine (32 vCPU; `--input cpus=64` opts into 64) and compares two `cargo build --release` binaries (not the PGO build:
+GitHub-hosted Linux x64 runner (`ubuntu-24.04` by default, configurable with `-f runner=<label>`) and compares two `cargo build --release` binaries (not the PGO build:
 relative comparisons only): the branch, and its merge base with `base` (default `main`), so commits that landed on
 main after the branch was cut are not counted as the branch's.
 
@@ -415,16 +403,16 @@ and single-threaded peak RSS are the numbers to quote in a pull request.
 How to run it:
 
 ```sh
-depot ci run --workflow .depot/workflows/pr-verify.yml      # from any branch or dirty worktree, all defaults
-depot ci dispatch --repo oxc-project/tsrs --workflow pr-verify.yml --ref <pushed branch> \
-  --input projects=vscode,webpack --input checkers=4,32 --input reps=5
+gh workflow run pr-verify.yml --ref <pushed-branch> \
+  -f projects=vscode,webpack -f checkers=1,4 -f reps=5
+gh run download <run-id> -n pr-verify
 ```
 
 or open a pull request into main that changes `crates/`: it then runs on every push to that pull request and keeps one
 comment with the table up to date. A pull request that changes nothing under `crates/` (a `Cargo.lock` bump, the bench
-harness) runs it only with the `verify` label. `depot ci run` takes no inputs (edit the defaults in your working copy
-to narrow it), and Depot does not serve `actions/cache` to it (not tied to a ref), so it clones and installs every
-project; a dispatched or pull request run restores the caches `bench.yml` saves.
+harness) runs it only with the `verify` label. Fork pull requests receive the artifact and job summary, without a
+comment because their token is read-only. Dispatches require a pushed ref; uncommitted local changes are not uploaded.
+All runs restore the caches `bench.yml` saves.
 
 Historical duration on 64 vCPU (10 projects x 4 checker counts x 3 reps, poison on), Depot run `8fp8bp2jk1`
 (2026-10-07, `depot ci run`, so no caches): 10 min 44 s for the job, of which setup and project clone + install
@@ -461,8 +449,9 @@ python3 bench/compare.py --tsrs target/release/tsrs --bun ~/.bun/bin/bun --proje
 python3 bench/compare.py --tsrs ... --bun ... --projects Compiler --threads default,4 --reps 2   # smoke test
 ```
 
-The Depot CI workflow `.depot/workflows/bench-compare.yml` (manual dispatch only) defaults to `depot-ubuntu-24.04-16`
-(16 vCPU; pass `--input cpus=32` or `--input cpus=64` for explicit scaling experiments) with the PGO `dist` build of the commit (built and trained as in `bench.yml`) and Bun canary, and uploads
+The GitHub Actions workflow `.github/workflows/bench-compare.yml` (manual dispatch only) defaults to `ubuntu-24.04`.
+Run `gh workflow run bench-compare.yml --ref <branch>`; use `-f runner=<label>` for a configured larger GitHub-hosted
+Linux x64 runner. It uses the PGO `dist` build of the commit (built and trained as in `bench.yml`) and Bun canary, and uploads
 `bench/results/compare/<date>-<commit>-<threads>t.{json,md}` plus the logs as the `bench-compare` artifact.
 
 First run, 2026-10-06 (Depot run `rnfhvvd79g`, vscode, 20 reps, `bench/results/compare/2026-10-06-2420b7ed410b-64t.md`):

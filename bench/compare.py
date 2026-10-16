@@ -2,7 +2,7 @@
 """Head-to-head type-check benchmark on one machine: tsgo 7.0.2, the TypeScript 7.1-dev nightly tsrs ports, tsrs and
 `bun check`, at the same thread counts.
 
-bench/run.py is the fixed-spec regression benchmark (8 vCPU, tsgo vs tsrs). This script answers a different question:
+bench/run.py is the fixed-spec regression benchmark (tsgo vs tsrs). This script answers a different question:
 how do the four compilers compare on a wide machine, the way Bun's `bun check` announcement measured them (vscode,
 Linux x64, 64 threads, mean of 20 runs). See bench/README.md "Head-to-head on a wide machine". Typical use:
 

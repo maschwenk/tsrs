@@ -1,13 +1,11 @@
-# Node programmatic API (`tsrs --api`, unstable/sync + unstable/async) validation on macOS. See
-# docs/NODE_API_VALIDATION.md. Parity and the Linux packages run on Depot CI (.depot/workflows/node-api.yml), which has
-# no macOS sandboxes and does not run pull requests from forks.
-# Security: read-only GITHUB_TOKEN, no secrets, nothing is published (no pnpm publish, no tags, no releases).
-# Triggers: pushes to main, manual dispatch (needs this file on the default branch), and pull requests into main
-# that touch the API surface. `pull_request` (never `pull_request_target`) runs with a read-only token and no
-# secrets; fork PRs additionally wait for the repository's approval setting. This lets the API branches be
-# validated before anything is merged.
+# Node programmatic API (`tsrs --api`, unstable/sync + unstable/async) validation. See docs/NODE_API_VALIDATION.md.
+# GitHub Actions runs parity and native Linux x64, Linux arm64 and macOS arm64 packaging.
+# Fork pull requests follow the repository's approval setting.
+# Security: read-only token, no secrets, nothing is published (no pnpm publish, no tags, no releases).
+# Triggers: pushes to main, manual dispatch, and pull requests into main that touch the API surface. This lets the
+# API branches be validated before anything is merged.
 
-name: Node API (macOS)
+name: Node API
 
 on:
   push:
@@ -50,10 +48,159 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Pinned upstream client + upstream sync/async suites + tools/node-api/tests, first against the Go server built
+  # from ts-ref (must be all green), then against tsrs. The tsrs result and the per-method inventory are uploaded;
+  # the job fails if any tsrs test fails, so partial support is never reported as green.
+  parity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out TypeScript at the pinned commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+
+      # setup-node saves its pnpm store after the repository install; cache this later upstream install separately.
+      - name: Restore Node API harness dependencies
+        id: harness-deps
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ts-ref/node_modules
+            ts-ref/packages/typescript/node_modules
+            ts-ref/pnpm-lock.yaml
+            ts-ref/pnpm-workspace.yaml
+          key: node-api-harness-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.node-version', 'pnpm-lock.yaml') }}-${{ steps.ts.outputs.commit }}
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: ts-ref/tsc/go.mod
+          cache-dependency-path: ts-ref/tsc/go.sum
+
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: true
+          cache-key: node-api-parity
+
+      - name: Harness setup (pnpm install in ts-ref, Go oracle from ts-ref/tsc)
+        run: tools/node-api/setup.sh
+
+      - name: Save Node API harness dependencies
+        if: steps.harness-deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ts-ref/node_modules
+            ts-ref/packages/typescript/node_modules
+            ts-ref/pnpm-lock.yaml
+            ts-ref/pnpm-workspace.yaml
+          key: ${{ steps.harness-deps.outputs.cache-primary-key }}
+
+      - name: Go oracle (must pass)
+        run: node tools/node-api/run-upstream.mjs --binary tools/node-api/.work/oracle/tsc --label go-oracle
+
+      - name: Build tsrs
+        run: cargo build --release --locked -p tsrs_cli
+
+      - name: tsrs against the same suites
+        id: tsrs
+        continue-on-error: true
+        run: node tools/node-api/run-upstream.mjs --binary target/release/tsrs --label tsrs
+
+      - name: Per-method inventory
+        if: always()
+        run: |
+          node tools/node-api/inventory.mjs --oracle go-oracle --candidate tsrs \
+            --md tools/node-api/.work/inventory.md --json tools/node-api/.work/inventory.json
+          head -n 12 tools/node-api/.work/inventory.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Evidence lives under tools/node-api/.work, a dot-directory that upload-artifact skips by default; only the
+      # listed result files are uploaded (no work trees, binaries or traces).
+      - name: Check evidence exists
+        if: always()
+        run: |
+          missing=0
+          for f in tools/node-api/.work/go-oracle/summary.json tools/node-api/.work/go-oracle/results.jsonl \
+                   tools/node-api/.work/tsrs/summary.json tools/node-api/.work/tsrs/results.jsonl \
+                   tools/node-api/.work/inventory.md tools/node-api/.work/inventory.json; do
+            if [ ! -s "$f" ]; then echo "missing evidence: $f"; missing=1; fi
+          done
+          exit $missing
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: node-api-parity
+          include-hidden-files: true
+          if-no-files-found: error
+          path: |
+            tools/node-api/.work/go-oracle/summary.json
+            tools/node-api/.work/go-oracle/results.jsonl
+            tools/node-api/.work/go-oracle/run.tap
+            tools/node-api/.work/go-oracle/meta.json
+            tools/node-api/.work/go-oracle/evidence/*.json
+            tools/node-api/.work/tsrs/summary.json
+            tools/node-api/.work/tsrs/results.jsonl
+            tools/node-api/.work/tsrs/run.tap
+            tools/node-api/.work/tsrs/meta.json
+            tools/node-api/.work/tsrs/evidence/*.json
+            tools/node-api/.work/inventory.md
+            tools/node-api/.work/inventory.json
+          retention-days: 14
+
+      - name: Fail on tsrs failures
+        if: steps.tsrs.outcome != 'success'
+        run: |
+          echo "tsrs did not pass the API suites; see the node-api-parity artifact"
+          exit 1
+
   # Pack tsrs exactly as a release would (without publishing), install the tarballs into a project outside the
   # repository and drive the installed binary through the CLI, unstable/sync, unstable/async and the published
-  # declarations. The Linux targets run on Depot CI (.depot/workflows/node-api.yml).
+  # declarations, on each Linux platform the release workflow builds (macOS is validated below).
   package:
+    name: package ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-24.04 }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm }
+    steps:
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: true
+          cache-key: node-api-${{ matrix.target }}
+
+      - name: Build tsrs
+        run: cargo build --release --locked -p tsrs_cli
+
+      - name: Pack (no publish)
+        run: node npm/build.mjs --binary ${{ matrix.target }}=target/release/tsrs --out "$RUNNER_TEMP/pack" --pack
+
+      - name: Installed-package smoke (CLI, sync, async, declarations)
+        run: node tools/node-api/consumer.mjs --dist "$RUNNER_TEMP/pack"
+
+  # Native macOS packaging uses the same installed-consumer validation as Linux.
+  package-macos:
     name: package ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
@@ -70,41 +217,32 @@ jobs:
         shell: bash
         run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
 
-      - parallel:
-          - name: Set up Node
-            uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+      - name: Set up Node
+        uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
 
-          - name: Set up Rust
-            uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-            with:
-              toolchain: ${{ steps.rust.outputs.toolchain }}
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ steps.rust.outputs.toolchain }}
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: node-api-${{ matrix.target }}
 
-      # Keep diagnostics for a slow or stuck native build in a separate log, then stop the monitor explicitly.
-      - name: Monitor build resources
-        id: resource-monitor
-        run: |
-          while true; do
-            date -u
-            vm_stat
-            top -l 1 -n 10 -o cpu -stats pid,cpu,mem,command
-            sleep 60
-          done
-        background: true
-
+      # Keep resource diagnostics for a slow build and stop the monitor on both success and failure.
       - name: Build tsrs
-        id: build
-        run: cargo build --release --locked -p tsrs_cli
-        background: true
-
-      - name: Wait for the Rust build
-        wait: build
-
-      - name: Stop build resource monitor
-        cancel: resource-monitor
+        run: |
+          (
+            while true; do
+              date -u
+              vm_stat
+              top -l 1 -n 10 -o cpu -stats pid,cpu,mem,command
+              sleep 60
+            done
+          ) &
+          monitor=$!
+          trap 'kill "$monitor" 2>/dev/null || true' EXIT
+          cargo build --release --locked -p tsrs_cli
 
       - name: Pack (no publish)
         run: node npm/build.mjs --binary ${{ matrix.target }}=target/release/tsrs --out "$RUNNER_TEMP/pack" --pack

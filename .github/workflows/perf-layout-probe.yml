@@ -1,15 +1,15 @@
-# Depot CI workflow: one-off probe of how the Linux x86-64 dist binary is built (notes/perf-binary-layout.md). In one
-# job on a 32-vCPU runner it builds the PGO-only bench binary (A, what bench.yml built before it added BOLT) and variants of it from the
+# GitHub Actions workflow: one-off probe of how the Linux x86-64 dist binary is built (notes/perf-binary-layout.md). In one
+# job on a GitHub-hosted runner it builds the PGO-only bench binary (A, what bench.yml built before it added BOLT) and variants of it from the
 # same instrumented build (the training runs of tsrs writing their profiles again, a larger PGO training set, BOLT as
 # release.yml does it, a larger BOLT training set, BOLT with -hugify: tools/perf/layout-build.sh), then measures them interleaved on every bench project
 # (tools/perf/layout-measure.py) and profiles the baseline on vscode. Not scheduled; run it from a pushed branch, which
 # restores the bench caches:
 #
-#   depot ci dispatch --repo oxc-project/tsrs --workflow perf-layout-probe.yml --ref <branch> [--input reps=7]
+#   gh workflow run perf-layout-probe.yml --ref <branch> -f reps=7
 #
 # Everything worth keeping is the `perf-layout-probe` artifact (probe-out/).
 
-name: Perf layout probe (32 threads)
+name: Perf layout probe
 
 on:
   workflow_dispatch:
@@ -31,25 +31,24 @@ env:
 
 jobs:
   probe:
-    runs-on: depot-ubuntu-24.04-32
-    timeout-minutes: 180
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
     steps:
-      # actions/checkout: `depot ci run` applies the local diff only after this step.
+      - name: Free disk space for builds and benchmark checkouts
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
-      # `depot ci run` applies the local diff right after the checkout, unstaged. oxc-project/setup-rust ends with
-      # `git restore .`, which would drop it; staging it keeps it.
-      - name: Keep the local diff
-        run: git add -A
-
-      - name: Runner hardware (32 vCPU x86_64)
+      - name: Runner hardware (x86_64)
         run: |
           mkdir -p probe-out
           { nproc; lscpu; free -g; uname -r; cat /sys/kernel/mm/transparent_hugepage/enabled; } | tee probe-out/machine.txt
-          if [ "$(nproc)" != 32 ] || [ "$(uname -m)" != x86_64 ]; then
-            echo "::error::expected 32 vCPU x86_64, got $(nproc) vCPU $(uname -m)"; exit 1
+          if [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected x86_64, got $(uname -m)"; exit 1
           fi
 
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1

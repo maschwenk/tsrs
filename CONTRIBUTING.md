@@ -63,7 +63,7 @@ git -C ts-ref sparse-checkout set tsc/testdata && git -C ts-ref checkout "$commi
 ./target/debug/tsrs-fourslash run                                # language-server suite
 TSRS_TEST=target/debug/tsrs-test .github/scripts/conformance-gate.sh # what CI enforces: errors, .types, .symbols
 tools/regressions.sh target/debug/tsrs                            # testdata/regressions (CI runs it too)
-cargo test -p tsrs_core -p tsrs_scanner -p tsrs_cli              # unit and CLI tests (see .depot/workflows/ci.yml)
+cargo test -p tsrs_core -p tsrs_scanner -p tsrs_cli              # unit and CLI tests (see .github/workflows/ci.yml)
 ```
 
 CI runs the gate twice: in tsgo's check history, which the baselines need, and in the default mode
@@ -80,10 +80,9 @@ For a bug outside the suite, add a reproduction under `testdata/regressions/<nam
 
 ## Landing changes
 
-- Changes target `main`. CI (`.depot/workflows/ci.yml`, on Depot CI) runs on pushes
-  to `main`, on pull requests into `main` (drafts too) and by manual dispatch, and must pass. Depot CI does not run
-  pull requests from forks, so those run only the macOS job of `.github/workflows/node-api.yml`, after a
-  maintainer's approval, and never get repository secrets.
+- Changes target `main`. CI (`.github/workflows/ci.yml`, on GitHub Actions) runs on pushes
+  to `main`, on pull requests into `main` (drafts too) and by manual dispatch, and must pass. Fork pull requests
+  follow the repository's approval setting, run with read-only tokens and never get repository secrets.
 - Maintainers land small commits directly on `main` (rebase onto `origin/main`, `cargo check --workspace`, re-run the
   affected tests and the full suite, then `git push origin HEAD:main`; never force-push). See `docs/DEBUGGING.md`.
 - Commit messages: `<area>: <what and why>`, plus the conformance totals when they change.

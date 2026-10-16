@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the binaries the layout probe compares (.depot/workflows/perf-layout-probe.yml, notes/perf-binary-layout.md),
+# Builds the binaries the layout probe compares (.github/workflows/perf-layout-probe.yml, notes/perf-binary-layout.md),
 # all from one instrumented build and one training run, Linux x86-64:
 #
 #   A0   the profile without pgo-train.sh's tsrs runs, i.e. main's bench binary between #143 and #153, when those

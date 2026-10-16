@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interleaved A/B/... measurement of several tsrs builds of the same source (.depot/workflows/perf-layout-probe.yml,
+"""Interleaved A/B/... measurement of several tsrs builds of the same source (.github/workflows/perf-layout-probe.yml,
 notes/perf-binary-layout.md).
 
     tools/perf/layout-measure.py --bin A=/tmp/l/bin/A/tsrs --bin R=/tmp/l/bin/R/tsrs --out probe-out \

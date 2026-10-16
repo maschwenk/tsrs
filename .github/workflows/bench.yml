@@ -1,23 +1,18 @@
-# Depot CI workflow (https://depot.dev/docs/ci/overview). Benchmarks tsrs against tsgo (typescript@7.0.2) on the
-# typescript-benchmarking projects and the open-source applications of bench/projects.json (bench/README.md) and
-# renders the tables in bench/RESULTS.md and the SVG chart linked from README.md. Not a GitHub Actions workflow: this
-# repository is connected to Depot CI, and Depot's runners for GitHub Actions only serve organization-owned
-# repositories.
+# GitHub Actions benchmark: tsrs against tsgo and Bun on the projects in bench/projects.json.
+# Publishes bench/RESULTS.md and the README charts; see bench/README.md.
 #
 # Five jobs (bench/README.md "CI"): `build` makes the PGO dist binary once; `measure` is one job per project of
 # bench/projects.json, each on its own machine of the fixed spec, so the projects are measured at the same time
-# without ever sharing a CPU (one job measuring them one after the other took 18-20 min; the longest project, vscode,
-# takes about 5), in the default mode, with --singleThreaded and with --checkers 4 and 8 (both compilers at the same
+# without sharing a runner, in the default mode, with --singleThreaded and with --checkers 4 and 8 (both compilers at the same
 # checker count); `measure-wide` measures every project in the default mode (`wide`, the summary table) and with
-# `--checkers` 4, 8 and 16 (the README chart's points) on 16-vCPU machines, two jobs with half the projects each, with
+# `--checkers` 4, 8 and 16 (the README chart's points) on standard GitHub-hosted machines, two jobs with half the projects each, with
 # `bun check` as a third column; `measure-watch` measures --watch on vscode
 # (bench/watch.py); `merge` joins the partial results into one result file (bench/run.py --merge), flags regressions and
 # commits.
 #
 # The push trigger is limited to the Rust source tree and build inputs: documentation, benchmark reports and other
 # repository-only changes do not need a fresh measurement. The results commit also carries [skip ci], which the build
-# job's `if` checks as a second loop guard (the commit is pushed by Depot's GitHub app, which may trigger Depot CI);
-# the other jobs need the build job, so they are skipped with it.
+# job's `if` checks as a second loop guard; the other jobs need the build job, so they are skipped with it.
 
 name: Bench
 
@@ -50,9 +45,9 @@ concurrency:
 permissions:
   contents: read
 
-# Fixed machine spec so runs are comparable: Depot depot-ubuntu-24.04-8 = 8 vCPU / 32 GB / x86_64 (bench/README.md
-# "CI"), for the build (PGO training) and for every measuring job except `measure-wide` (depot-ubuntu-24.04-16, 16
-# vCPU). The hardware steps fail the job on any other machine; there is no fallback runner.
+# All measuring jobs use GitHub-hosted ubuntu-24.04: 4 vCPU / 16 GB / x86_64 for this public repository.
+# Results record their actual CPU model and start a new baseline when hardware changes.
+# Explicit 8- and 16-checker modes oversubscribe this runner; checker counts are software workers.
 
 env:
   CARGO_TERM_COLOR: always
@@ -66,11 +61,16 @@ jobs:
   build:
     # Second loop guard: the results commit says [skip ci] (null on workflow_dispatch, which then runs).
     if: github.repository == 'oxc-project/tsrs' && !contains(github.event.head_commit.message, '[skip ci]')
-    runs-on: depot-ubuntu-24.04-8
-    timeout-minutes: 60
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
     outputs:
       projects: ${{ steps.plan.outputs.projects }}
     steps:
+      - name: Free disk space for builds and benchmark checkouts
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ inputs.commit || github.sha }} # the measured commit (workflow_dispatch may name one)
@@ -81,8 +81,8 @@ jobs:
           nproc; free -g; df -h / | tail -1
           lscpu | grep -E 'Model name|^CPU\(s\)' || true
           mem_gb=$(awk '/MemTotal/ {printf "%d", $2 / 1048576}' /proc/meminfo)
-          if [ "$(nproc)" != 8 ] || [ "$mem_gb" -lt 28 ] || [ "$(uname -m)" != x86_64 ]; then
-            echo "::error::expected 8 vCPU / 32 GB / x86_64, got $(nproc) vCPU / ${mem_gb} GB / $(uname -m)"; exit 1
+          if [ "$(nproc)" != 4 ] || [ "$mem_gb" -lt 14 ] || [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected 4 vCPU / 16 GB / x86_64, got $(nproc) vCPU / ${mem_gb} GB / $(uname -m)"; exit 1
           fi
 
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
@@ -130,8 +130,7 @@ jobs:
       # Caches ~/.cargo and the dependency part of target/, which holds only the instrumented build below: its
       # RUSTFLAGS are the same in every run, so its dependencies are reused. The final build's RUSTFLAGS contain the
       # profile's hash, which changes every run, so it is built outside target/ and not cached.
-      # On Depot runners every cache action below is served by Depot Cache (no workflow changes needed). One cache for
-      # the suite checkout + the npm compilers, and one per cloned project (checkout + node_modules) keyed on its pinned
+      # One GitHub Actions cache for the suite checkout + npm compilers, and one per cloned project keyed on its pinned
       # commit and install command. This job needs the two training projects; each measuring job restores its own.
       - name: Cache keys
         id: keys
@@ -265,16 +264,21 @@ jobs:
   # run (one project at a time, nothing else running), only the projects no longer wait for each other.
   measure:
     needs: build
-    runs-on: depot-ubuntu-24.04-8
-    timeout-minutes: 60 # a warm run takes a few minutes; a cold project cache adds its clone and install
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180 # a warm run takes a few minutes; a cold project cache adds its clone and install
     strategy:
       fail-fast: false # one project's failure must not cancel the others; the merge job then waits for a re-run
       matrix:
         project: ${{ fromJSON(needs.build.outputs.projects) }}
     env:
-      BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-8`
+      BENCH_RUNNER: GitHub Actions `ubuntu-24.04`
       PROJECT: ${{ matrix.project }}
     steps:
+      - name: Free disk space for builds and benchmark checkouts
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ inputs.commit || github.sha }} # the measured commit (workflow_dispatch may name one)
@@ -285,8 +289,8 @@ jobs:
           nproc; free -g; df -h / | tail -1
           lscpu | grep -E 'Model name|^CPU\(s\)' || true
           mem_gb=$(awk '/MemTotal/ {printf "%d", $2 / 1048576}' /proc/meminfo)
-          if [ "$(nproc)" != 8 ] || [ "$mem_gb" -lt 28 ] || [ "$(uname -m)" != x86_64 ]; then
-            echo "::error::expected 8 vCPU / 32 GB / x86_64, got $(nproc) vCPU / ${mem_gb} GB / $(uname -m)"; exit 1
+          if [ "$(nproc)" != 4 ] || [ "$mem_gb" -lt 14 ] || [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected 4 vCPU / 16 GB / x86_64, got $(nproc) vCPU / ${mem_gb} GB / $(uname -m)"; exit 1
           fi
 
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
@@ -360,38 +364,41 @@ jobs:
           path: bench/.work/logs
           if-no-files-found: ignore
 
-  # The 16-vCPU machine's tables: in default mode (`wide`: each compiler at its own thread count, which is the summary
-  # table) and with both compilers at `--checkers` 4, 8 and 16 (the README chart's points; 16 checker threads would
-  # oversubscribe the fixed-spec machine), each with `bun check` from Bun canary as a third column. Two jobs, each with
-  # every other project of bench/projects.json, so every project's points come from one machine and the four modes take
-  # no longer than the two did in one job. They run while the fixed-spec jobs do. Their cells record their machine
-  # (bench/run.py --merge). The regression flag never reads them: it compares the single-threaded counts of the
-  # fixed-spec jobs.
+  # Bun comparison tables: default mode and explicit 4, 8 and 16 checker threads. Two shards keep each project's
+  # modes on the same machine. The historical "wide" mode names are retained for result and chart compatibility;
+  # these jobs now use the same runner size as measure, so 8 and 16 threads oversubscribe it.
+  # The regression flag reads the single-threaded counts from measure instead.
   measure-wide:
     needs: build
-    runs-on: depot-ubuntu-24.04-16
-    timeout-minutes: 60
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
     strategy:
       fail-fast: false # one shard's failure must not cancel the other
       matrix:
         shard: [0, 1]
     env:
-      BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-16`
+      BENCH_RUNNER: GitHub Actions `ubuntu-24.04`
       ALL_PROJECTS: ${{ needs.build.outputs.projects }}
       SHARD: ${{ matrix.shard }}
       BUN_VERSION: canary
     steps:
+      - name: Free disk space for builds and benchmark checkouts
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ inputs.commit || github.sha }} # the measured commit (workflow_dispatch may name one)
           persist-credentials: false
 
-      - name: Runner hardware (16 vCPU x86_64)
+      - name: Runner hardware (must match the fixed spec)
         run: |
           nproc; free -g; df -h / | tail -1
           lscpu | grep -E 'Model name|^CPU\(s\)' || true
-          if [ "$(nproc)" != 16 ] || [ "$(uname -m)" != x86_64 ]; then
-            echo "::error::expected 16 vCPU x86_64, got $(nproc) vCPU $(uname -m)"; exit 1
+          mem_gb=$(awk '/MemTotal/ {printf "%d", $2 / 1048576}' /proc/meminfo)
+          if [ "$(nproc)" != 4 ] || [ "$mem_gb" -lt 14 ] || [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected 4 vCPU / 16 GB / x86_64, got $(nproc) vCPU / ${mem_gb} GB / $(uname -m)"; exit 1
           fi
 
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
@@ -552,7 +559,7 @@ jobs:
 
       - name: Benchmark (default mode and --checkers 4, 8 and 16, with bun check)
         run: |
-          # Old backfilled commits lack some of the modes; measure the ones their run.py has on the 16-vCPU runner.
+          # Old backfilled commits lack some of the modes; measure the ones their run.py has on the current runner.
           modes=$(python3 -c 'import sys; sys.path.insert(0, "bench"); import run; print(",".join(m for m in ("wide", "wide-checkers4", "wide-checkers8", "checkers16") if m in run.MODE_FLAGS))')
           python3 bench/run.py --projects "${{ steps.shard.outputs.projects }}" --modes "$modes" --tsrs /tmp/tsrs-pgo/dist/tsrs \
             --tsrs-build pgo-dist --rustc "$(cat /tmp/tsrs-pgo/dist/rustc.txt)" --bun /tmp/bun/bun-linux-x64/bun \
@@ -579,11 +586,16 @@ jobs:
   # in the reports (never in the chart). Optional like the wide jobs: if it fails, the results have no watch table.
   measure-watch:
     needs: build
-    runs-on: depot-ubuntu-24.04-8
-    timeout-minutes: 60
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
     env:
-      BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-8`
+      BENCH_RUNNER: GitHub Actions `ubuntu-24.04`
     steps:
+      - name: Free disk space for builds and benchmark checkouts
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ inputs.commit || github.sha }} # the measured commit (workflow_dispatch may name one)
@@ -594,8 +606,8 @@ jobs:
           nproc; free -g; df -h / | tail -1
           lscpu | grep -E 'Model name|^CPU\(s\)' || true
           mem_gb=$(awk '/MemTotal/ {printf "%d", $2 / 1048576}' /proc/meminfo)
-          if [ "$(nproc)" != 8 ] || [ "$mem_gb" -lt 28 ] || [ "$(uname -m)" != x86_64 ]; then
-            echo "::error::expected 8 vCPU / 32 GB / x86_64, got $(nproc) vCPU / ${mem_gb} GB / $(uname -m)"; exit 1
+          if [ "$(nproc)" != 4 ] || [ "$mem_gb" -lt 14 ] || [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected 4 vCPU / 16 GB / x86_64, got $(nproc) vCPU / ${mem_gb} GB / $(uname -m)"; exit 1
           fi
 
       # Both watches use inotify, one watch per directory of the program (vscode: a few thousand).
@@ -664,14 +676,14 @@ jobs:
 
   # Joins the per-project results into bench/results/<date>-<commit>.{json,md} and the summary table, flags
   # regressions, and commits. Runs only when every fixed-spec measuring job succeeded: the regression flag reads them.
-  # bench/RESULTS.md shows the 16-vCPU machine's modes (`wide` and `--checkers` 4, 8 and 16, with bun check);
+  # bench/RESULTS.md shows the Bun comparison modes (`wide` and `--checkers` 4, 8 and 16, with bun check);
   # bench/results/<...>.md has every mode. The results commit also draws bench/large-projects.svg and its dark-theme
-  # twin. If either wide job failed or was cancelled, the results file has the 16-vCPU sections of the other one only,
-  # and the summary tables and chart are left as they were (bench/publish.py needs every project's 16-vCPU cells).
+  # twin. If either wide job failed or was cancelled, the results file has the Bun comparison sections of the other one only,
+  # and the summary tables and chart are left as they were (bench/publish.py needs every project's Bun comparison cells).
   merge:
     needs: [build, measure, measure-wide, measure-watch]
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.measure.result == 'success' }}
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write # pushes the results commit
@@ -701,8 +713,8 @@ jobs:
           path: /tmp/bench-merged
 
       # Only a bench of a commit on main, measured without local changes, is published (the results commit and the
-      # regression comments). A run started from a branch or a dirty worktree (`depot ci run --workflow
-      # .depot/workflows/bench.yml`, which applies the local diff on the runner) ends with the `bench-result` artifact.
+      # regression comments). A dispatch from a branch (`gh workflow run bench.yml --ref <branch>`) ends with the
+      # `bench-result` artifact when the measured commit is not on main.
       - name: Decide whether to publish
         id: publish
         run: |

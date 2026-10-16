@@ -1,7 +1,6 @@
-# Depot CI workflow (https://depot.dev/docs/ci/overview); Depot CI has no macOS sandboxes, so the macOS jobs stay in
-# .github/workflows/. Security: read-only token, no secrets. Runs on pushes to main, on pull requests into main
+# Security: read-only token, no secrets. Runs on pushes to main, on pull requests into main
 # (drafts included, so a branch gets feedback as soon as it is pushed), and on manual dispatch by collaborators.
-# Depot CI does not run pull requests from forks.
+# Fork pull requests follow the repository's approval setting.
 
 name: CI
 
@@ -26,12 +25,17 @@ env:
 
 jobs:
   check-and-test:
-    runs-on: depot-ubuntu-24.04-8
-    timeout-minutes: 60
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
     env:
       TSRS_TEST: target/ci/tsrs-test
       TSRS_FOURSLASH: target/ci/tsrs-fourslash
     steps:
+      - name: Free disk space for builds and benchmark checkouts
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
       - name: Read TypeScript reference commit
@@ -41,20 +45,19 @@ jobs:
       # The conformance tests and the tsoptions unit tests read the reference baselines from ts-ref/tsc/testdata.
       # The testdata checkout (~5 s) is cached per TypeScript commit. Restore it alongside the Rust toolchain; the
       # sparse checkout below runs only on a miss.
-      - parallel:
-          - name: Restore TypeScript testdata
-            id: ts-ref
-            uses: actions/cache/restore@v4
-            with:
-              path: ts-ref/tsc/testdata
-              key: ts-ref-testdata-${{ steps.ts.outputs.commit }}
+      - name: Restore TypeScript testdata
+        id: ts-ref
+        uses: actions/cache/restore@v4
+        with:
+          path: ts-ref/tsc/testdata
+          key: ts-ref-testdata-${{ steps.ts.outputs.commit }}
 
-          # This job warms one cache on main; the other Rust jobs and pull requests only restore it.
-          - name: Set up Rust
-            uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
-            with:
-              save-cache: ${{ github.ref_name == 'main' }}
-              cache-key: warm
+      # This job warms one cache on main; the other Rust jobs and pull requests only restore it.
+      - name: Set up Rust
+        uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: ${{ github.ref_name == 'main' }}
+          cache-key: warm
 
       - name: Check out TypeScript testdata
         if: steps.ts-ref.outputs.cache-hit != 'true'
@@ -155,38 +158,37 @@ jobs:
         id: determinism-keys
         run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack,nuxt,drizzle-orm | tee -a "$GITHUB_OUTPUT"
 
-      - parallel:
-          - name: Restore the bench compilers
-            uses: actions/cache/restore@v4
-            with:
-              path: |
-                bench/.work/suite
-                bench/.work/tsgo
-              key: bench-shared-${{ runner.os }}-${{ steps.determinism-keys.outputs.shared }}
+      - name: Restore the bench compilers
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.determinism-keys.outputs.shared }}
 
-          - name: Restore xstate-main
-            uses: actions/cache/restore@v4
-            with:
-              path: bench/.work/solutions/xstate-main
-              key: bench-xstate-main-${{ runner.os }}-${{ steps.determinism-keys.outputs['xstate-main'] }}
+      - name: Restore xstate-main
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/xstate-main
+          key: bench-xstate-main-${{ runner.os }}-${{ steps.determinism-keys.outputs['xstate-main'] }}
 
-          - name: Restore webpack
-            uses: actions/cache/restore@v4
-            with:
-              path: bench/.work/solutions/webpack
-              key: bench-webpack-${{ runner.os }}-${{ steps.determinism-keys.outputs['webpack'] }}
+      - name: Restore webpack
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/webpack
+          key: bench-webpack-${{ runner.os }}-${{ steps.determinism-keys.outputs['webpack'] }}
 
-          - name: Restore nuxt
-            uses: actions/cache/restore@v4
-            with:
-              path: bench/.work/solutions/nuxt
-              key: bench-nuxt-${{ runner.os }}-${{ steps.determinism-keys.outputs['nuxt'] }}
+      - name: Restore nuxt
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/nuxt
+          key: bench-nuxt-${{ runner.os }}-${{ steps.determinism-keys.outputs['nuxt'] }}
 
-          - name: Restore drizzle-orm
-            uses: actions/cache/restore@v4
-            with:
-              path: bench/.work/solutions/drizzle-orm
-              key: bench-drizzle-orm-${{ runner.os }}-${{ steps.determinism-keys.outputs['drizzle-orm'] }}
+      - name: Restore drizzle-orm
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/drizzle-orm
+          key: bench-drizzle-orm-${{ runner.os }}-${{ steps.determinism-keys.outputs['drizzle-orm'] }}
 
       # A no-op for everything restored above; clones and installs the rest (the bench workflow saves these caches on
       # every push to main, so a miss means a changed pin or an evicted cache).
@@ -211,9 +213,14 @@ jobs:
   # differential against native --singleThreaded (regressions, fixtures, the 2,000-case conformance sample on the
   # node file system and in memory, four bench projects, emit).
   wasm:
-    runs-on: depot-ubuntu-24.04-32
-    timeout-minutes: 60
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
     steps:
+      - name: Free disk space for builds and benchmark checkouts
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
       - name: Read TypeScript reference commit
@@ -238,8 +245,6 @@ jobs:
           sparse-checkout: tsc/testdata
           persist-credentials: false
 
-      # Not in a parallel group: a step there may not keep the PATH it adds (GITHUB_PATH). setup-node's pnpm was lost
-      # that way on #516 ("pnpm: command not found" in the pnpm test step), depending on which step finished last.
       - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
         with:
           save-cache: false
@@ -262,48 +267,45 @@ jobs:
         id: bench-keys
         run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack | tee -a "$GITHUB_OUTPUT"
 
-      # Each build has its own target directory, so that none waits on another's lock. The native binaries are the
-      # gate's reference, not what ships: the ci profile (no LTO) builds them in a third of the release time.
-      - parallel:
-          - name: cargo check (wasm32-wasip1) and cargo test -p tsrs_wasm
-            run: |
-              cargo check -p tsrs_wasm --target wasm32-wasip1 --locked --config 'build.warnings="deny"'
-              cargo test --locked -p tsrs_wasm
+      # Build sequentially to fit a standard runner's memory. The native reference uses the ci profile (no LTO).
+      - name: cargo check (wasm32-wasip1) and cargo test -p tsrs_wasm
+        run: |
+          cargo check -p tsrs_wasm --target wasm32-wasip1 --locked --config 'build.warnings="deny"'
+          cargo test --locked -p tsrs_wasm
 
-          - name: Build the module
-            run: |
-              mkdir -p target
-              CARGO_TARGET_DIR=target/wasm tools/wasm/build.sh | tee target/wasm-size.txt
+      - name: Build the module
+        run: |
+          mkdir -p target
+          CARGO_TARGET_DIR=target/wasm tools/wasm/build.sh | tee target/wasm-size.txt
 
-          - name: Build native binaries
-            run: CARGO_TARGET_DIR=target/native cargo build --profile ci --locked -p tsrs_cli -p tsrs_testrunner
+      - name: Build native binaries
+        run: CARGO_TARGET_DIR=target/native cargo build --profile ci --locked -p tsrs_cli -p tsrs_testrunner
 
-          - name: Restore the bench compilers
-            uses: actions/cache/restore@v4
-            with:
-              path: |
-                bench/.work/suite
-                bench/.work/tsgo
-              key: bench-shared-${{ runner.os }}-${{ steps.bench-keys.outputs.shared }}
+      - name: Restore the bench compilers
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.bench-keys.outputs.shared }}
 
-          - name: Restore xstate-main
-            uses: actions/cache/restore@v4
-            with:
-              path: bench/.work/solutions/xstate-main
-              key: bench-xstate-main-${{ runner.os }}-${{ steps.bench-keys.outputs['xstate-main'] }}
+      - name: Restore xstate-main
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/xstate-main
+          key: bench-xstate-main-${{ runner.os }}-${{ steps.bench-keys.outputs['xstate-main'] }}
 
-          - name: Restore webpack
-            uses: actions/cache/restore@v4
-            with:
-              path: bench/.work/solutions/webpack
-              key: bench-webpack-${{ runner.os }}-${{ steps.bench-keys.outputs['webpack'] }}
+      - name: Restore webpack
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/webpack
+          key: bench-webpack-${{ runner.os }}-${{ steps.bench-keys.outputs['webpack'] }}
 
-      - parallel:
-          - name: pnpm test (npm/tsrs-wasm)
-            run: TSRS_NATIVE=$PWD/target/native/ci/tsrs pnpm --dir npm/tsrs-wasm test
+      - name: pnpm test (npm/tsrs-wasm)
+        run: TSRS_NATIVE=$PWD/target/native/ci/tsrs pnpm --dir npm/tsrs-wasm test
 
-          - name: Set up the bench projects
-            run: python3 bench/run.py --setup-only --projects xstate-main,webpack,Compiler,Compiler-Unions
+      - name: Set up the bench projects
+        run: python3 bench/run.py --setup-only --projects xstate-main,webpack,Compiler,Compiler-Unions
 
       - name: Differential gate
         run: TSRS_TEST=target/native/ci/tsrs-test tools/wasm/gate.sh target/native/ci/tsrs
@@ -323,7 +325,7 @@ jobs:
 
   # docs/RUST.md: every enabled Clippy lint is denied across the full workspace, including generated Fourslash fixtures.
   lint-ratchet:
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
@@ -333,20 +335,19 @@ jobs:
           save-cache: false
           cache-key: warm
 
-      - parallel:
-          - name: Clippy
-            run: cargo clippy --workspace --locked --all-targets --config 'build.warnings="deny"' -- -D dead-code
+      - name: Clippy
+        run: cargo clippy --workspace --locked --all-targets --config 'build.warnings="deny"' -- -D dead-code
 
-          # Unsafe Send/Sync inventory and comments on weakened atomic orderings (docs/RUST.md, "Source checks").
-          - name: Source checks
-            run: python3 tools/lint/source.py --self-test && python3 tools/lint/source.py
+      # Unsafe Send/Sync inventory and comments on weakened atomic orderings (docs/RUST.md, "Source checks").
+      - name: Source checks
+        run: python3 tools/lint/source.py --self-test && python3 tools/lint/source.py
 
   # tools/ci/skip_marker.py: a pull request that changes code must not carry a CI-skip marker in its title, body or
   # commit subjects, because `gh pr merge --squash` copies them into the commit message and the commit then lands on
   # main without CI and without a bench run (bench/README.md "CI"). Notes-only pull requests carry it on purpose.
   skip-marker:
     if: github.event_name == 'pull_request'
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -371,7 +372,7 @@ jobs:
   # tools/gen-check.sh: re-runs the code generators and fails if a generated file differs from its generator's output
   # (docs/RUST.md, "Generated-code freshness check").
   generated-code:
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
@@ -398,14 +399,13 @@ jobs:
             !/tsc/testdata/
           persist-credentials: false
 
-      - parallel:
-          - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-            with:
-              go-version-file: ts-ref/tsc/go.mod
-              cache-dependency-path: ts-ref/tsc/go.sum
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: ts-ref/tsc/go.mod
+          cache-dependency-path: ts-ref/tsc/go.sum
 
-          - name: Benchmark reporting tests
-            run: python3 -m unittest discover -s bench -p test_reporting.py
+      - name: Benchmark reporting tests
+        run: python3 -m unittest discover -s bench -p test_reporting.py
 
       - name: Generated code is up to date
         run: tools/gen-check.sh
@@ -416,9 +416,14 @@ jobs:
   # suite on a `panic = "abort"` release build, which crashed on 44 tests before the fix. tools/lint/source.py
   # (lint job) rejects the direct pattern.
   arena-safety:
-    runs-on: depot-ubuntu-24.04-8
-    timeout-minutes: 40
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
     steps:
+      - name: Free disk space for builds and benchmark checkouts
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
       - name: Read TypeScript reference commit
@@ -490,9 +495,14 @@ jobs:
   # report fails the job. `P<T>` is `Send`/`Sync` by decree, so this is the only check that threads do not race on arena
   # data (#510 fixed the first race it found). Suppressions, each with its reason, are in tools/ci/tsan.supp.
   thread-sanitizer:
-    runs-on: depot-ubuntu-24.04-8
-    timeout-minutes: 45
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
     steps:
+      - name: Free disk space for builds and benchmark checkouts
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
@@ -519,38 +529,37 @@ jobs:
         id: tsan-keys
         run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack | tee -a "$GITHUB_OUTPUT"
 
-      - parallel:
-          - name: Restore the bench compilers
-            uses: actions/cache/restore@v4
-            with:
-              path: |
-                bench/.work/suite
-                bench/.work/tsgo
-              key: bench-shared-${{ runner.os }}-${{ steps.tsan-keys.outputs.shared }}
+      - name: Restore the bench compilers
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.tsan-keys.outputs.shared }}
 
-          - name: Restore xstate-main
-            uses: actions/cache/restore@v4
-            with:
-              path: bench/.work/solutions/xstate-main
-              key: bench-xstate-main-${{ runner.os }}-${{ steps.tsan-keys.outputs['xstate-main'] }}
+      - name: Restore xstate-main
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/xstate-main
+          key: bench-xstate-main-${{ runner.os }}-${{ steps.tsan-keys.outputs['xstate-main'] }}
 
-          - name: Restore webpack
-            uses: actions/cache/restore@v4
-            with:
-              path: bench/.work/solutions/webpack
-              key: bench-webpack-${{ runner.os }}-${{ steps.tsan-keys.outputs['webpack'] }}
+      - name: Restore webpack
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/webpack
+          key: bench-webpack-${{ runner.os }}-${{ steps.tsan-keys.outputs['webpack'] }}
 
-          # Plain pointers: ThreadSanitizer's shadow memory takes the compressed handles' address range. The system
-          # allocator: ThreadSanitizer cannot see mimalloc's reuse of memory across threads (false races).
-          - name: Build tsrs with ThreadSanitizer
-            env:
-              RUSTFLAGS: -Zsanitizer=thread
-              CARGO_PROFILE_RELEASE_STRIP: "false"
-              CARGO_PROFILE_RELEASE_DEBUG: line-tables-only
-              CARGO_TARGET_DIR: target/tsan
-            run: >-
-              cargo +nightly-2026-10-04 build --release --locked -p tsrs_cli -Zbuild-std
-              --features tsrs_core/plain-ptrs,tsrs_cli/system-alloc --target x86_64-unknown-linux-gnu
+      # Plain pointers: ThreadSanitizer's shadow memory takes the compressed handles' address range. The system
+      # allocator: ThreadSanitizer cannot see mimalloc's reuse of memory across threads (false races).
+      - name: Build tsrs with ThreadSanitizer
+        env:
+          RUSTFLAGS: -Zsanitizer=thread
+          CARGO_PROFILE_RELEASE_STRIP: "false"
+          CARGO_PROFILE_RELEASE_DEBUG: line-tables-only
+          CARGO_TARGET_DIR: target/tsan
+        run: >-
+          cargo +nightly-2026-10-04 build --release --locked -p tsrs_cli -Zbuild-std
+          --features tsrs_core/plain-ptrs,tsrs_cli/system-alloc --target x86_64-unknown-linux-gnu
 
       - name: Set up the bench projects
         run: python3 bench/run.py --setup-only --projects xstate-main,webpack

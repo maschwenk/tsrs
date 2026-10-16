@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Probe for the residency slack of a many-checker run (notes/mem-linux-residency-32.md), for
-# .depot/workflows/perf-probe.yml with `--input script=tools/perf/slackprobe.sh`: tools/perf/slackprobe.py on the
+# .github/workflows/perf-probe.yml with `-f script=tools/perf/slackprobe.sh`: tools/perf/slackprobe.py on the
 # projects the workflow set up, with PROBE_ARGS appended. `--base-ref <ref>` (first in PROBE_ARGS) also builds that
 # ref into target-base/ and exposes it as $BASE_BIN, for variants such as `main:BIN=$BASE_BIN`.
 set -euo pipefail

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Probe for the checker assignment (notes/perf-clustered-assignment.md), for .depot/workflows/perf-probe.yml with
-# `--input script=tools/perf/clusterprobe.sh`: builds the branch and its merge base with origin/main as `--release`
+# Probe for the checker assignment (notes/perf-clustered-assignment.md), for .github/workflows/perf-probe.yml with
+# `-f script=tools/perf/clusterprobe.sh`: builds the branch and its merge base with origin/main as `--release`
 # in this same directory, one after the other (a plain release A/B moves check time 15-60 ms on unrelated diffs,
 # notes/perf-front-end-fixed-costs.md), then runs tools/perf/clusterprobe.py on the projects the workflow set up with
 # PROBE_ARGS appended (for example `--reps 10 --checkers 16,32`). Variants: `main` (the merge base), then those PROBE_ARGS

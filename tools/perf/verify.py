@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Before/after check of a tsrs branch: are its diagnostics identical to a base build's, and what did it do to wall
-time, peak memory and instructions? (.depot/workflows/pr-verify.yml; bench/README.md "Verifying a branch".)
+time, peak memory and instructions? (.github/workflows/pr-verify.yml; bench/README.md "Verifying a branch".)
 
     tools/perf/verify.py --base /tmp/verify/base/tsrs --new /tmp/verify/new/tsrs --out verify-out
     tools/perf/verify.py --base ... --new ... --projects xstate-main,webpack --checkers 1,4 --reps 1 --no-poison

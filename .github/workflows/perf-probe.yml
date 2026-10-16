@@ -1,23 +1,9 @@
-# Depot CI workflow: one-off performance probe on a 32-vCPU machine (or the `runner` input's, such as the 8-vCPU
-# `depot-ubuntu-24.04-8` of the README bench), for hill-climbing experiments that need more cores than a laptop, or
-# Linux (notes/perf-*.md). Not scheduled and not triggered by pushes: run it from a branch or a dirty
-# worktree with
-#
-#   depot ci run --workflow .depot/workflows/perf-probe.yml
-#
-# which uploads the local diff against origin/main and applies it on the runner, so the probe script and any tsrs
-# change under test need not be pushed. Builds `cargo build --release -p tsrs_cli` (not the PGO dist build: relative
-# comparisons only; confirm wins with bench-compare.yml), sets up the bench projects named in PROBE_PROJECTS, downloads
-# Bun canary and tsgo, then runs tools/perf/probe.sh, which writes everything it wants to keep to probe-out/. That
-# directory is the `perf-probe` artifact (depot ci artifacts list <run>; depot ci artifacts download <id>).
-# actions/cache is not available to `depot ci run` (API-triggered runs are not tied to a ref), so every run clones and
-# installs its projects (vscode: ~2 min) and builds from scratch (~4 min on 64 cores). A run of a pushed branch with
-#
-#   depot ci dispatch --repo oxc-project/tsrs --workflow perf-probe.yml --ref <branch> --input runner=depot-ubuntu-24.04-8 \
-#     --input projects=vscode,formbricks-web --input script=tools/perf/leafprobe.sh --input probe_args='--reps 5'
-#
-# For an explicit 64-vCPU scaling experiment, pass --input runner=depot-ubuntu-24.04-64.
-# This restores the projects from bench.yml's caches. `script` picks the probe (it gets `probe_args` as PROBE_ARGS).
+# Manual Linux performance probe on a GitHub-hosted runner (bench/README.md).
+# Push the branch, then run:
+#   gh workflow run perf-probe.yml --ref <branch> -f projects=vscode,formbricks-web \
+#     -f script=tools/perf/leafprobe.sh -f probe_args='--reps 5'
+# Builds the release binary for relative comparisons, restores bench.yml's project caches and runs the selected
+# script. Download probe-out/ with `gh run download <run-id> -n perf-probe`.
 
 name: Perf probe
 
@@ -28,8 +14,8 @@ on:
         description: comma-separated bench/projects.json names to set up
         default: vscode
       runner:
-        description: Depot runner label
-        default: depot-ubuntu-24.04-32
+        description: GitHub-hosted Linux x64 runner label
+        default: ubuntu-24.04
       script:
         description: probe script to run with bash
         default: tools/perf/probe.sh
@@ -46,23 +32,25 @@ env:
 
 jobs:
   probe:
-    runs-on: ${{ inputs.runner || 'depot-ubuntu-24.04-32' }}
-    timeout-minutes: 120
+    runs-on: ${{ inputs.runner || 'ubuntu-24.04' }}
+    timeout-minutes: 240
     steps:
-      # actions/checkout: `depot ci run` applies the local diff only after this step.
+      - name: Free disk space for builds and benchmark checkouts
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-
-      # `depot ci run` applies the local diff right after the checkout, unstaged. oxc-project/setup-rust ends with
-      # `git restore .`, which would drop it; staging it keeps it.
-      - name: Keep the local diff
-        run: git add -A
 
       - name: Runner hardware
         run: |
           nproc; free -g; uname -r
           lscpu | grep -E 'Model name|^CPU\(s\)|Thread|Socket|NUMA' || true
+          if [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected x86_64, got $(uname -m)"; exit 1
+          fi
           mkdir -p probe-out
           { nproc; lscpu; free -g; } > probe-out/machine.txt
 
@@ -83,12 +71,12 @@ jobs:
         with:
           components: llvm-tools
           save-cache: true
-          cache-key: perf-probe-${{ inputs.runner || 'depot-ubuntu-24.04-32' }}
+          cache-key: perf-probe-${{ inputs.runner || 'ubuntu-24.04' }}
 
       - name: Install x86_64-unknown-linux-gnu target
         run: rustup target add x86_64-unknown-linux-gnu
 
-      # bench.yml's caches (restore only; dispatched runs of a pushed branch get them, `depot ci run` does not).
+      # bench.yml's caches (restore only).
       - name: Cache keys
         id: keys
         run: python3 bench/run.py --print-cache-keys --projects "$PROBE_PROJECTS" | tee -a "$GITHUB_OUTPUT"

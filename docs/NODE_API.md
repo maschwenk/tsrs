@@ -78,7 +78,7 @@ The API was developed in parallel lanes; the names stay in use below and in the 
 | codec | `crates/tsrs_api_codec` (AST binary encoder/decoder, string table, node index tables, source-file id) |
 | checker | `crates/tsrs_api/src/checker.rs`, `crates/tsrs_api/src/checker/**`, necessary checker exports |
 | sdk | `npm/**` (ported `unstable/sync` / `unstable/async` client, AST package, Node tests) |
-| parity | `tools/node-api/**`, `.depot/workflows/node-api.yml`, `.github/workflows/node-api.yml` |
+| parity | `tools/node-api/**`, `.github/workflows/node-api.yml` |
 
 ## Integration contract (Rust)
 

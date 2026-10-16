@@ -2,7 +2,7 @@
 """Draw the README's chart from a recorded benchmark result.
 
 Two panels of three bars: tsrs's, bun check's and tsgo's check time and peak memory, each summed over the projects
-of bench/projects.json, all three at the same thread count on the 16-vCPU machine (4, tsgo's default, when the result
+of bench/projects.json, all three at the same thread count on the recorded machine (4, tsgo's default, when the result
 has it). Shorter is better.
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ import run
 # Drawn top to bottom; bun check only when the result measured it on every project.
 COMPILERS = ("tsrs", "bun", "tsgo")
 NAMES = {"tsrs": "tsrs", "bun": "bun check", "tsgo": "tsgo"}
-# The 16-vCPU machine's equal-thread modes (bench/run.py WIDE_CHECKER_MODES; bench/publish.py publishes their tables).
+# The Bun comparison equal-thread modes (bench/run.py WIDE_CHECKER_MODES; bench/publish.py publishes their tables).
 POINTS = run.WIDE_CHECKER_MODES
 # The mode a result must have for the chart to be drawn (bench/publish.py). The chart uses the fewest threads every
 # project was measured at: 4 since the 4-thread mode exists, 16 for older results.

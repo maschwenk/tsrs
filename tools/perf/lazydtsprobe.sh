@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Probe for lazily parsed declaration-file member lists (notes/mem-lazy-dts-members.md), for
-# .depot/workflows/perf-probe.yml with `--input script=tools/perf/lazydtsprobe.sh`: builds origin/main next to the
+# .github/workflows/perf-probe.yml with `-f script=tools/perf/lazydtsprobe.sh`: builds origin/main next to the
 # branch build, then runs tools/perf/leafprobe.py on the projects the workflow set up with two interleaved variants:
 # main's binary and this binary as it ships. PROBE_ARGS is appended (for example `--reps 10 --checkers 32 --no-strace`;
 # `--variant off:TSRS_LAZY_DTS=0` adds this binary with the mode off).

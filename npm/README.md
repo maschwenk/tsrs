@@ -180,7 +180,7 @@ What maintainers must configure before the first release:
 - GNU binaries are built on Ubuntu 22.04, so they need glibc >= 2.35 at most (a build on Debian 12 needed 2.34).
   Musl binaries are statically linked for Alpine/musl.
 
-`.depot/workflows/ci.yml` (Depot CI; pushes to main, pull requests into main, manual dispatch): `cargo check
+`.github/workflows/ci.yml` (GitHub Actions; pushes to main, pull requests into main, manual dispatch): `cargo check
 --workspace` with warnings denied, `cargo test` for the fast crates, a release build, the conformance and fourslash
 gates, the determinism gate, a pnpm install smoke test of the packed tarballs, the WebAssembly build and differential
 gate, the lint ratchet, and the skip-marker, generated-code and arena-safety jobs.

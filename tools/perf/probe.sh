@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Default probe for .depot/workflows/perf-probe.yml: the checker-count scaling curve of tsrs on vscode with per-checker
+# Default probe for .github/workflows/perf-probe.yml: the checker-count scaling curve of tsrs on vscode with per-checker
 # CPU times, plus bun check's load/check split, on the selected runner. Experiments replace or extend this script in
 # their branch; keep everything worth keeping under $PROBE_OUT.
 #

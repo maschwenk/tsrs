@@ -2,7 +2,7 @@
 """Watch-mode benchmark: tsrs --watch against tsgo --watch on one project (bench/README.md "Watch mode").
 
     python3 bench/watch.py --local                                  # vscode, 3 sessions of each compiler
-    python3 bench/watch.py --tsrs <binary> --out-dir <dir>          # the CI job (.depot/workflows/bench.yml)
+    python3 bench/watch.py --tsrs <binary> --out-dir <dir>          # the CI job (.github/workflows/bench.yml)
 
 Each session starts `<compiler> --watch -p <project> --noEmit --preserveWatchOutput --pretty false` (no thread
 flags) and makes edits to one leaf file (a file nothing imports), each after the previous cycle has settled:

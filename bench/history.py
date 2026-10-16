@@ -7,11 +7,11 @@
 Orders bench/results/*.json by the first-parent history of `--branch` (oldest first; a result whose commit is not on
 that branch is left out unless --all, which appends such results by date) and prints one table per metric: a row per
 result, a column per project, each cell the value and its change against the row above, which with one bench per push
-(.depot/workflows/bench.yml) is the previous merge. Hardware or compiler-build changes start a new baseline
+(.github/workflows/bench.yml) is the previous merge. Hardware or compiler-build changes start a new baseline
 instead of reporting a percentage against an incompatible result. Metrics: `instructions` and `peak` are the single-threaded
 instruction count and peak RSS from bench/count.py (deterministic to ~0.001% and ~0.4%: a change is the code's);
-`wall` is the default-mode wall on the fixed 8-vCPU runner (noisy, up to 10-20% between runs of the same code);
-`wide_wall` and `wide_peak` are the wider runner's default-mode wall and peak, with `bun check`'s wall beside the wall. A cell
+`wall` is the default-mode wall on the fixed-spec runner (noisy, up to 10-20% between runs of the same code);
+`wide_wall` and `wide_peak` are the Bun comparison's default-mode wall and peak, with `bun check`'s wall beside the wall. A cell
 past the thresholds of bench/regressions.py (instructions or peak up more than 1%, and peak by more than 2 MiB) is
 marked `!`; a wall or wide-peak change next to an instruction change under 0.3% is marked `~`: the code did not
 change, so that is the runner's noise (a median 2%, up to 10%, between publishes of the same code on 2026-10-07). Use it to find which commit cost what, and whether a commit's gain was worth its cost.

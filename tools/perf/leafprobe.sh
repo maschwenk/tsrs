@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Probe for leaf-file freeing (notes/mem-leaf-regions-cost.md), for .depot/workflows/perf-probe.yml with
-# `--input script=tools/perf/leafprobe.sh`: tools/perf/leafprobe.py on the projects the workflow set up, with
+# Probe for leaf-file freeing (notes/mem-leaf-regions-cost.md), for .github/workflows/perf-probe.yml with
+# `-f script=tools/perf/leafprobe.sh`: tools/perf/leafprobe.py on the projects the workflow set up, with
 # PROBE_ARGS appended (for example `--reps 20 --checkers 1,4,8 --no-strace`).
 set -euo pipefail
 : "${TSRS_BIN:?}" "${BENCH_WORK:?}" "${PROBE_OUT:?}"

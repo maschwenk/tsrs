@@ -5,7 +5,7 @@
   tools/ci/skip_marker.py --self-test
 
 `gh pr merge --squash` builds the commit message from the pull request's title and body, or for a pull request of
-several commits from the list of their subjects, and GitHub Actions and Depot CI skip a push whose message carries a
+several commits from the list of their subjects, and GitHub Actions skips a push whose message carries a
 marker such as "[skip ci]" anywhere in it. A notes-only pull request carries the marker in its title on purpose, so
 that prose does not start a bench run. A pull request that changes anything else must not carry one anywhere: on
 2026-10-07 two code changes landed on main without CI and without a results file because their bodies and commit

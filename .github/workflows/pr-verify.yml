@@ -1,29 +1,22 @@
-# Depot CI workflow: before/after check of a branch on a 32-vCPU machine by default (bench/README.md "Verifying a branch").
+# GitHub Actions workflow: before/after check of a branch on a GitHub-hosted Linux x64 runner (bench/README.md "Verifying a branch").
 # Builds the branch's tsrs and the tsrs of its merge base with `base` (`cargo build --release` of each: relative
 # comparisons only, as in perf-probe.yml), then runs tools/perf/verify.py on the bench projects: identical
 # diagnostics and exit codes at each checker count, wall time, peak RSS and check time before/after, instructions of
 # one single-threaded run, and one run with poisoned arenas. The run fails when any diagnostic differs, so its status
 # answers "is this branch exact". The table is the `pr-verify` artifact (verify-out/) and the job summary.
 #
-# Three ways to start it:
-#   depot ci run --workflow .depot/workflows/pr-verify.yml       # any branch or dirty worktree; the inputs below take
-#                                                                # their defaults (edit them in the working copy to change)
-#   depot ci dispatch --repo oxc-project/tsrs --workflow pr-verify.yml --ref <pushed branch> --input projects=vscode
-#   a pull request into main that changes crates/: runs on every push and posts the table as a comment; for a pull
-#   request that changes nothing under crates/ (a Cargo.lock bump, the bench harness) the `verify` label starts it
-# A `depot ci run` is not tied to a ref, so Depot skips actions/cache there: every project is cloned and installed
-# (bench/README.md "Verifying a branch" has the durations). Dispatched and pull request runs restore bench.yml's caches.
+# Start with `gh workflow run pr-verify.yml --ref <pushed-branch> -f projects=vscode`, or open a pull request into
+# main that changes crates/. Other pull requests opt in with the verify label. Runs restore bench.yml's caches.
+# Same-repository pull requests receive a result comment; fork pull requests retain the artifact and job summary.
 
 name: PR verify
 
 on:
   workflow_dispatch:
     inputs:
-      cpus:
-        description: Depot vCPU count (checker counts may exceed this)
-        type: choice
-        options: ["16", "32", "64"]
-        default: "32"
+      runner:
+        description: GitHub-hosted Linux x64 runner label
+        default: ubuntu-24.04
       base:
         description: branch to compare against (the baseline is the merge base of this commit and origin/<base>)
         default: main
@@ -58,8 +51,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  # `depot ci run` and pull request runs have no inputs; these fallbacks are the defaults above.
-  RUNNER_CPUS: ${{ inputs.cpus || '32' }}
+  # Pull request runs have no inputs; these fallbacks are the defaults above.
   BASE: ${{ inputs.base || 'main' }}
   PROJECTS: ${{ inputs.projects || 'all' }}
   CHECKERS: ${{ inputs.checkers || '1,4,16,32' }}
@@ -71,7 +63,7 @@ jobs:
   # label. Adding some other label does not start another run. Dispatched runs always run. A job of its own because
   # the list of changed files is not in the event payload.
   gate:
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       pull-requests: read
@@ -109,27 +101,27 @@ jobs:
   verify:
     needs: gate
     if: needs.gate.outputs.run == 'true'
-    runs-on: ${{ format('depot-ubuntu-24.04-{0}', inputs.cpus || '32') }}
-    timeout-minutes: 120
+    runs-on: ${{ inputs.runner || 'ubuntu-24.04' }}
+    timeout-minutes: 240
     outputs:
       identical: ${{ steps.verify.outputs.identical }}
     steps:
+      - name: Free disk space for builds and benchmark checkouts
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0 # the merge base with origin/<base>
           persist-credentials: false
 
-      # `depot ci run` applies the local diff right after the checkout, unstaged. oxc-project/setup-rust ends with
-      # `git restore .`, which would drop it; staging it keeps it.
-      - name: Keep the local diff
-        run: git add -A
-
       - name: Runner hardware
         run: |
           nproc; free -g; df -h / | tail -1
           lscpu | grep -E 'Model name|^CPU\(s\)' || true
-          if [ "$(nproc)" != "$RUNNER_CPUS" ] || [ "$(uname -m)" != x86_64 ]; then
-            echo "::error::expected $RUNNER_CPUS vCPU x86_64, got $(nproc) vCPU $(uname -m)"; exit 1
+          if [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected x86_64, got $(uname -m)"; exit 1
           fi
           python3 -c 'import os; assert all(int(n) > 0 for n in os.environ["CHECKERS"].split(",")), "checker counts must be positive"'
 
@@ -290,16 +282,15 @@ jobs:
           git worktree add -q --detach /tmp/verify/base-src "$base"
           mkdir -p /tmp/verify/new /tmp/verify/base
 
-      # Both release builds at once (separate target dirs; one build does not use 64 cores for most of its time).
-      - parallel:
-          - name: Build tsrs at the base commit (release)
-            working-directory: /tmp/verify/base-src
-            env:
-              CARGO_TARGET_DIR: /tmp/verify/base-target
-            run: cargo build --release --locked -p tsrs_cli
+      # Build sequentially to fit a standard runner's memory; keep each revision's target directory separate.
+      - name: Build tsrs at the base commit (release)
+        working-directory: /tmp/verify/base-src
+        env:
+          CARGO_TARGET_DIR: /tmp/verify/base-target
+        run: cargo build --release --locked -p tsrs_cli
 
-          - name: Build tsrs on the branch (release)
-            run: cargo build --release --locked -p tsrs_cli
+      - name: Build tsrs on the branch (release)
+        run: cargo build --release --locked -p tsrs_cli
 
       - name: Stage and check both binaries
         run: |
@@ -342,8 +333,9 @@ jobs:
     needs: verify
     if: >-
       always() && github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
       (needs.verify.result == 'success' || needs.verify.result == 'failure')
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       pull-requests: write

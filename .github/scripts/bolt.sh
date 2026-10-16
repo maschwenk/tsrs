@@ -13,7 +13,7 @@
 # Needs llvm-bolt and merge-fdata (LLVM release matching rustc's LLVM) on PATH, ts-ref/tsc/testdata, and the bench
 # projects pgo-train.sh set up in <bench work dir>.
 #
-# BOLT_TSRS_ONLY=1 (.depot/workflows/bench.yml): only tsrs, whose BOLT training and byte comparison are the same as
+# BOLT_TSRS_ONLY=1 (.github/workflows/bench.yml): only tsrs, whose BOLT training and byte comparison are the same as
 # above; <dist dir> then needs no tsrs-test or tsrs-fourslash, and the suite gates (release.yml's job) are not run.
 set -euo pipefail
 

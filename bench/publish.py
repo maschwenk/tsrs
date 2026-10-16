@@ -3,7 +3,7 @@
 
     python3 bench/publish.py bench/results/<date>-<commit>.json
 
-Older backfills and runs without the 16-vCPU results (wide and checkers16) keep the existing report and chart.
+Older backfills and runs without the Bun comparison results (wide and checkers16) keep the existing report and chart.
 """
 
 import argparse
@@ -16,8 +16,8 @@ import chart
 import run
 
 REPO = run.REPO
-# The summary tables, all from the 16-vCPU machine: each compiler at its own default, then both at 4 (tsgo's default),
-# 8 and 16 (tsrs's default there) checker threads, the chart's points. Modes a result lacks are skipped.
+# The summary tables, all from the Bun comparison jobs: each compiler at its own default, then both at 4 (tsgo's default),
+# 8 and 16 checker threads, the chart's points. Modes a result lacks are skipped.
 PUBLISHED_MODES = ["wide", *chart.POINTS.values()]
 
 
@@ -39,7 +39,7 @@ def picture(stem: str, alt: str) -> str:
 
 def publish(result_path: Path, report: Path, image_path: Path) -> bool:
     result = json.loads(result_path.read_text())
-    # Both 16-vCPU jobs must have finished: with one, the tables and chart would show half the projects.
+    # Both Bun comparison jobs must have finished: with one, the tables and chart would show half the projects.
     for mode in ("wide", chart.MODE):
         if mode not in result["modes"] or not all(mode in p for p in result["projects"].values()):
             print(f"No {mode} results for every project; keeping the latest report and chart.")

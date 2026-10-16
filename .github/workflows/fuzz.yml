@@ -1,4 +1,4 @@
-# Depot CI workflow: nightly differential fuzzing of the parser against tsgo's (tools/fuzz/parser.py, docs/RUST.md
+# GitHub Actions workflow: nightly differential fuzzing of the parser against tsgo's (tools/fuzz/parser.py, docs/RUST.md
 # "Differential fuzzing"). A failed run means the Rust parser built a different AST from Go's for some input; the
 # inputs, their parse flags and the diff of the two dumps are in the `fuzz-findings` artifact.
 
@@ -17,8 +17,8 @@ env:
 
 jobs:
   parser:
-    runs-on: depot-ubuntu-24.04-8
-    timeout-minutes: 45
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
@@ -57,7 +57,7 @@ jobs:
 
       # A new seed every day; the seed is printed, so a finding can be reproduced locally.
       - name: Fuzz the parser
-        run: python3 tools/fuzz/parser.py --rounds 50 --per-round 4000 --seed "$(date -u +%Y%m%d)" --jobs 8
+        run: python3 tools/fuzz/parser.py --rounds 50 --per-round 4000 --seed "$(date -u +%Y%m%d)" --jobs "$(nproc)"
 
       - name: Upload findings
         if: failure()
