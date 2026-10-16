@@ -2863,22 +2863,35 @@ pub(crate) fn get_name_from_index_info(info: P<IndexInfo>) -> String {
 
 impl Checker {
     // checker.go:28273
+    #[expect(clippy::inline_always, reason = "measured: plain #[inline] leaves one hot call out of line (notes/perf-checker-inline-cold.md)")]
+    #[inline(always)]
     pub(crate) fn is_unknown_like_union_type(&mut self, t: P<Type>) -> bool {
-        if self.strict_null_checks && t.flags().intersects(TypeFlags::Union) {
-            if !t.object_flags_lazy().intersects(ObjectFlags::IsUnknownLikeUnionComputed) {
-                t.object_flags.set(t.object_flags_lazy() | ObjectFlags::IsUnknownLikeUnionComputed);
-                let types = t.types();
-                if types.len() >= 3
-                    && types[0].flags().intersects(TypeFlags::Undefined)
-                    && types[1].flags().intersects(TypeFlags::Null)
-                    && types.iter().any(|&t| self.is_empty_anonymous_object_type(t))
-                {
-                    t.object_flags.set(t.object_flags_lazy() | ObjectFlags::IsUnknownLikeUnion);
-                }
-            }
-            return t.object_flags_lazy().intersects(ObjectFlags::IsUnknownLikeUnion);
+        if !self.strict_null_checks || !t.flags().intersects(TypeFlags::Union) {
+            return false;
         }
-        false
+        let flags = t.object_flags_lazy();
+        if flags.intersects(ObjectFlags::IsUnknownLikeUnionComputed) {
+            return flags.intersects(ObjectFlags::IsUnknownLikeUnion);
+        }
+        self.compute_is_unknown_like_union_type(t)
+    }
+
+    /// Computes the memoized answer once; repeated relation checks take the inline flag-only path above.
+    #[cold]
+    #[inline(never)]
+    fn compute_is_unknown_like_union_type(&mut self, t: P<Type>) -> bool {
+        debug_assert!(self.strict_null_checks && t.flags().intersects(TypeFlags::Union));
+        debug_assert!(!t.object_flags_lazy().intersects(ObjectFlags::IsUnknownLikeUnionComputed));
+        t.object_flags.set(t.object_flags_lazy() | ObjectFlags::IsUnknownLikeUnionComputed);
+        let types = t.types();
+        if types.len() >= 3
+            && types[0].flags().intersects(TypeFlags::Undefined)
+            && types[1].flags().intersects(TypeFlags::Null)
+            && types.iter().any(|&t| self.is_empty_anonymous_object_type(t))
+        {
+            t.object_flags.set(t.object_flags_lazy() | ObjectFlags::IsUnknownLikeUnion);
+        }
+        t.object_flags_lazy().intersects(ObjectFlags::IsUnknownLikeUnion)
     }
 
     // Return true the given type is a primitive union type where no two literal type constituents are
