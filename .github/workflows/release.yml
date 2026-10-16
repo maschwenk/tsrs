@@ -1,6 +1,6 @@
 # Builds the tsrs binaries and the WebAssembly module, publishes the npm packages, then creates the GitHub release,
-# using docs/releases/<workspace version>.md for its notes. All packages use the
-# version npm/build.mjs derives from Cargo.toml. The conformance and fourslash gates run here on the BOLT-optimized
+# using docs/releases/<workspace version>.md for its notes. Bump the root package.json version on main to release;
+# it must match the npm version npm/build.mjs derives from Cargo.toml. The conformance and fourslash gates run here on the BOLT-optimized
 # GNU binaries (.github/scripts/bolt.sh). The macOS binary gets only the smoke tests below; nothing runs the suites
 # on macOS (.github/workflows/ci.yml, Linux only, gates the source). The broader WebAssembly differential gate
 # (tools/wasm/gate.sh) is preserved in the disabled ci.yml.bak.
@@ -8,7 +8,7 @@
 # Setup before the first release:
 #   - npm trusted publishers for `tsrs`, `@tsrs/wasm` and every platform package: GitHub Actions,
 #     repository oxc-project/tsrs, workflow release.yml, no environment, with direct publishing allowed.
-#   - tag pushes `v<workspace version>` or `v<npm version>` (node npm/build.mjs --print-version), e.g. v0.1.0.
+#   - root package.json version set to `node npm/build.mjs --print-version` when preparing a release.
 # Provenance (`pnpm publish --provenance`) is only possible from a public repository; it is enabled automatically
 # when the repository is public and skipped while it is private.
 
@@ -16,7 +16,8 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths: [package.json]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -37,31 +38,51 @@ env:
 
 jobs:
   version:
+    if: github.repository == 'oxc-project/tsrs'
     runs-on: ubuntu-22.04
     outputs:
+      release: ${{ github.event_name == 'workflow_dispatch' || steps.check.outputs.changed == 'true' }}
       version: ${{ steps.v.outputs.version }}
+      crate_version: ${{ steps.v.outputs.crate_version }}
       ts_commit: ${{ steps.v.outputs.ts_commit }}
       ts_nightly: ${{ steps.v.outputs.ts_nightly }}
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
       - name: Set up Node
-        # The helpers use Node 24, including import.meta.main.
         uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
         with:
           registry-url: ""
-      - name: Validate release tag and notes
+      - name: Check version changes
+        if: github.event_name == 'push'
+        id: check
+        uses: EndBug/version-check@095362f3cd50f690c8fa0e6afeea81834bd8d320 # v3.0.0
+        with:
+          static-checking: localIsNew
+          file-name: package.json
+          file-url: https://registry.npmjs.org/tsrs/latest
+      - name: Validate release version and notes
+        if: github.event_name == 'workflow_dispatch' || steps.check.outputs.changed == 'true'
+        id: v
         env:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
-        run: node .github/scripts/github-release.mjs preflight
-      - id: v
         run: |
-          if [ "$GITHUB_REF_TYPE" = tag ]; then node npm/build.mjs --check-tag "$GITHUB_REF_NAME"; fi
-          echo "version=$(node npm/build.mjs --print-version)" >> "$GITHUB_OUTPUT"
+          if [ "$DRY_RUN" != true ] && [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::Real releases must run from main."
+            exit 1
+          fi
+          version=$(node -p 'require("./package.json").version')
+          expected=$(node npm/build.mjs --print-version)
+          [ "$version" = "$expected" ] || { echo "::error::package.json version $version does not match $expected from Cargo.toml"; exit 1; }
+          crate_version=$(node npm/build.mjs --print-crate-version)
+          test -s "docs/releases/$crate_version.md" || { echo "::error::Missing release notes for $crate_version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "crate_version=$crate_version" >> "$GITHUB_OUTPUT"
           echo "ts_commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
           echo "ts_nightly=$(node npm/build.mjs --print-typescript-nightly)" >> "$GITHUB_OUTPUT"
       # The binaries stamp `nightly` as TypeScript's version (Cargo.toml): it must be built from the pinned commit, or
       # from a later one that changes nothing under tsc/, or tsbuildinfo files would claim to come from another tsgo.
       - name: Check the TypeScript nightly against the pinned commit
+        if: github.event_name == 'workflow_dispatch' || steps.check.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -85,6 +106,7 @@ jobs:
   build:
     name: build ${{ matrix.target }}
     needs: version
+    if: needs.version.outputs.release == 'true'
     env:
       # TypeScript's version in the binary (Cargo.toml [workspace.metadata.typescript] nightly).
       TSRS_TS_VERSION: ${{ needs.version.outputs.ts_nightly }}
@@ -212,6 +234,7 @@ jobs:
 
   check:
     needs: version
+    if: needs.version.outputs.release == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
@@ -224,6 +247,7 @@ jobs:
   # Musl uses static dist builds without PGO/BOLT.
   build-musl:
     needs: version
+    if: needs.version.outputs.release == 'true'
     env:
       # TypeScript's version in the binary (Cargo.toml [workspace.metadata.typescript] nightly).
       TSRS_TS_VERSION: ${{ needs.version.outputs.ts_nightly }}
@@ -261,6 +285,7 @@ jobs:
   # tarball installed and run before it is handed to the publish job.
   wasm:
     needs: version
+    if: needs.version.outputs.release == 'true'
     env:
       # TypeScript's version in the binary (Cargo.toml [workspace.metadata.typescript] nightly).
       TSRS_TS_VERSION: ${{ needs.version.outputs.ts_nightly }}
@@ -382,19 +407,18 @@ jobs:
         run: node .github/scripts/wait-for-npm-packages.mjs --release npm/dist/packages.json wasm-dist/packages.json
 
   github-release:
-    needs: publish
-    if: github.ref_type == 'tag' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run)
+    needs: [version, publish]
+    if: github.event_name != 'workflow_dispatch' || !inputs.dry_run
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     permissions:
       contents: write
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
-      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
-        with:
-          registry-url: ""
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          DRY_RUN: "false"
-        run: node .github/scripts/github-release.mjs publish
+          VERSION: ${{ needs.version.outputs.crate_version }}
+        run: >-
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"
+          --title "TSRS $VERSION" --notes-file "docs/releases/$VERSION.md" --prerelease=false --latest

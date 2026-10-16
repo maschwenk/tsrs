@@ -1,5 +1,6 @@
 {
     "name": "tsrs-tooling",
+    "version": "0.16.0-ts7.1.0-dev.20260929",
     "private": true,
     "packageManager": "pnpm@12.10.1"
 }

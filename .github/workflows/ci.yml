@@ -60,9 +60,6 @@ jobs:
           sparse-checkout: tsc/testdata
           persist-credentials: false
 
-      - name: Release tooling
-        # Release helpers only mock GitHub and npm; this step cannot publish anything.
-        run: node --test .github/scripts/*.test.mjs
       - name: cargo check
         run: cargo check --workspace --exclude tsrs_fourslash --locked --config 'build.warnings="deny"'
       - name: Request filesystem Go fixtures

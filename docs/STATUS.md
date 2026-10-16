@@ -29,8 +29,9 @@ the pinned upstream sources. The watch checks require FSEvents access outside th
 release dry run on `d5682df5` (before the version bump)
 [passed](https://github.com/oxc-project/tsrs/actions/runs/38918398638): all five native targets, WebAssembly and the
 packaging/publish dry run. The local 0.16.0 binary was rebuilt with the nightly stamp; both conformance gates and
-the packed CLI/API smoke pass with no lost passing baselines. The release workflow publishes the
-[GitHub release notes](releases/0.16.0.md) after all npm packages are available.
+the packed CLI/API smoke pass with no lost passing baselines. Bumping the root `package.json` version on `main`
+triggers `release.yml`; it must match the npm version derived from `Cargo.toml`. The workflow publishes the
+[GitHub release notes](releases/0.16.0.md) with `gh release create` after all npm packages are available.
 
 ## 2026-10-14: 0.15.0 release
 
