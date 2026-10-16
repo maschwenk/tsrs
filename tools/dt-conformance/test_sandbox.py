@@ -6,12 +6,34 @@ from pathlib import Path
 import tempfile
 import time
 import unittest
+from unittest import mock
 
-from sandbox import copy_outputs, launch
+from sandbox import UNPRIVILEGED_UID, copy_outputs, launch
 
 
 IMAGE = os.environ.get("TSRS_DT_CONFORMANCE_SANDBOX_IMAGE")
 WORKER = Path(__file__).with_name("run.py").resolve()
+
+
+class ContainerIdentityTests(unittest.TestCase):
+    def test_root_host_uses_an_unprivileged_container_identity(self):
+        with tempfile.TemporaryDirectory(prefix="tsrs-dt-root-host-") as temporary:
+            root = Path(temporary)
+            work = root / "work"
+            request = root / "request.json"
+            request.write_text("{}")
+            completed = mock.Mock(returncode=0)
+            with mock.patch("sandbox.os.getuid", return_value=0), mock.patch("sandbox.os.getgid", return_value=0), \
+                    mock.patch("sandbox.os.chown") as chown, mock.patch("sandbox.subprocess.run", return_value=completed) as run:
+                result = launch("image", WORKER, root / "typescript", root / "candidate", root / "platform",
+                                work, request, root / "sandbox.log", 30)
+            self.assertEqual(result, {"exit": 0, "timeout": False})
+            command = run.call_args_list[0].args[0]
+            self.assertEqual(command[command.index("--user") + 1], f"{UNPRIVILEGED_UID}:{UNPRIVILEGED_UID}")
+            chown.assert_has_calls([
+                mock.call(work, UNPRIVILEGED_UID, UNPRIVILEGED_UID),
+                mock.call(work / "tmp", UNPRIVILEGED_UID, UNPRIVILEGED_UID),
+            ])
 
 
 @unittest.skipUnless(IMAGE, "set TSRS_DT_CONFORMANCE_SANDBOX_IMAGE to run the Docker isolation smoke")

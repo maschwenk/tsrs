@@ -12,10 +12,20 @@ import tempfile
 import uuid
 
 
+UNPRIVILEGED_UID = 65532
+
+
 def launch(image: str, worker: Path, typescript: Path, candidate_package: Path, candidate_platform: Path,
            work: Path, request: Path, log: Path, timeout: float) -> dict:
-    if os.getuid() == 0:
-        raise ValueError("Run DefinitelyTyped conformance as a non-root host user")
+    (work / "tmp").mkdir(parents=True)
+    container_uid = os.getuid()
+    container_gid = os.getgid()
+    if container_uid == 0:
+        # Depot CI sandboxes may run the host step as root. Do not carry that identity into the untrusted container;
+        # give a numeric nobody-like user only the private work mount instead.
+        container_uid = container_gid = UNPRIVILEGED_UID
+        os.chown(work, container_uid, container_gid)
+        os.chown(work / "tmp", container_uid, container_gid)
     name = "tsrs-dt-conformance-" + uuid.uuid4().hex
     mounts = [
         (worker, "/harness/tools/dt-conformance/run.py", True),
@@ -27,14 +37,13 @@ def launch(image: str, worker: Path, typescript: Path, candidate_package: Path, 
     ]
     command = [
         "docker", "run", "--pull=never", "--name", name, "--label", "tsrs.dt-conformance", "--init",
-        "--read-only", "--user", f"{os.getuid()}:{os.getgid()}", "--cap-drop=ALL",
+        "--read-only", "--user", f"{container_uid}:{container_gid}", "--cap-drop=ALL",
         "--security-opt=no-new-privileges", "--pids-limit=4096", "--network=bridge", "--workdir=/work",
         "--env=HOME=/work/home", "--env=TMPDIR=/work/tmp", "--entrypoint=python3",
     ]
     for path, target, readonly in mounts:
         command += ["--mount", f"type=bind,source={path.resolve()},target={target}" + (",readonly" if readonly else "")]
     command += [image, "-B", "/harness/tools/dt-conformance/run.py", "_suite"]
-    (work / "tmp").mkdir(parents=True)
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("w") as output:
         try:

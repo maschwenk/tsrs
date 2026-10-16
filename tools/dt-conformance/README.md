@@ -13,9 +13,10 @@ general lint checks are intentionally skipped; `--expectOnly` still checks compi
 One container holds the checkout, script-disabled install with DT's pinned pnpm version and both compiler runs. DT
 intentionally disables its lockfile, as in TypeScript's own DT pipeline; sharing one installed tree keeps the
 differential comparison consistent. dtslint may use child processes inside that container, but packages are not
-split across containers or machines. The container runs as the host's non-root user with a read-only root, all
-capabilities dropped, no privilege escalation, no credentials or Docker socket, and only read-only compiler/package
-inputs. Its private scratch directory is deleted after outputs are copied without following symlinks.
+split across containers or machines. The container always runs as a non-root user (including on a root-hosted CI
+runner) with a read-only root, all capabilities dropped, no privilege escalation, no credentials or Docker socket,
+and only read-only compiler/package inputs. Its private scratch directory is deleted after outputs are copied without
+following symlinks.
 
 For a local run, first prepare the same inputs as CI: a pinned TypeScript checkout with `packages/typescript` built and
 `built/local/tsc`, plus staged `tsrs` and `tsrs-linux-x64-gnu` directories from `npm/build.mjs`. Then run:

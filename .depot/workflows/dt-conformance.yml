@@ -45,6 +45,11 @@ jobs:
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
+      - name: Initialize diagnostic output
+        run: |
+          mkdir -p dt-conformance/results
+          id > dt-conformance/results/runner.txt
+
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
 
       - name: Read TypeScript reference commit
@@ -72,15 +77,21 @@ jobs:
 
       - name: Test harness result handling
         run: |
-          python3 -m unittest discover -s tools/dt-conformance -p 'test_run.py' -v
-          python3 -m unittest discover -s tools/repo-conformance -p 'test_run.py' -k definitely_typed -v
+          set -o pipefail
+          python3 -m unittest discover -s tools/dt-conformance -p 'test_run.py' -v 2>&1 \
+            | tee dt-conformance/results/harness-tests.log
+          python3 -m unittest discover -s tools/repo-conformance -p 'test_run.py' -k definitely_typed -v 2>&1 \
+            | tee -a dt-conformance/results/harness-tests.log
 
       - name: Build and test the isolation boundary
         env:
           TSRS_DT_CONFORMANCE_SANDBOX_IMAGE: tsrs-dt-conformance
         run: |
-          docker build --tag tsrs-dt-conformance tools/dt-conformance
-          python3 -m unittest discover -s tools/dt-conformance -p 'test_sandbox.py' -v
+          set -o pipefail
+          docker build --tag tsrs-dt-conformance tools/dt-conformance 2>&1 \
+            | tee dt-conformance/results/isolation-test.log
+          python3 -m unittest discover -s tools/dt-conformance -p 'test_sandbox.py' -v 2>&1 \
+            | tee -a dt-conformance/results/isolation-test.log
 
       - name: Install TypeScript build dependencies
         working-directory: ts-ref
