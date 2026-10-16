@@ -12,6 +12,7 @@ function genKind() {
     const src = fs.readFileSync(path.join(goDir, "kind_generated.go"), "utf8");
     const constBlock = src.slice(src.indexOf("const ("), src.indexOf("\n)\n", src.indexOf("const (")));
     const variants: string[] = [];
+    const names: string[] = [];
     const consts: [string, string][] = [];
     for (const raw of constBlock.split("\n").slice(1)) {
         const line = raw.trim();
@@ -22,11 +23,19 @@ function genKind() {
         const m = /^Kind(\w+)(?:\s+Kind)?(?:\s*=\s*(\w+))?$/.exec(code.trim());
         if (!m) throw new Error("bad kind line: " + line);
         if (m[2] && m[2] !== "iota") consts.push([m[1], m[2].replace(/^Kind/, "")]);
-        else variants.push(`    ${m[1]},${comment}`);
+        else {
+            variants.push(`    ${m[1]},${comment}`);
+            names.push(m[1]);
+        }
     }
     let out = header;
-    out += "#[repr(i16)]\n#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]\npub enum Kind {\n";
+    out += "#[repr(i16)]\n#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]\npub enum Kind {\n";
     out += variants.map((v, i) => i === 0 ? v.replace("Unknown,", "#[default]\n    Unknown,") : v).join("\n") + "\n}\n\n";
+    out += "impl std::fmt::Debug for Kind {\n";
+    out += "    // Keep the generated name lookup tables in one formatter instead of duplicating them at callers.\n";
+    out += "    #[inline(never)]\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {\n        f.write_str(match self {\n";
+    out += names.map(n => `            Kind::${n} => "${n}",`).join("\n");
+    out += "\n        })\n    }\n}\n\n";
     out += "impl Kind {\n";
     for (const [n, v] of consts) out += `    pub const ${n}: Kind = Kind::${v};\n`;
     out += "\n    #[inline]\n    pub fn from_i16(v: i16) -> Kind {\n        assert!(v >= 0 && v <= Kind::Count as i16);\n        // SAFETY: Kind is repr(i16) with contiguous discriminants 0..=Count.\n        unsafe { std::mem::transmute::<i16, Kind>(v) }\n    }\n}\n\n";
