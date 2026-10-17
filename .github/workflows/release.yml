@@ -430,3 +430,10 @@ jobs:
         run: >-
           gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"
           --title "TSRS $VERSION" --notes-file "docs/releases/$VERSION.md" --prerelease=false --latest
+
+  playground:
+    needs: github-release
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/void-deploy.yml

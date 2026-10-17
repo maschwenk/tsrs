@@ -1,8 +1,7 @@
 name: Playground
 
 on:
-  push:
-    branches: [main]
+  workflow_call:
   pull_request:
     branches: [main]
 
@@ -17,55 +16,69 @@ env:
   CARGO_TERM_COLOR: always
   VOID_API_URL: https://api.void.cloud
   VOID_PROJECT: tsrs-playground
-  VOID_VERSION: 0.28.0
 
 jobs:
   validate:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
-      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
-        with:
-          registry-url: ""
+      - parallel:
+          - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+            with:
+              registry-url: ""
 
-      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
-        with:
-          save-cache: ${{ github.ref_name == 'main' }}
-          cache-key: playground
+          - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+            with:
+              save-cache: ${{ github.ref_name == 'main' }}
+              cache-key: playground
+
+          - name: Install Binaryen 133
+            run: |
+              curl -sSLf -o "$RUNNER_TEMP/binaryen.tgz" https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
+              echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  $RUNNER_TEMP/binaryen.tgz" | sha256sum -c -
+              tar xzf "$RUNNER_TEMP/binaryen.tgz" -C "$RUNNER_TEMP"
+              echo "$RUNNER_TEMP/binaryen-version_133/bin" >> "$GITHUB_PATH"
+
+      - name: Install Chromium
+        id: chromium
+        background: true
+        working-directory: playground
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Install wasm32-wasip1 target
         run: rustup target add wasm32-wasip1
 
-      - name: Install Binaryen 133
-        run: |
-          curl -sSLf -o "$RUNNER_TEMP/binaryen.tgz" https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
-          echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  $RUNNER_TEMP/binaryen.tgz" | sha256sum -c -
-          tar xzf "$RUNNER_TEMP/binaryen.tgz" -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/binaryen-version_133/bin" >> "$GITHUB_PATH"
+      - name: Build WASM
+        run: tools/wasm/build.sh
 
-      - name: Build native reference and WASM
-        run: |
-          cargo build --profile dev --locked -p tsrs_cli -p tsrs_testrunner
-          tools/wasm/build.sh
+      - name: Build native reference
+        id: native
+        background: true
+        run: cargo build --profile dev --locked -p tsrs_cli
 
       - name: Check and build playground
         working-directory: playground
         run: |
           pnpm run prepare-assets
           pnpm exec vp check
-          pnpm exec vp test run
           pnpm exec vp build
+
+      - wait: native
+
+      - name: Compare WASM with native tsrs
+        working-directory: playground
+        run: pnpm exec vp test run
+
+      - wait: chromium
 
       - name: Verify production build in Chromium
         working-directory: playground
-        run: |
-          pnpm exec playwright install --with-deps chromium
-          pnpm run test:browser
+        run: pnpm run test:browser
 
       - name: Save validated site
-        if: github.event_name == 'push' && github.repository == 'maschwenk/tsrs'
+        if: github.event_name != 'pull_request' && github.repository == 'oxc-project/tsrs'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playground-${{ github.sha }}
@@ -75,8 +88,8 @@ jobs:
 
   deploy:
     needs: validate
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'maschwenk/tsrs'
-    runs-on: ubuntu-24.04
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'oxc-project/tsrs'
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
@@ -87,40 +100,33 @@ jobs:
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
-      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
-        with:
-          registry-url: ""
+      - parallel:
+          - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+            with:
+              registry-url: ""
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: playground-${{ github.sha }}
-          path: playground/dist/
+          - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+            with:
+              name: playground-${{ github.sha }}
+              path: playground/dist/
 
-      # This runs inside the production lock, so a slow older build cannot replace a newer deployment.
-      - name: Check that this commit is still main
-        id: current
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          latest=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
-          if [ "$latest" = "$GITHUB_SHA" ]; then
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Skipping superseded commit $GITHUB_SHA (main is $latest)." >> "$GITHUB_STEP_SUMMARY"
-          fi
+      - name: Install Chromium
+        id: chromium
+        background: true
+        working-directory: playground
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Deploy to Void using OIDC
-        if: steps.current.outputs.deploy == 'true'
         run: |
-          pnpm dlx "void@$VOID_VERSION" connect "$VOID_API_URL" --no-login
-          pnpm dlx "void@$VOID_VERSION" deploy --platform void --project "$VOID_PROJECT" --dir playground/dist
+          pnpm exec void connect "$VOID_API_URL" --no-login
+          pnpm exec void deploy --platform void --project "$VOID_PROJECT" --dir playground/dist
+
+      - wait: chromium
 
       - name: Verify hosted playground
-        if: steps.current.outputs.deploy == 'true'
         working-directory: playground
         env:
           PLAYWRIGHT_BASE_URL: https://tsrs-playground.void.app
         run: |
-          pnpm exec playwright install --with-deps chromium
           pnpm run test:browser
           echo "Playground: $PLAYWRIGHT_BASE_URL (commit $GITHUB_SHA)" >> "$GITHUB_STEP_SUMMARY"
