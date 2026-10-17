@@ -18,7 +18,7 @@ cargo clippy --all-targets --config 'build.warnings="deny"'
 
 `[workspace.lints.clippy]` in `Cargo.toml` and `clippy.toml` turn on the oxc baseline and the project-specific strict
 lints, all at `deny`. The command also rejects ordinary compiler warnings. There is no findings baseline:
-the command above must be clean before a change lands (CI runs it in the `test` job).
+the command above must be clean before a change lands (CI runs it in the `lint` job).
 
 When it fails:
 
@@ -59,7 +59,7 @@ An upgrade is a pull request of its own:
 
 ## Source checks
 
-`tools/lint/source.py` (CI: the `test` job; after Bun's `test/internal/source-lints/`) checks three things
+`tools/lint/source.py` (CI: the `lint` job; after Bun's `test/internal/source-lints/`) checks three things
 clippy cannot express:
 
 - **`unsafe impl Send` / `Sync`.** `tools/lint/send_sync.tsv` lists all of them (31 on 2026-10-10). Adding or removing

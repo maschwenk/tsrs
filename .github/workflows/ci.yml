@@ -16,7 +16,30 @@ concurrency:
   cancel-in-progress: ${{ github.ref_name != 'main' }}
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - name: Source checks
+        id: source-checks
+        run: python3 tools/lint/source.py --self-test && python3 tools/lint/source.py
+        background: true
+
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: ${{ github.ref_name == 'main' }}
+          cache-key: warm-lint
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets --config 'build.warnings="deny"'
+
+      - wait: source-checks
+
   test:
+    name: Test Linux
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -30,10 +53,7 @@ jobs:
           - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
             with:
               save-cache: ${{ github.ref_name == 'main' }}
-              cache-key: warm
-
-          - name: Source checks
-            run: python3 tools/lint/source.py --self-test && python3 tools/lint/source.py
+              cache-key: warm-test
 
       - name: Read TypeScript reference commit
         id: ts
@@ -51,9 +71,6 @@ jobs:
           fetch-depth: 1
           sparse-checkout: tsc/testdata
           persist-credentials: false
-
-      - name: Clippy
-        run: cargo clippy --locked --all-targets --config 'build.warnings="deny"'
 
       - name: cargo check
         run: cargo check --workspace --exclude tsrs_fourslash --locked --config 'build.warnings="deny"'
