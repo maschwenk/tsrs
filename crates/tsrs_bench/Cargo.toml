@@ -29,3 +29,7 @@ harness = false
 # A CLI compilation keeps its arenas until exit. CodSpeed runs a bounded number of iterations;
 # ordinary Criterion calibration would keep allocating programs until the process runs out of memory.
 required-features = ["codspeed"]
+
+[lib]
+test = false
+doctest = false
