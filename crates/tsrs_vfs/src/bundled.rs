@@ -10,9 +10,10 @@ mod libs_generated;
 
 pub use self::bundled::*;
 #[cfg(not(feature = "noembed"))]
-pub use self::embed::{is_bundled, WrappedFS};
+use self::embed as implementation;
 #[cfg(feature = "noembed")]
-pub use self::noembed::{is_bundled, WrappedFS};
+use self::noembed as implementation;
+pub use self::implementation::is_bundled;
 pub use self::libs_generated::*;
 
 #[cfg(test)]

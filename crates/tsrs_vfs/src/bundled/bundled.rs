@@ -1,55 +1,40 @@
 use tsrs_core::tspath;
 
-#[cfg(not(feature = "noembed"))]
-use super::embed::{self, WrappedFS};
-#[cfg(feature = "noembed")]
-use super::noembed::{self as embed, WrappedFS};
+use super::implementation;
 use crate::FS;
 
 // Embedded is true if the bundled files are implemented through an embedded FS.
-pub const EMBEDDED: bool = embed::EMBEDDED;
+pub const EMBEDDED: bool = !cfg!(feature = "noembed");
 
 // WrapFS returns an FS which redirects embedded paths to the embedded file system.
-pub fn wrap_fs<T: FS>(fs: T) -> WrappedFS<T> {
-    embed::wrap_fs(fs)
+// If embedding is disabled, it returns the original FS.
+pub fn wrap_fs<T: FS>(fs: T) -> impl FS {
+    implementation::wrap_fs(fs)
 }
 
 // LibPath returns the path to the directory containing the bundled lib.d.ts files.
 pub fn lib_path() -> String {
-    embed::lib_path()
+    implementation::lib_path()
 }
 
-/// The default library directory of the CLI, the language server and the API server.
+/// The default library directory, with the tsrs-only `TSRS_LIB_PATH` override.
 ///
-/// Go's embedded build reads the libraries from `bundled:///libs` and its `noembed` build (the npm `tsgo`)
-/// from its executable's directory (bundled/noembed.go `libPath`). The npm packages ship the libraries next
-/// to the binary, so a binary with a `lib.d.ts` beside it reads them from there like the npm `tsgo`: file
-/// listings, diagnostics in lib files and tsbuildinfo then name the same real paths. Otherwise (a `cargo`
-/// build) the embedded libraries; `noembed` builds require the disk libraries.
-/// tsrs-only: `TSRS_LIB_PATH=<dir containing lib.d.ts>` overrides both.
+/// Otherwise follows Go's build-selected `bundled.LibPath`: embedded libraries for
+/// standalone builds, or the executable's directory for npm (`noembed`) builds.
 pub fn default_lib_path() -> String {
-    let override_dir = std::env::var("TSRS_LIB_PATH").ok().filter(|dir| !dir.is_empty());
-    // Realpath'd like Go's executableDir, so a symlinked install (pnpm) names the store directory as the npm tsgo does.
-    let exe_dir = std::env::current_exe()
-        .and_then(std::fs::canonicalize)
-        .ok()
-        .and_then(|exe| exe.parent().map(std::path::Path::to_path_buf));
-    default_lib_path_from(override_dir, exe_dir)
+    default_lib_path_from(std::env::var("TSRS_LIB_PATH").ok())
 }
 
-pub(crate) fn default_lib_path_from(override_dir: Option<String>, exe_dir: Option<std::path::PathBuf>) -> String {
-    if let Some(dir) = override_dir {
-        return tspath::normalize_path(&dir);
-    }
-    match exe_dir {
-        Some(dir) if dir.join("lib.d.ts").is_file() => tspath::normalize_path(&dir.to_string_lossy()),
-        _ => lib_path(),
+pub(crate) fn default_lib_path_from(override_dir: Option<String>) -> String {
+    match override_dir.filter(|dir| !dir.is_empty()) {
+        Some(dir) => tspath::normalize_path(&dir),
+        None => lib_path(),
     }
 }
 
-// The embedded text of a bundled lib path without a copy (tsrs-only, see embed::embedded_file).
+// The embedded text of a bundled lib path without a copy (tsrs-only, see implementation::embedded_file).
 pub fn embedded_file(path: &str) -> Option<&'static str> {
-    embed::embedded_file(path)
+    implementation::embedded_file(path)
 }
 
 // TestingLibPath returns the path to the source bundled libs directory.

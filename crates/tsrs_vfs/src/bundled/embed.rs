@@ -7,8 +7,6 @@ use super::embed_generated::EMBEDDED_CONTENTS;
 use super::libs_generated::LIB_NAMES;
 use crate::{Entries, FileInfo, FileMode, FS};
 
-pub const EMBEDDED: bool = true;
-
 const SCHEME: &str = "bundled:///";
 
 static EMBEDDED_CONTENTS_MAP: LazyLock<FxHashMap<&'static str, &'static str>> = LazyLock::new(|| EMBEDDED_CONTENTS.iter().copied().collect());

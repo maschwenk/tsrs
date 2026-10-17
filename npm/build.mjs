@@ -3,6 +3,7 @@
 // `bin/tsrs`) whose `optionalDependencies` name one package per platform, each holding that platform's binary and,
 // beside it, the default libraries (lib.*.d.ts), which the binary then reads from disk like the npm tsgo.
 //
+//   cargo build --release -p tsrs_cli --features noembed  # npm binary; standalone builds omit the feature
 //   node npm/build.mjs --binary aarch64-apple-darwin=target/release/tsrs --pack
 //   node npm/build.mjs --artifacts dir/ --pack      # dir/<target triple>/tsrs[.exe], as the release workflow lays out
 //   node npm/build.mjs --wasm npm/tsrs-wasm/tsrs.wasm --pack   # the WebAssembly package (tools/wasm/build.sh)
