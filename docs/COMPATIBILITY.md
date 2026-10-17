@@ -29,7 +29,8 @@ Updating this table (../AGENTS.md says when; commands and paths below are relati
 - Keep the root and npm README summaries, docs/EMIT.md, docs/LSP.md and docs/STATUS.md consistent with the table.
 -->
 
-"Identical" below means identical to tsgo built from the same pinned commit.
+"Identical" below means identical to tsgo built from the same pinned commit. [Defaults that differ from
+tsgo](DEFAULTS.md) lists every default tsrs changes, option by option.
 
 | feature | status | evidence and notes |
 | --- | --- | --- |
