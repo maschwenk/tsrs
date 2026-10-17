@@ -41,7 +41,7 @@ Both runs measure compiler source from `cccadf7c` (unchanged from main `990d32d5
 
 TSRS wins all four projects at both sizes. Its diagnostics match the pinned 7.1-dev reference in every project at both sizes. The 16-vCPU box is sufficient for the routine benchmark; 32 remains useful for explicit scaling comparisons. The 64-checker-on-16-vCPU combination is supported but was not measured here; do not infer its performance from these default-mode results.
 
-Raw results: [16 vCPU](../bench/results/compare/2026-10-08-cccadf7cd14b-16t.json), [32 vCPU](../bench/results/compare/2026-10-08-cccadf7cd14b-32t.json), with human-readable `.md` files beside each.
+Archived raw results: [16 vCPU](https://github.com/oxc-project/tsrs/blob/94e7305f0f067e9f68570798c0498e03c7e423eb/bench/results/compare/2026-10-08-cccadf7cd14b-16t.json), [32 vCPU](https://github.com/oxc-project/tsrs/blob/94e7305f0f067e9f68570798c0498e03c7e423eb/bench/results/compare/2026-10-08-cccadf7cd14b-32t.json), with human-readable `.md` files beside each.
 
 The complete head-to-head job (including PGO build/setup and all four compilers) took 1,741.5 seconds on 16 vCPU and 1,583.0 seconds on 32. Multiplying attempt duration by the published rate gives about $1.39 vs $2.53: 45% less compute-equivalent cost for 10% more wall time. These are one-run observations with separate builds/caches, not an invoice or a measured monthly saving. This head-to-head job is distinct from the full automatic benchmark workflow. The 16-vCPU run peaked at 19.7% of RAM and averaged 27.2% of allocated CPU; the 32-vCPU run peaked at 10.2% of RAM and averaged 15.1% of CPU.
 

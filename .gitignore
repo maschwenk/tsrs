@@ -5,6 +5,7 @@ ts-ref
 __pycache__/
 npm/dist/
 bench/.work/
+bench/results/
 *.pyc
 .env
 .env.*

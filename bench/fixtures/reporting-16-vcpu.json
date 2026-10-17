@@ -1,0 +1,432 @@
+{
+  "date": "2026-10-11 04:35 UTC",
+  "machine": {
+    "ci": true,
+    "cpu": "AMD EPYC 9R45 96-Core Processor",
+    "cpus": 8,
+    "label": "Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor)",
+    "libc": "glibc 2.39",
+    "memory_gb": 31,
+    "platform": "Linux x86_64"
+  },
+  "tsrs": {
+    "commit": "177e6cf55d52be07d9ded7438447231d0497d810",
+    "dirty": false,
+    "version": "Version 7.1.0-dev (tsrs 0.13.0-ts7.1.0-dev.20260929, microsoft/TypeScript@b85298b6a81f)",
+    "build": "pgo-dist",
+    "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)"
+  },
+  "tsgo": {
+    "version": "7.0.2",
+    "binary": "~/work/tsrs/tsrs/bench/.work/tsgo/7.0.2/node_modules/@typescript/typescript-linux-x64/lib/tsc"
+  },
+  "suite": {
+    "repo": "https://github.com/microsoft/typescript-benchmarking.git",
+    "commit": "41f652ab2df5077b1115f73eaeefc2fe9f674132"
+  },
+  "reference": {
+    "package": "typescript",
+    "version": "7.1.0-dev.20260930.4",
+    "commit": "b85298b6a81f772d080b0455de0ca9d744cd6fd6",
+    "note": "nightly built from b85298b6 + one CI-only commit (9adc871f); b85298b6 is the TypeScript commit tsrs ports (Cargo.toml [workspace.metadata.typescript]). Run only when tsgo and tsrs report different errors, to tell a TypeScript version difference from a tsrs bug."
+  },
+  "reps": 5,
+  "tsgo_reps": 3,
+  "modes": [
+    "default",
+    "single",
+    "checkers8",
+    "checkers16",
+    "wide"
+  ],
+  "mode_reps": {
+    "default": {
+      "reps": 5,
+      "tsgo_reps": 3
+    },
+    "single": {
+      "reps": 5,
+      "tsgo_reps": 3
+    },
+    "checkers8": {
+      "reps": 5,
+      "tsgo_reps": 3
+    },
+    "wide": {
+      "reps": 10,
+      "tsgo_reps": 3
+    },
+    "checkers16": {
+      "reps": 10,
+      "tsgo_reps": 3
+    }
+  },
+  "bun": {
+    "version": "1.4.4-canary.1+6c1eb067e",
+    "binary": "/tmp/bun/bun-linux-x64/bun"
+  },
+  "flags": "--noEmit --incremental false --extendedDiagnostics --pretty false",
+  "projects": {
+    "vscode": {
+      "commit": "9cf0128b9822dcd8a533f08ef7312956a4390301",
+      "project": "src",
+      "source": "suite",
+      "default": {
+        "tsgo": {
+          "runs": 3,
+          "ok_runs": 3,
+          "wall_s": 11.631,
+          "check_s": 8.426,
+          "total_s": 9.501,
+          "peak_rss_bytes": 8281915392,
+          "memory_used_kb": 6850951,
+          "files": 10427,
+          "symbols": 10442193,
+          "types": 3567680,
+          "instantiations": 5123076,
+          "errors": 359,
+          "error_counts": [
+            359
+          ]
+        },
+        "tsrs": {
+          "runs": 5,
+          "ok_runs": 5,
+          "wall_s": 1.544,
+          "check_s": 1.287,
+          "total_s": 1.529,
+          "peak_rss_bytes": 2058403840,
+          "memory_used_kb": 1984868,
+          "files": 10427,
+          "symbols": 5428769,
+          "types": 3240919,
+          "instantiations": 5107960,
+          "errors": 371,
+          "error_counts": [
+            371
+          ]
+        },
+        "errors_match": false,
+        "error_locations_match": false,
+        "error_diff_sample": {
+          "tsgo_only": [],
+          "tsrs_only": [
+            "src/vs/server/node/remoteTerminalChannel.ts(234,103): error TS2345",
+            "src/vs/workbench/api/common/extHostVariableResolverService.ts(170,3): error TS2322",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/customizationMigrationServiceImpl.test.ts(218,4): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(1083,85): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(1117,84): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(188,80): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(672,85): error TS2345",
+            "src/vs/workbench/services/configurationResolver/browser/configurationResolverService.ts(38,50): error TS2345",
+            "src/vs/workbench/services/configurationResolver/common/variableResolver.ts(83,15): error TS2416",
+            "src/vs/workbench/services/configurationResolver/electron-browser/configurationResolverService.ts(48,50): error TS2345",
+            "src/vs/workbench/services/configurationResolver/test/electron-browser/configurationResolverService.test.ts(89,3): error TS2322",
+            "src/vs/workbench/test/browser/componentFixtures/sessions/aiCustomizationManagementEditor.fixture.ts(1335,5): error TS2345"
+          ]
+        },
+        "reference": {
+          "ok": true,
+          "errors": 371,
+          "same_as_tsrs": true
+        }
+      },
+      "single": {
+        "tsgo": {
+          "runs": 3,
+          "ok_runs": 3,
+          "wall_s": 31.944,
+          "check_s": 26.242,
+          "total_s": 30.084,
+          "peak_rss_bytes": 7179055104,
+          "memory_used_kb": 5976216,
+          "files": 10427,
+          "symbols": 8543195,
+          "types": 2667247,
+          "instantiations": 3508104,
+          "errors": 359,
+          "error_counts": [
+            359
+          ]
+        },
+        "tsrs": {
+          "runs": 5,
+          "ok_runs": 5,
+          "wall_s": 9.688,
+          "check_s": 8.141,
+          "total_s": 9.654,
+          "peak_rss_bytes": 1689694208,
+          "memory_used_kb": 1627544,
+          "files": 10427,
+          "symbols": 4740514,
+          "types": 2454401,
+          "instantiations": 3421185,
+          "errors": 371,
+          "error_counts": [
+            371
+          ],
+          "instructions": 74856246500,
+          "max_rss_bytes": 1679085568
+        },
+        "errors_match": false,
+        "error_locations_match": false,
+        "error_diff_sample": {
+          "tsgo_only": [],
+          "tsrs_only": [
+            "src/vs/server/node/remoteTerminalChannel.ts(234,103): error TS2345",
+            "src/vs/workbench/api/common/extHostVariableResolverService.ts(170,3): error TS2322",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/customizationMigrationServiceImpl.test.ts(218,4): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(1083,85): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(1117,84): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(188,80): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(672,85): error TS2345",
+            "src/vs/workbench/services/configurationResolver/browser/configurationResolverService.ts(38,50): error TS2345",
+            "src/vs/workbench/services/configurationResolver/common/variableResolver.ts(83,15): error TS2416",
+            "src/vs/workbench/services/configurationResolver/electron-browser/configurationResolverService.ts(48,50): error TS2345",
+            "src/vs/workbench/services/configurationResolver/test/electron-browser/configurationResolverService.test.ts(89,3): error TS2322",
+            "src/vs/workbench/test/browser/componentFixtures/sessions/aiCustomizationManagementEditor.fixture.ts(1335,5): error TS2345"
+          ]
+        },
+        "reference": {
+          "ok": true,
+          "errors": 371,
+          "same_as_tsrs": true
+        }
+      },
+      "checkers8": {
+        "tsgo": {
+          "runs": 3,
+          "ok_runs": 3,
+          "wall_s": 9.746,
+          "check_s": 6.376,
+          "total_s": 7.471,
+          "peak_rss_bytes": 9406607360,
+          "memory_used_kb": 7338090,
+          "files": 10427,
+          "symbols": 11423273,
+          "types": 4121270,
+          "instantiations": 6177743,
+          "errors": 359,
+          "error_counts": [
+            359
+          ]
+        },
+        "tsrs": {
+          "runs": 5,
+          "ok_runs": 5,
+          "wall_s": 1.571,
+          "check_s": 1.308,
+          "total_s": 1.557,
+          "peak_rss_bytes": 2060562432,
+          "memory_used_kb": 1988016,
+          "files": 10427,
+          "symbols": 5430923,
+          "types": 3243199,
+          "instantiations": 5110259,
+          "errors": 371,
+          "error_counts": [
+            371
+          ]
+        },
+        "errors_match": false,
+        "error_locations_match": false,
+        "error_diff_sample": {
+          "tsgo_only": [],
+          "tsrs_only": [
+            "src/vs/server/node/remoteTerminalChannel.ts(234,103): error TS2345",
+            "src/vs/workbench/api/common/extHostVariableResolverService.ts(170,3): error TS2322",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/customizationMigrationServiceImpl.test.ts(218,4): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(1083,85): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(1117,84): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(188,80): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(672,85): error TS2345",
+            "src/vs/workbench/services/configurationResolver/browser/configurationResolverService.ts(38,50): error TS2345",
+            "src/vs/workbench/services/configurationResolver/common/variableResolver.ts(83,15): error TS2416",
+            "src/vs/workbench/services/configurationResolver/electron-browser/configurationResolverService.ts(48,50): error TS2345",
+            "src/vs/workbench/services/configurationResolver/test/electron-browser/configurationResolverService.test.ts(89,3): error TS2322",
+            "src/vs/workbench/test/browser/componentFixtures/sessions/aiCustomizationManagementEditor.fixture.ts(1335,5): error TS2345"
+          ]
+        },
+        "reference": {
+          "ok": true,
+          "errors": 371,
+          "same_as_tsrs": true
+        }
+      },
+      "checkers16": {
+        "tsgo": {
+          "runs": 3,
+          "ok_runs": 3,
+          "wall_s": 7.53,
+          "check_s": 4.17,
+          "total_s": 5.099,
+          "peak_rss_bytes": 10000617472,
+          "memory_used_kb": 8032740,
+          "files": 10427,
+          "symbols": 12566839,
+          "types": 4824632,
+          "instantiations": 7750941,
+          "errors": 359,
+          "error_counts": [
+            359
+          ]
+        },
+        "tsrs": {
+          "runs": 10,
+          "ok_runs": 10,
+          "wall_s": 0.9085000000000001,
+          "check_s": 0.717,
+          "total_s": 0.8915,
+          "peak_rss_bytes": 2232676352.0,
+          "memory_used_kb": 2151620.0,
+          "files": 10427.0,
+          "symbols": 5714538.5,
+          "types": 3571653.0,
+          "instantiations": 5983340.5,
+          "errors": 371.0,
+          "error_counts": [
+            371
+          ]
+        },
+        "errors_match": false,
+        "error_locations_match": false,
+        "bun": {
+          "runs": 10,
+          "ok_runs": 10,
+          "wall_s": 1.7160000000000002,
+          "check_s": null,
+          "total_s": null,
+          "peak_rss_bytes": 1996453888.0,
+          "memory_used_kb": null,
+          "files": 9399.0,
+          "symbols": null,
+          "types": null,
+          "instantiations": null,
+          "errors": 359.0,
+          "error_counts": [
+            359
+          ]
+        },
+        "error_diff_sample": {
+          "tsgo_only": [],
+          "tsrs_only": [
+            "src/vs/server/node/remoteTerminalChannel.ts(234,103): error TS2345",
+            "src/vs/workbench/api/common/extHostVariableResolverService.ts(170,3): error TS2322",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/customizationMigrationServiceImpl.test.ts(218,4): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(1083,85): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(1117,84): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(188,80): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(672,85): error TS2345",
+            "src/vs/workbench/services/configurationResolver/browser/configurationResolverService.ts(38,50): error TS2345",
+            "src/vs/workbench/services/configurationResolver/common/variableResolver.ts(83,15): error TS2416",
+            "src/vs/workbench/services/configurationResolver/electron-browser/configurationResolverService.ts(48,50): error TS2345",
+            "src/vs/workbench/services/configurationResolver/test/electron-browser/configurationResolverService.test.ts(89,3): error TS2322",
+            "src/vs/workbench/test/browser/componentFixtures/sessions/aiCustomizationManagementEditor.fixture.ts(1335,5): error TS2345"
+          ]
+        },
+        "reference": {
+          "ok": true,
+          "errors": 371,
+          "same_as_tsrs": true
+        },
+        "machine": {
+          "platform": "Linux x86_64",
+          "cpus": 16,
+          "cpu": "AMD EPYC 9R45 96-Core Processor",
+          "memory_gb": 63,
+          "libc": "glibc 2.39",
+          "ci": true,
+          "label": "Depot CI `depot-ubuntu-24.04-16` (16 vCPU, 63 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor)"
+        }
+      },
+      "wide": {
+        "tsgo": {
+          "runs": 3,
+          "ok_runs": 3,
+          "wall_s": 11.744,
+          "check_s": 9.097,
+          "total_s": 10.033,
+          "peak_rss_bytes": 8060030976,
+          "memory_used_kb": 6849411,
+          "files": 10427,
+          "symbols": 10442193,
+          "types": 3567680,
+          "instantiations": 5123076,
+          "errors": 359,
+          "error_counts": [
+            359
+          ]
+        },
+        "tsrs": {
+          "runs": 10,
+          "ok_runs": 10,
+          "wall_s": 0.9185000000000001,
+          "check_s": 0.718,
+          "total_s": 0.902,
+          "peak_rss_bytes": 2228482048.0,
+          "memory_used_kb": 2147714.0,
+          "files": 10427.0,
+          "symbols": 5714805.5,
+          "types": 3573663.5,
+          "instantiations": 5957191.0,
+          "errors": 371.0,
+          "error_counts": [
+            371
+          ]
+        },
+        "errors_match": false,
+        "error_locations_match": false,
+        "bun": {
+          "runs": 10,
+          "ok_runs": 10,
+          "wall_s": 1.7105000000000001,
+          "check_s": null,
+          "total_s": null,
+          "peak_rss_bytes": 1995436032.0,
+          "memory_used_kb": null,
+          "files": 9399.0,
+          "symbols": null,
+          "types": null,
+          "instantiations": null,
+          "errors": 359.0,
+          "error_counts": [
+            359
+          ]
+        },
+        "error_diff_sample": {
+          "tsgo_only": [],
+          "tsrs_only": [
+            "src/vs/server/node/remoteTerminalChannel.ts(234,103): error TS2345",
+            "src/vs/workbench/api/common/extHostVariableResolverService.ts(170,3): error TS2322",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/customizationMigrationServiceImpl.test.ts(218,4): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(1083,85): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(1117,84): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(188,80): error TS2345",
+            "src/vs/workbench/contrib/chat/test/browser/aiCustomization/mcpServerCustomizationMigration.test.ts(672,85): error TS2345",
+            "src/vs/workbench/services/configurationResolver/browser/configurationResolverService.ts(38,50): error TS2345",
+            "src/vs/workbench/services/configurationResolver/common/variableResolver.ts(83,15): error TS2416",
+            "src/vs/workbench/services/configurationResolver/electron-browser/configurationResolverService.ts(48,50): error TS2345",
+            "src/vs/workbench/services/configurationResolver/test/electron-browser/configurationResolverService.test.ts(89,3): error TS2322",
+            "src/vs/workbench/test/browser/componentFixtures/sessions/aiCustomizationManagementEditor.fixture.ts(1335,5): error TS2345"
+          ]
+        },
+        "reference": {
+          "ok": true,
+          "errors": 371,
+          "same_as_tsrs": true
+        },
+        "machine": {
+          "platform": "Linux x86_64",
+          "cpus": 16,
+          "cpu": "AMD EPYC 9R45 96-Core Processor",
+          "memory_gb": 63,
+          "libc": "glibc 2.39",
+          "ci": true,
+          "label": "Depot CI `depot-ubuntu-24.04-16` (16 vCPU, 63 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor)"
+        }
+      }
+    }
+  },
+  "raw": [],
+  "duration_s": 2761
+}

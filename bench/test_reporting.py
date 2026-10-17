@@ -17,7 +17,7 @@ import run
 class ReportingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.historical = json.loads((Path(__file__).parent / 'results/2026-10-08-6e82c526ff8e.json').read_text())
+        cls.historical = json.loads((Path(__file__).parent / 'fixtures/reporting-64-vcpu.json').read_text())
 
     def resized(self):
         result = copy.deepcopy(self.historical)
@@ -121,8 +121,7 @@ class ReportingTests(unittest.TestCase):
 class PublishTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.historical = json.loads((Path(__file__).parent / 'results/2026-10-11-177e6cf55d52.json').read_text())
-        cls.historical['projects'] = {'vscode': cls.historical['projects']['vscode']}
+        cls.historical = json.loads((Path(__file__).parent / 'fixtures/reporting-16-vcpu.json').read_text())
 
     def setUp(self):
         directory = tempfile.TemporaryDirectory()

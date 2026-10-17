@@ -6,6 +6,8 @@ open-source applications and libraries (see "Application projects") with tsrs, w
 Bun binary is given, with `bun check`, and reports wall time, peak memory and the error count of each.
 Benchmark automation is disabled; its workflow is preserved as
 [`.github/workflows/bench.yml.bak`](../.github/workflows/bench.yml.bak). The local commands below remain available.
+The outdated `bench/results/` archive has been removed from the working tree; historical runs remain in
+[Git history](https://github.com/oxc-project/tsrs/tree/94e7305f0f067e9f68570798c0498e03c7e423eb/bench/results).
 The saved workflow measures every project on GitHub-hosted `ubuntu-24.04` runners in four modes and in four more
 with bun check; `bench/results/<date>-<commit>.md` has every table. [The latest recorded results](RESULTS.md) show the
 Bun comparison tables, with tsgo, tsrs and bun check side by side: the default mode (each compiler at its own
@@ -44,7 +46,7 @@ python3 bench/chart.py bench/results/<date>-<commit>.json --output /tmp/benchmar
 
 Publishing preserves a newer commit's tables and chart when an older backfill finishes later.
 
-Results go to `bench/results/<date>-<tsrs commit>[-local].{json,md}`; per-run compiler output to
+Local results are ignored by Git and go to `bench/results/<date>-<tsrs commit>[-local].{json,md}`; per-run compiler output to
 `<work-dir>/logs/<timestamp>/`. The first run clones and installs the projects into `<work-dir>/solutions`
 (default `bench/.work`, ~5 GB); later runs reuse them as long as `bench/projects.json` is unchanged.
 
@@ -247,7 +249,7 @@ the small projects move by a few hundred KiB), so peak memory is flagged when it
 
 Benchmark automation is disabled, including manual dispatch. The definitions are preserved under `.github/workflows/`
 as `bench.yml.bak`, `bench-compare.yml.bak`, `codspeed.yml.bak`, `pr-verify.yml.bak`, `perf-probe.yml.bak` and
-`perf-layout-probe.yml.bak`. Local measurement tools and recorded results remain available.
+`perf-layout-probe.yml.bak`. Local measurement tools remain available; recorded runs are archived in Git history.
 
 The workflow descriptions and dispatch commands in this section document the saved definitions. Restore the
 corresponding original `.yml` filename before using any `gh workflow run` command. No automated measurements,
