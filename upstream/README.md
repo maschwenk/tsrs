@@ -270,7 +270,7 @@ cd <tsrs worktree> && CARGO_TARGET_DIR=$PWD/target cargo build --release -p tsrs
 
 # The private monorepo runs (read-only checkout; --noEmit --incremental false is mandatory there), medians of 3, interleaved
 python3 upstream/tools/measure.py out.jsonl 3 single,multi "prs=$BIN/tsgo-<base>" "L1=$BIN/tsgo-<c1>" ...
-python3 upstream/tools/measure.py eq.jsonl 1 single,multi "go-L1=$BIN/ref-L1" \
+STATS=1 python3 upstream/tools/measure.py eq.jsonl 1 single,multi "go-L1=$BIN/ref-L1" \
   "rs-L1=target/release/tsrs:TSRS_LAZY_TUPLES=1;TSRS_LAZY_EMPTY=0;TSRS_LAZY_UNMATCHED=0;TSRS_LAZY_PROP_CACHE=0;TSRS_LAZY_COND_MAPPER=0;TSRS_LAZY_HAS_PROP=0"
 python3 upstream/tools/summarize.py out.jsonl
 
@@ -282,6 +282,9 @@ GODEBUG=memprofilerate=1 $BIN/tsgo-<c> -p <project> --noEmit --incremental false
 go tool pprof -sample_index=alloc_objects -top -diff_base <before>/*-memprofile.pb.gz $BIN/tsgo-<c> <after>/*-memprofile.pb.gz
 ```
 
-`measure.py` runs `/usr/bin/time -l <bin> -p <project> --noEmit --incremental false --extendedDiagnostics`
+`measure.py` runs `/usr/bin/time -l <bin> --project <project> --noEmit --incremental false`
 (`--singleThreaded`, or `--checkers 4` plus `--checkerAssignment go` for tsrs) with its cwd outside the private monorepo.
+With `STATS=1` it runs `<bin> ... --extendedDiagnostics` without `/usr/bin/time` and records the counters only: never
+read wall time or peak memory from a run with `--extendedDiagnostics` (bench/README.md, "Never time a run with
+`--extendedDiagnostics`").
 `git -C <pristine root> status --short` was empty after all runs.

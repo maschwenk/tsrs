@@ -30,6 +30,13 @@ note gave for revisiting it.
 **Bring numbers.** A performance change needs instructions retired and peak RSS, before and after, in the pull
 request.
 
+**Never benchmark with `--extendedDiagnostics`.** Never pass `--extendedDiagnostics` or `--diagnostics` to a run
+whose wall time, CPU time, peak memory or instruction count you measure or quote: not in a harness, not in `time tsrs
+...`, `/usr/bin/time`, `hyperfine` or `perf stat`. The statistics report runs inside the measured process, and tsgo
+forces two full GCs and builds every file's line map there, so the flag slows tsgo more than tsrs and inflates the
+gap. Take counters and phase times from a separate, untimed run. bench/README.md ("Never time a run with
+`--extendedDiagnostics`") has the details.
+
 **Clear the bar.** A change lands only if it gains at least one of:
 
 - 1% of single-threaded instructions on at least one `bench/projects.json` project (`bench/count.py`, deterministic);

@@ -6,11 +6,11 @@ time, peak memory and instructions? (.github/workflows/pr-verify.yml; bench/READ
     tools/perf/verify.py --base ... --new ... --projects xstate-main,webpack --checkers 1,4 --reps 1 --no-poison
 
 For each project of bench/projects.json and each checker count, both binaries run
-`-p <project> --noEmit --incremental false --extendedDiagnostics --pretty false --checkers N`, `--reps` times,
-interleaved (the order flips every rep). A cell is identical when every run of both binaries printed the same
-diagnostics (each `error TS` line and its indented continuation lines, in order) and exited with the same code as
-the base's first run. The rest of the output (the --extendedDiagnostics counters; times and memory left out) is
-compared too and its first difference recorded in verify.json, but it does not decide.
+`-p <project> --noEmit --incremental false --pretty false --checkers N`, `--reps` times, interleaved (the order flips
+every rep). A cell is identical when every run of both binaries printed the same diagnostics (each `error TS` line and
+its indented continuation lines, in order) and exited with the same code as the base's first run. The rest of the
+output is compared too and its first difference recorded in verify.json, but it does not decide. The timed runs pass no
+--extendedDiagnostics: its statistics report runs inside the measured process (bench/run.py TIMED_FLAGS).
 
 Per project, also: one untimed single-threaded run of each binary through bench/count.py (`--singleThreaded`,
 RAYON_NUM_THREADS=1) for instructions retired and peak RSS (Linux only), whose diagnostics must match too; and, unless
@@ -38,11 +38,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "bench"))
 import run as rb  # noqa: E402  (bench/run.py: project setup and paths, output parsing, machine info)
 
-FLAGS = ["--noEmit", "--incremental", "false", "--extendedDiagnostics", "--pretty", "false"]
+FLAGS = rb.TIMED_FLAGS
 POISON_CHECKERS = 16
 ERROR_LINE_RE = re.compile(r"(^|: )error TS\d+:")
-# --extendedDiagnostics lines that differ between any two runs; left out of the full-text comparison.
-VOLATILE_RE = re.compile(r"^(?:[A-Za-z ]+ time|Memory used):\s")
 
 
 def diagnostics(text: str) -> list[str]:
@@ -88,12 +86,10 @@ def run_once(exe: Path, cwd: Path, proj: Path, checkers: int, log: Path, timeout
     r: dict = {"exit": p.returncode, "wall_s": round(wall, 3), "user_s": round(ru.ru_utime, 3),
                "peak_rss_bytes": ru.ru_maxrss * (1 if sys.platform == "darwin" else 1024),
                "log": str(out_path)}
-    for line in stdout.splitlines():
-        if m := rb.TIME_RE.match(line):
-            r[f"{m.group(1).lower()}_s"] = float(m.group(2))
-    r["ok"] = p.returncode in (0, 1, 2) and "check_s" in r
+    text = stdout.splitlines() + stderr.splitlines()
+    r["ok"] = p.returncode in (0, 1, 2) and not any(rb.CRASH_RE.match(l) for l in text)
     r["_diagnostics"] = diagnostics(stdout + "\n" + stderr)
-    r["_text"] = [l for l in stdout.splitlines() + stderr.splitlines() if not VOLATILE_RE.match(l)]
+    r["_text"] = text
     return r
 
 
@@ -147,7 +143,7 @@ def compare_cell(base_runs: list[dict], new_runs: list[dict]) -> dict:
 
 def summarize(runs: list[dict]) -> dict:
     ok = [r for r in runs if r["ok"]] or runs
-    return {k: median([r.get(k) for r in ok]) for k in ("wall_s", "user_s", "peak_rss_bytes", "check_s")}
+    return {k: median([r.get(k) for r in ok]) for k in ("wall_s", "user_s", "peak_rss_bytes")}
 
 
 # Markdown ----------------------------------------------------------------------------------------------------------
@@ -207,9 +203,8 @@ def markdown(result: dict) -> str:
     lines += ["", "<details><summary>Per-project tables</summary>", ""]
     for name, pr in result["projects"].items():
         lines += [f"#### {name}", "",
-                  "| checkers | identical | errors | wall base (s) | wall new (s) | Δ | peak RSS base | peak RSS new | Δ | "
-                  "check base (s) | check new (s) |",
-                  "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
+                  "| checkers | identical | errors | wall base (s) | wall new (s) | Δ | peak RSS base | peak RSS new | Δ |",
+                  "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
         for c in pr["cells"]:
             errs = c.get("errors")
             e = "n/a" if not errs else (str(errs["base"]) if errs["base"] == errs["new"] else f"{errs['base']} → {errs['new']}")
@@ -217,21 +212,20 @@ def markdown(result: dict) -> str:
                 bs, ns = c["base"], c["new"]
                 lines.append(f"| {c['checkers']} | {yes(c['identical'])} | {e} | {fmt_s(bs['wall_s'])} | {fmt_s(ns['wall_s'])} | "
                              f"{fmt_pct(c['wall_delta_pct'])} | {rb.fmt_mem(bs['peak_rss_bytes'])} | "
-                             f"{rb.fmt_mem(ns['peak_rss_bytes'])} | {fmt_pct(c['rss_delta_pct'])} | "
-                             f"{fmt_s(bs['check_s'])} | {fmt_s(ns['check_s'])} |")
+                             f"{rb.fmt_mem(ns['peak_rss_bytes'])} | {fmt_pct(c['rss_delta_pct'])} |")
             elif c["kind"] == "instructions":
                 bs, ns = c["base"], c["new"]
                 lines.append(f"| 1 thread, instructions | {yes(c['identical'])} | {e} | {fmt_g(bs['instructions'])} | "
                              f"{fmt_g(ns['instructions'])} | {fmt_pct(c['instructions_delta_pct'], 3)} | "
                              f"{rb.fmt_mem(bs['peak_rss_bytes'])} | {rb.fmt_mem(ns['peak_rss_bytes'])} | "
-                             f"{fmt_pct(c['rss_delta_pct'])} | | |")
+                             f"{fmt_pct(c['rss_delta_pct'])} |")
             else:  # poison
                 ns = c["new"]
                 lines.append(f"| {c['checkers']}, poisoned arenas (new) | {yes(c['identical'])} | {e} | | "
-                             f"{fmt_s(ns['wall_s'])} | | | {rb.fmt_mem(ns['peak_rss_bytes'])} | | | {fmt_s(ns.get('check_s'))} |")
+                             f"{fmt_s(ns['wall_s'])} | | | {rb.fmt_mem(ns['peak_rss_bytes'])} | |")
         lines.append("")
     lines += ["</details>", "",
-              f"Wall, peak RSS (`ru_maxrss`) and check time: median of {result['reps']} interleaved run{'s' if result['reps'] != 1 else ''} per binary. "
+              f"Wall and peak RSS (`ru_maxrss`): median of {result['reps']} interleaved run{'s' if result['reps'] != 1 else ''} per binary. "
               "The instructions row: user-space instructions retired by one `--singleThreaded` run "
               "(`bench/count.py`; repeats to about 0.001%) in the wall columns, its peak RSS in the memory columns. "
               "Wall time on these machines moves 2-4% between identical runs; instructions and single-threaded peak "
@@ -306,8 +300,8 @@ def main() -> None:
             for c in checkers:
                 for which in order:
                     r = run_once(exes[which], cwd, proj, c, logs / name / f"checkers{c}-{which}-{rep}", args.timeout)
-                    rb.log(f"{name} checkers {c:>2} {which:4} rep {rep}: wall {r['wall_s']:.2f} s, check "
-                           f"{r.get('check_s')} s, peak {rb.fmt_mem(r['peak_rss_bytes'])}, exit {r['exit']}"
+                    rb.log(f"{name} checkers {c:>2} {which:4} rep {rep}: wall {r['wall_s']:.2f} s, "
+                           f"peak {rb.fmt_mem(r['peak_rss_bytes'])}, exit {r['exit']}"
                            + ("" if r["ok"] else "  FAILED"))
                     runs[c][which].append(r)
                     result["runs"].append({"project": name, "checkers": c, "binary": which, "rep": rep, **public(r)})

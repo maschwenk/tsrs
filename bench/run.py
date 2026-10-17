@@ -76,11 +76,16 @@ TSRS_BUILDS = {
     "pgo-dist": "PGO-optimized `dist` build, built like the npm release binaries",
 }
 
-COUNTER_RE = re.compile(r"^(Files|Lines|Identifiers|Symbols|Types|Instantiations):\s+(\d+)\s*$")
-TIME_RE = re.compile(r"^(Config|Parse|Bind|Check|Total) time:\s+([\d.]+)s\s*$")
-MEMORY_RE = re.compile(r"^Memory used:\s+(\d+)K\s*$")
+# The flags of every timed tsgo and tsrs run. Never add --extendedDiagnostics (or --diagnostics) to a run whose wall
+# time or peak memory is measured: after the check, tsgo's statistics report runs two full garbage collections and
+# builds the line map of every file before the process exits, so the flag adds time to tsgo's wall clock that tsrs
+# does not pay (bench/README.md "Method").
+TIMED_FLAGS = ["--noEmit", "--incremental", "false", "--pretty", "false"]
 # `--pretty false`: "path(line,col): error TS1234: message" or "error TS5023: message"; continuation lines are indented.
 ERROR_RE = re.compile(r"^((?:\S.*\(\d+,\d+\): )?error TS\d+):")
+# A crash. Go exits 2 on a panic or a fatal runtime error, the code of a run that reports errors, so the exit code alone
+# does not tell them apart; Rust exits 101 on a panic.
+CRASH_RE = re.compile(r"^(?:panic: |fatal error: |thread '.*' panicked at )")
 
 
 def log(msg: str) -> None:
@@ -222,8 +227,7 @@ def run_once(exe: Path, cwd: Path, proj: Path, mode: str, log_path: Path, timeou
         # --all: no grouping of repeated errors (bun groups above 50), so every error line is counted.
         argv = [str(exe), "check", "-p", str(proj), "--no-pretty", "--all", *BUN_FLAGS[mode]]
     else:
-        argv = [str(exe), "-p", str(proj), "--noEmit", "--incremental", "false", "--extendedDiagnostics", "--pretty", "false"]
-        argv += MODE_FLAGS[mode]
+        argv = [str(exe), "-p", str(proj), *TIMED_FLAGS, *MODE_FLAGS[mode]]
     log_path.parent.mkdir(parents=True, exist_ok=True)
     # Through bench/measure.py, a small fresh process: a child of this one could not report a peak RSS below this
     # process's own size (bench/measure.py has why). Its own session, so the timeout kills the compiler with it.
@@ -246,22 +250,19 @@ def run_once(exe: Path, cwd: Path, proj: Path, mode: str, log_path: Path, timeou
     # ru_maxrss: KiB on Linux, bytes on macOS (the number `/usr/bin/time -v` / `-l` print).
     peak = measured["maxrss"] * (1 if sys.platform == "darwin" else 1024)
     r: dict = {"exit": exit_code, "wall_s": round(measured["wall_s"], 3), "peak_rss_bytes": peak, "errors": 0}
-    keys = []
+    keys, crashed = [], False
     for line in log_path.read_text(errors="replace").splitlines():
         if m := ERROR_RE.match(line):
             keys.append(m.group(1))
-        elif m := COUNTER_RE.match(line):
-            r[m.group(1).lower()] = int(m.group(2))
-        elif m := TIME_RE.match(line):
-            r[f"{m.group(1).lower()}_s"] = float(m.group(2))
-        elif m := MEMORY_RE.match(line):
-            r["memory_used_kb"] = int(m.group(1))
+        elif CRASH_RE.match(line):
+            crashed = True
         elif compiler == "bun" and (m := BUN_FILES_RE.search(line)):
             r["files"] = int(m.group(1).replace(",", ""))
     r["errors"] = len(keys)
     r["error_keys"] = sorted(keys)
-    # tsgo/tsrs print --extendedDiagnostics after a completed check; bun prints its "checked N files" summary.
-    finished = "files" in r if compiler == "bun" else "check_s" in r
+    # bun prints its "checked N files" summary after a completed check; tsgo and tsrs exit 0 without errors and 1 or 2
+    # with them.
+    finished = "files" in r if compiler == "bun" else not crashed
     r["ok"] = exit_code in (0, 1, 2) and finished
     return r
 
@@ -294,8 +295,7 @@ def median(xs: list[float]) -> float | None:
 def summarize(runs: list[dict]) -> dict:
     ok = [r for r in runs if r["ok"]]
     s: dict = {"runs": len(runs), "ok_runs": len(ok)}
-    for k in ("wall_s", "check_s", "total_s", "peak_rss_bytes", "memory_used_kb", "files", "symbols", "types",
-              "instantiations", "errors"):
+    for k in ("wall_s", "peak_rss_bytes", "files", "errors"):
         s[k] = median([r.get(k) for r in ok])
     s["error_counts"] = sorted({r["errors"] for r in ok})
     return s
@@ -868,7 +868,7 @@ def main() -> None:
         "reps": args.reps,
         "tsgo_reps": args.tsgo_reps if args.tsgo_reps is not None else args.reps,
         "modes": modes,
-        "flags": "--noEmit --incremental false --extendedDiagnostics --pretty false",
+        "flags": " ".join(TIMED_FLAGS),
         "projects": {},
         "raw": [],
     }
@@ -897,7 +897,7 @@ def main() -> None:
                         continue
                     r = run_once(compilers[c], cwd, proj, mode, logs / f"{name}-{mode}-{c}-{rep}.log", args.timeout,
                                  compiler=c)
-                    log(f"{name} {mode:7} {c} rep {rep}: wall {r['wall_s']:.2f} s, check {r.get('check_s')} s, "
+                    log(f"{name} {mode:7} {c} rep {rep}: wall {r['wall_s']:.2f} s, "
                         f"peak {fmt_mem(r['peak_rss_bytes'])}, errors {r['errors']}, exit {r['exit']}")
                     if not r["ok"]:
                         log(f"  FAILED; log: {logs / f'{name}-{mode}-{c}-{rep}.log'}")

@@ -6,9 +6,11 @@ Two parts, both on the projects and checker counts given:
 - `--split`: one run per cell and variant with `TSRS_MEM_SPLIT=1` (tsrs prints its own split at `parse end`,
   `check end` and `exit`) while a sampler reads `/proc/<pid>/status` and `/proc/<pid>/smaps_rollup` every
   `--sample-ms`; the sample with the largest Rss is kept with its AnonHugePages, thread count and time.
-- timed reps: `--reps` interleaved runs per variant (wall, user/sys, peak RSS, phases), no sampling but `status`.
+- timed reps: `--reps` interleaved runs per variant (wall, user/sys, peak RSS), no sampling but `status`.
 
-A variant is `name:K=V;K=V`; `BIN=<path>` in it runs another binary. Results go to $PROBE_OUT (summary.md).
+No run passes `--extendedDiagnostics`: it adds end-of-run work (tsgo forces two GCs and builds every file's line map;
+tsrs sums its counters across checkers). A variant is `name:K=V;K=V`; `BIN=<path>` in it runs another binary. Results
+go to $PROBE_OUT (summary.md).
 """
 
 import argparse
@@ -26,13 +28,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "bench"))
 import run as bench  # noqa: E402
 
-PHASES = ["Parse time", "Bind time", "Check time", "Total time"]
-
-
 def project_cmd(cfg: dict, name: str, tsrs: str, work: Path, checkers: int) -> tuple[Path, list[str]]:
     p = next(p for p in cfg["projects"] if p["name"] == name)
     cwd, proj = bench.project_path(cfg, p, work)
-    args = [tsrs, "-p", str(proj), "--noEmit", "--incremental", "false", "--pretty", "false", "--extendedDiagnostics"]
+    args = [tsrs, "--project", str(proj), "--noEmit", "--incremental", "false", "--pretty", "false"]
     args += ["--singleThreaded"] if checkers == 1 else ["--checkers", str(checkers)]
     return cwd, args
 
@@ -74,10 +73,6 @@ def run_one(cwd: Path, args: list[str], env: dict, out: Path, rollup: bool, peri
     text = out.read_text(errors="replace") + out.with_suffix(".err").read_text(errors="replace")
     r = {"wall": wall, "user": ru.ru_utime, "sys": ru.ru_stime, "maxrss_kib": ru.ru_maxrss, "minflt": ru.ru_minflt,
          "exit": os.waitstatus_to_exitcode(status), "errors": len(re.findall(r"error TS\d+", text))}
-    for ph in PHASES:
-        m = re.search(rf"^{ph}:\s+([\d.]+)s", text, re.M)
-        if m:
-            r[ph] = float(m.group(1))
     if samples:
         peak = max(samples, key=lambda s: s["rss"])
         r["peak_sample"] = peak
@@ -141,7 +136,7 @@ def main() -> None:
                     head = (f"### {name}, {k} checkers, {vname}: peak RSS {r['maxrss_kib'] / 1048576:.3f} GiB; sampled peak "
                             f"{ps.get('rss', 0) / 1024:.0f} MiB at {ps.get('t', 0):.3f} s (AnonHugePages {ps.get('huge', 0) / 1024:.0f} MiB, "
                             f"threads {ps.get('threads')}), {r.get('samples')} samples, max threads {r.get('max_threads')}; "
-                            f"wall {r['wall']:.3f} s, Parse {r.get('Parse time')} Check {r.get('Check time')} Total {r.get('Total time')}")
+                            f"wall {r['wall']:.3f} s")
                     print(head, flush=True)
                     text = o.with_suffix(".err").read_text(errors="replace")
                     block = [l for l in text.splitlines() if l.startswith("tsrs mem split") or l.startswith("  ")]
@@ -163,16 +158,15 @@ def main() -> None:
                         r.update(project=name, checkers=k, variant=vname, rep=rep)
                         results.append(r)
                         print(f"{name} c{k} {vname:>12} rep{rep}: wall {r['wall']:.3f} user {r['user']:.2f} sys {r['sys']:.2f} "
-                              f"rss {r['maxrss_kib'] / 1048576:.3f} GiB check {r.get('Check time')} parse {r.get('Parse time')} "
-                              f"errors {r['errors']} exit {r['exit']}", flush=True)
+                              f"rss {r['maxrss_kib'] / 1048576:.3f} GiB errors {r['errors']} exit {r['exit']}", flush=True)
         (out / "results.json").write_text(json.dumps(results, indent=1))
 
         def med(xs):
             return statistics.median(xs) if xs else float("nan")
 
         lines.append("## Timed reps (medians; paired = median of per-rep ratios to the first variant)\n")
-        lines.append("| project | checkers | variant | reps | wall s | paired | wall min-max | check s | parse s | user+sys s | sys s | peak GiB | vs first | peak min-max | errors |")
-        lines.append("| --- | --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |")
+        lines.append("| project | checkers | variant | reps | wall s | paired | wall min-max | user+sys s | sys s | peak GiB | vs first | peak min-max | errors |")
+        lines.append("| --- | --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | --- | --- |")
         for name in projects:
             for k in checkers:
                 cell = [r for r in results if r["project"] == name and r["checkers"] == k]
@@ -187,7 +181,6 @@ def main() -> None:
                     first = first or (w, rss)
                     lines.append(
                         f"| {name} | {k} | {vname} | {len(rs)} | {w:.3f} | {100 * (paired - 1):+.1f}% | {min(r['wall'] for r in rs):.3f}-{max(r['wall'] for r in rs):.3f} | "
-                        f"{med([r.get('Check time', 0) for r in rs]):.3f} | {med([r.get('Parse time', 0) for r in rs]):.3f} | "
                         f"{med([r['user'] + r['sys'] for r in rs]):.2f} | {med([r['sys'] for r in rs]):.2f} | {rss / 1048576:.3f} | "
                         f"{100 * (rss / first[1] - 1):+.1f}% | {min(r['maxrss_kib'] for r in rs) / 1048576:.3f}-{max(r['maxrss_kib'] for r in rs) / 1048576:.3f} | "
                         f"{sorted({r['errors'] for r in rs})} |")

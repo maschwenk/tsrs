@@ -23,7 +23,8 @@ or rejected approach.
 
 For a performance or memory report, follow `AGENTS.md`: find what was already
 tried and do not claim a regression or improvement without the required
-instruction, wall-time, and peak-RSS evidence. Do not run against private code.
+instruction, wall-time, and peak-RSS evidence, measured without
+`--extendedDiagnostics`. Do not run against private code.
 
 ## Report and return
 

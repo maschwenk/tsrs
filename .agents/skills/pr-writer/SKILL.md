@@ -21,5 +21,6 @@ Use a concise title of the form `<area>: <what and why>`. In the body, follow
   confidence or impact.
 
 Never invent benchmark numbers, test results, reporter confirmation, or Go
-source locations. Never include details about private code beyond the exact
+source locations. Never quote a wall time, peak memory or instruction count
+from a run that passed `--extendedDiagnostics` (`AGENTS.md`). Never include details about private code beyond the exact
 phrase `a large private monorepo`.

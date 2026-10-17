@@ -13,15 +13,16 @@ def med(rs, k):
     v = [r[k] for r in rs if r.get(k) is not None]
     return statistics.median(v) if v else None
 
-print("| mode | build | n | symbols | types | instantiations | allocs (M) | check s | Go mem used GB | peak footprint GB | max RSS GB | load |")
-print("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+def fmt(x, spec, scale=1.0):
+    """A median, or `-` where the runs did not record it (counters come from STATS=1 runs, times from timed runs)."""
+    return "-" if x is None else format(x * scale, spec)
+
+print("| mode | build | n | symbols | types | instantiations | allocs (M) | check s | Go mem used GB | real s | peak footprint GB | max RSS GB | load |")
+print("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
 for (mode, label), rs in sorted(rows.items(), key=lambda kv: (kv[0][0] != "single",)):
     syms = {r.get("Symbols") for r in rs}
     flag = "" if len(syms) == 1 else " (varies)"
-    allocs = med(rs, "Memory allocs")
-    mem = med(rs, "Memory used")
-    print(f"| {mode} | {label} | {len(rs)} | {int(med(rs,'Symbols')):,}{flag} | {int(med(rs,'Types')):,} | {int(med(rs,'Instantiations')):,} | "
-          f"{allocs/1e6:.2f} | {med(rs,'Check time'):.2f} | {mem*1024/1e9:.2f} | {med(rs,'peak')/1e9:.2f} | {med(rs,'maxrss')/1e9:.2f} | {med(rs,'load'):.0f} |"
-          if allocs is not None else
-          f"| {mode} | {label} | {len(rs)} | {int(med(rs,'Symbols')):,}{flag} | {int(med(rs,'Types')):,} | {int(med(rs,'Instantiations')):,} | - | {med(rs,'Check time'):.2f} | "
-          f"{(mem*1024/1e9) if mem else 0:.2f} | {med(rs,'peak')/1e9:.2f} | {med(rs,'maxrss')/1e9:.2f} | {med(rs,'load'):.0f} |")
+    print(f"| {mode} | {label} | {len(rs)} | {fmt(med(rs, 'Symbols'), ',.0f')}{flag} | {fmt(med(rs, 'Types'), ',.0f')} | "
+          f"{fmt(med(rs, 'Instantiations'), ',.0f')} | {fmt(med(rs, 'Memory allocs'), '.2f', 1e-6)} | "
+          f"{fmt(med(rs, 'Check time'), '.2f')} | {fmt(med(rs, 'Memory used'), '.2f', 1024 / 1e9)} | {fmt(med(rs, 'real'), '.2f')} | "
+          f"{fmt(med(rs, 'peak'), '.2f', 1e-9)} | {fmt(med(rs, 'maxrss'), '.2f', 1e-9)} | {fmt(med(rs, 'load'), '.0f')} |")

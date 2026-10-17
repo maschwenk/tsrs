@@ -4,10 +4,16 @@
 usage: measure.py OUT.jsonl ROUNDS MODE[,MODE] LABEL=BIN[:ENV=V;ENV=V] ...
 MODE: single | multi (4 checkers; tsrs gets --checkerAssignment go)
 Runs are interleaved per round (label order within a round).
+
+By default each run is timed (`real`, `maxrss`, `peak` from /usr/bin/time) and passes no --extendedDiagnostics. With
+STATS=1 each run passes --extendedDiagnostics for the counters (Symbols, Types, Instantiations, Memory used, check
+time) and records no wall time or peak memory: the statistics report runs inside the measured process (tsgo forces two
+full GCs and builds every file's line map), so its times are not comparable.
 """
-import json, os, re, subprocess, sys, time
+import json, os, re, subprocess, sys
 
 PROJECT = os.environ.get("PROJECT") or sys.exit("set PROJECT to the tsconfig directory to measure")
+STATS = os.environ.get("STATS") == "1"
 SCR = os.environ.get("MEASURE_CWD", os.path.dirname(os.path.abspath(__file__)))  # cwd for the runs (nothing is written there)
 
 out, rounds, modes = sys.argv[1], int(sys.argv[2]), sys.argv[3].split(",")
@@ -29,12 +35,13 @@ def parse(stdout, stderr):
         m = re.search(r"^" + key + r":\s+([\d.]+)", stdout, re.M)
         if m:
             r[key] = float(m.group(1))
-    m = re.search(r"([\d.]+) real", stderr)
-    r["real"] = float(m.group(1)) if m else None
-    m = re.search(r"(\d+)\s+maximum resident set size", stderr)
-    r["maxrss"] = int(m.group(1)) if m else None
-    m = re.search(r"(\d+)\s+peak memory footprint", stderr)
-    r["peak"] = int(m.group(1)) if m else None
+    if not STATS:
+        m = re.search(r"([\d.]+) real", stderr)
+        r["real"] = float(m.group(1)) if m else None
+        m = re.search(r"(\d+)\s+maximum resident set size", stderr)
+        r["maxrss"] = int(m.group(1)) if m else None
+        m = re.search(r"(\d+)\s+peak memory footprint", stderr)
+        r["peak"] = int(m.group(1)) if m else None
     r["errors_lines"] = len(re.findall(r"error TS\d+", stdout))
     return r
 
@@ -42,7 +49,9 @@ for rnd in range(rounds):
     for mode in modes:
         for label, binpath, env in specs:
             is_tsrs = os.path.basename(binpath) == "tsrs"
-            args = [binpath, "-p", PROJECT, "--noEmit", "--incremental", "false", "--extendedDiagnostics"]
+            args = [binpath, "--project", PROJECT, "--noEmit", "--incremental", "false"]
+            if STATS:
+                args.append("--extendedDiagnostics")
             if mode == "single":
                 args.append("--singleThreaded")
             else:
@@ -51,11 +60,11 @@ for rnd in range(rounds):
                     args += ["--checkerAssignment", "go"]
             e = dict(os.environ)
             e.update(env)
-            t0 = time.time()
-            p = subprocess.run(["/usr/bin/time", "-l"] + args, cwd=SCR, env=e, capture_output=True, text=True)
+            p = subprocess.run(args if STATS else ["/usr/bin/time", "-l"] + args, cwd=SCR, env=e, capture_output=True,
+                               text=True)
             r = parse(p.stdout, p.stderr)
             r.update(label=label, mode=mode, round=rnd, exit=p.returncode, load=os.getloadavg()[0], env=env)
             with open(out, "a") as f:
                 f.write(json.dumps(r) + "\n")
             print(f"{label:28s} {mode:6s} r{rnd} sym={r.get('Symbols')} types={r.get('Types')} inst={r.get('Instantiations')} "
-                  f"check={r.get('Check time')} mem={r.get('Memory used')} peak={r.get('peak')} load={r['load']:.0f} exit={p.returncode}", flush=True)
+                  f"check={r.get('Check time')} mem={r.get('Memory used')} real={r.get('real')} peak={r.get('peak')} load={r['load']:.0f} exit={p.returncode}", flush=True)

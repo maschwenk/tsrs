@@ -2,11 +2,12 @@
 """Probe for leaf-file freeing (notes/mem-leaf-regions-cost.md): interleaved runs of one tsrs binary under several
 environment variants, with the kernel-side numbers next to the wall time.
 
-Per run: wall (`os.wait4`), user and system CPU, peak RSS, minor faults, context switches, the deltas of
-/proc/vmstat counters that move with page faults, huge pages, compaction and TLB flushes, and the phase times of
-`--extendedDiagnostics`. After the timed runs, per variant: `perf stat` (page faults, dTLB misses, context switches,
-user and kernel cycles), `strace -f -c` (the syscall mix) and, if asked, `perf record` of one run with the kernel's
-top symbols. Everything goes to $PROBE_OUT; summary.md has the tables.
+Per run: wall (`os.wait4`), user and system CPU, peak RSS, minor faults, context switches and the deltas of
+/proc/vmstat counters that move with page faults, huge pages, compaction and TLB flushes. After the timed runs, per
+variant: `perf stat` (page faults, dTLB misses, context switches, user and kernel cycles), `strace -f -c` (the syscall
+mix) and, if asked, `perf record` of one run with the kernel's top symbols. Everything goes to $PROBE_OUT; summary.md
+has the tables. No run passes `--extendedDiagnostics`: it adds end-of-run work (tsgo forces two GCs and builds every
+file's line map; tsrs sums its counters across checkers).
 
     tools/perf/leafprobe.py --tsrs target/release/tsrs --work bench/.work --out probe-out \
         --projects vscode,formbricks-web --checkers 1,4 --reps 5 \
@@ -37,7 +38,6 @@ VMSTAT = [
     "pgscan_direct", "pgsteal_direct", "nr_tlb_remote_flush", "nr_tlb_remote_flush_received", "nr_tlb_local_flush_all",
     "nr_tlb_local_flush_one", "zone_reclaim_failed", "pgfree", "pgalloc_normal",
 ]
-PHASES = ["Parse time", "Bind time", "Check time", "Total time"]
 
 
 def vmstat() -> dict:
@@ -54,7 +54,7 @@ def vmstat() -> dict:
 def project_cmd(cfg: dict, name: str, tsrs: str, work: Path, checkers: int) -> tuple[Path, list[str]]:
     p = next(p for p in cfg["projects"] if p["name"] == name)
     cwd, proj = bench.project_path(cfg, p, work)
-    args = [tsrs, "-p", str(proj), "--noEmit", "--incremental", "false", "--pretty", "false", "--extendedDiagnostics"]
+    args = [tsrs, "--project", str(proj), "--noEmit", "--incremental", "false", "--pretty", "false"]
     args += ["--singleThreaded"] if checkers == 1 else ["--checkers", str(checkers)]
     return cwd, args
 
@@ -76,10 +76,6 @@ def timed(cwd: Path, args: list[str], env: dict, out: Path) -> dict:
         "errors": len(re.findall(r"error TS\d+", text)),
         "stats": next((l for l in text.splitlines() if l.startswith("tsrs: leaf files")), ""),
     }
-    for ph in PHASES:
-        m = re.search(rf"^{ph}:\s+([\d.]+)s", text, re.M)
-        if m:
-            r[ph] = float(m.group(1))
     return r
 
 
@@ -141,7 +137,7 @@ def main() -> None:
                     r.update(project=name, checkers=k, variant=vname, rep=rep)
                     results.append(r)
                     print(f"{name} c{k} {vname:>10} rep{rep}: wall {r['wall']:.3f} user {r['user']:.2f} sys {r['sys']:.2f}"
-                          f" rss {r['maxrss_kib'] / 1048576:.2f} GiB minflt {r['minflt']} check {r.get('Check time')}"
+                          f" rss {r['maxrss_kib'] / 1048576:.2f} GiB minflt {r['minflt']}"
                           f" thp {r['vmstat'].get('thp_fault_alloc')} compact {r['vmstat'].get('compact_stall')}"
                           f" errors {r['errors']} exit {r['exit']}", flush=True)
     (out / "results.json").write_text(json.dumps(results, indent=1))
@@ -165,8 +161,8 @@ def main() -> None:
                 lines.append(f"| {name} | {k} | {vname} | {w:.3f} | {100 * (w / first[0] - 1):+.1f}% | {100 * (paired - 1):+.1f}% | "
                              f"{min(r['wall'] for r in rs):.3f}-{max(r['wall'] for r in rs):.3f} | {cpu:.2f} | {rss / 1048576:.3f} | {100 * (rss / first[1] - 1):+.1f}% |")
     lines.append("")
-    lines.append("| project | checkers | variant | wall s (median) | vs first | user s | sys s | peak GiB | vs first | minor faults | thp_fault_alloc | compact_stall | tlb_remote_flush | Parse s | Bind s | Check s | errors |")
-    lines.append("| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
+    lines.append("| project | checkers | variant | wall s (median) | vs first | user s | sys s | peak GiB | vs first | minor faults | thp_fault_alloc | compact_stall | tlb_remote_flush | errors |")
+    lines.append("| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
     for name in projects:
         for k in checkers:
             first = None
@@ -174,13 +170,12 @@ def main() -> None:
                 rs = [r for r in results if r["project"] == name and r["checkers"] == k and r["variant"] == vname]
                 m = {key: med([r[key] for r in rs]) for key in ["wall", "user", "sys", "maxrss_kib", "minflt"]}
                 vm = {key: med([r["vmstat"].get(key, 0) for r in rs]) for key in ["thp_fault_alloc", "compact_stall", "nr_tlb_remote_flush"]}
-                ph = {key: med([r[key] for r in rs if key in r]) for key in PHASES}
                 first = first or m
                 lines.append(
                     f"| {name} | {k} | {vname} | {m['wall']:.3f} | {100 * (m['wall'] / first['wall'] - 1):+.1f}% | {m['user']:.2f} | "
                     f"{m['sys']:.2f} | {m['maxrss_kib'] / 1048576:.3f} | {100 * (m['maxrss_kib'] / first['maxrss_kib'] - 1):+.1f}% | "
                     f"{m['minflt']:.0f} | {vm['thp_fault_alloc']:.0f} | {vm['compact_stall']:.0f} | {vm['nr_tlb_remote_flush']:.0f} | "
-                    f"{ph['Parse time']:.3f} | {ph['Bind time']:.3f} | {ph['Check time']:.3f} | {sorted({r['errors'] for r in rs})} |")
+                    f"{sorted({r['errors'] for r in rs})} |")
     stats_lines = sorted({(r["variant"], r["project"], r["checkers"], r["stats"]) for r in results if r["stats"]})
     if stats_lines:
         lines.append("\n```")

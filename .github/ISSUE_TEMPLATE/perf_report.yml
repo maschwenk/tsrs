@@ -20,7 +20,7 @@ body:
     id: commands
     attributes:
       label: Commands
-      description: The exact commands for both compilers, for example `-p . --noEmit --incremental false --extendedDiagnostics`, with or without `--singleThreaded`.
+      description: The exact commands for both compilers, for example `--project . --noEmit --incremental false`, with or without `--singleThreaded`. Time runs without `--extendedDiagnostics`, whose statistics report adds work to tsgo's run that tsrs does not do.
       render: text
     validations:
       required: true
@@ -28,7 +28,7 @@ body:
     id: numbers
     attributes:
       label: Measurements
-      description: Wall time and peak memory for both (for example from `/usr/bin/time -l` or `-v`), how many runs, and the `--extendedDiagnostics` output of each.
+      description: Wall time and peak memory for both (for example from `/usr/bin/time -l` or `-v`) from runs without `--extendedDiagnostics`, how many runs, and the `--extendedDiagnostics` output of one separate, untimed run of each.
       render: text
     validations:
       required: true

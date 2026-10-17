@@ -143,8 +143,8 @@ tsrs's errors (the table's errors paragraph names such projects).
 
 ## What is measured
 
-- Invocation, identical for both: `-p <project> --noEmit --incremental false --extendedDiagnostics --pretty false`,
-  in the default mode (no thread flag: tsgo uses 4 checker threads; tsrs every core up to 16, then half the cores,
+- Invocation, identical for both: `-p <project> --noEmit --incremental false --pretty false` (`TIMED_FLAGS` in
+  `run.py`), in the default mode (no thread flag: tsgo uses 4 checker threads; tsrs every core up to 16, then half the cores,
   from 4 to 32, lowered toward 4 for programs with fewer than 32 type-checked files per checker; the standard
   4-vCPU runner uses 4). Other modes set `--singleThreaded`, `--checkers 4` or `--checkers 8`.
   The Bun comparison jobs run default mode again (`wide`) and `--checkers` 4, 8 and 16 (`wide-checkers4`,
@@ -173,9 +173,10 @@ tsrs's errors (the table's errors paragraph names such projects).
 - Wall: process wall clock measured by the harness. Peak: max RSS from `wait4` rusage (the number `/usr/bin/time -v`
   prints). Both come from `bench/measure.py`, a small process that starts the compiler: on Linux a child's peak
   starts at its parent's size, so peaks below the runner's own size (up to about 566 MiB) used to read as that size.
-  Results before 2026-10-15 have that floor; it shows as bun check and tsrs reading the same peak on small projects. The JSON also has the `--extendedDiagnostics` check/total time, "Memory used", files, symbols, types and
-  instantiations of every run. tsrs's default-mode counters are lower than tsgo's by design (lazy members); compare
-  counters in `--singleThreaded` runs or with `--noLazyMembers`.
+  Results before 2026-10-15 have that floor; it shows as bun check and tsrs reading the same peak on small projects.
+- No timed run passes `--extendedDiagnostics` (or `--diagnostics`); see
+  [Never time a run with `--extendedDiagnostics`](#never-time-a-run-with---extendeddiagnostics). A tsgo or tsrs run
+  counts as finished when it exits 0, 1 or 2 and printed no panic.
 - Each mode gets two tables, wall time and peak memory, with the same rows in the same order: sorted by the speedup
   vs tsgo, biggest first (`speedup_sort_key` in `run.py`); a failed row goes last. The comparison columns read
   "Nx faster" / "Nx slower" and "Nx less" / "Nx more" (the other tool's value / tsrs's, or its inverse).
@@ -429,6 +430,26 @@ artifact works on Depot CI (a job can download an artifact that a still-running 
 because the 64-vCPU job's 13-minute measurement varies by more than that (762 s vs 779 s). And eleven runners, one of
 them 64 vCPU, sat idle through the 7-minute build.
 
+## Never time a run with `--extendedDiagnostics`
+
+Never pass `--extendedDiagnostics` or `--diagnostics` to a run whose wall time or peak memory you measure: not in
+`bench/`, `tools/perf/`, `upstream/tools/`, a one-off `time tsc ...` or `hyperfine`, nor in numbers quoted in a pull
+request or note. The statistics report runs inside the process, after the check and before it exits, and it costs the
+two compilers different amounts:
+
+- tsgo calls `runtime.GC()` twice to settle the heap, then `runtime.ReadMemStats`, then `Program.LineCount()`, which
+  builds the line map of every source file (`internal/execute/tsc/emit.go` `EmitAndReportStatistics`,
+  `internal/execute/tsc/statistics.go`). Two full collections of a multi-GB heap add wall time and CPU, and the line
+  maps add memory.
+- tsrs reads its resident size from `/proc/self/statm` and counts lines without building or keeping the line maps
+  (notes/mem-frontend.md), then sums the counters across checkers.
+
+A timed run with the flag adds more work to tsgo than to tsrs and tilts the comparison toward tsrs; in a
+tsrs-vs-tsrs comparison it still adds end-of-run work that is not type checking. When you need
+the counters or phase times, take them from a separate untimed run: `bench/compare.py`'s warm-up, the stats runs of
+`tools/perf/clusterprobe.py` and `tools/perf/probe.sh`, or `upstream/tools/measure.py` with `STATS=1`. Instruction
+counts (`bench/count.py`) leave it off too.
+
 ## Verifying a branch
 
 The disabled [`.github/workflows/pr-verify.yml.bak`](../.github/workflows/pr-verify.yml.bak) answers the two questions a performance or refactoring branch has to answer before it
@@ -439,11 +460,11 @@ main after the branch was cut are not counted as the branch's.
 
 `tools/perf/verify.py` does the measuring (it also runs locally: `tools/perf/verify.py --base <tsrs> --new <tsrs>`).
 For every project in `bench/projects.json` and every checker count (default 1, 4, 16, 32), both binaries run
-`-p <project> --noEmit --incremental false --extendedDiagnostics --pretty false --checkers N` three times, interleaved.
+`-p <project> --noEmit --incremental false --pretty false --checkers N` three times, interleaved.
 Per project it also counts the instructions of one single-threaded run of each (`bench/count.py`, as in the
 regression flag), and runs the branch once at 16 checkers with `TSRS_ARENA_POISON=1` (freed arena memory is filled
 and never reused, so a use after free crashes or changes the output). The result is a table per project (wall time,
-peak RSS and check time, base vs branch, and the instruction counts), in the job summary and the `pr-verify` artifact
+peak RSS, base vs branch, and the instruction counts), in the job summary and the `pr-verify` artifact
 (`verify-out/verify.{md,json}` plus every run's output).
 
 **What fails it**: any cell where the two binaries' diagnostics differ (every `error TS` line with its continuation
@@ -488,7 +509,7 @@ tsrs every core up to 16, then half the cores, at most 32, bun one thread per co
 `--threads N` to bun;
 `all` is the machine's thread count. The knobs are not identical: `--checkers` sets only the checker threads (parsing
 and binding still use every core), while bun's `--threads` caps all of its threads. Per project, one untimed warm-up
-per compiler, then `--reps` (default 20) reps in which the compiler order rotates; the table reports mean ± standard
+per compiler (tsgo and tsrs with `--extendedDiagnostics`, for the program's file count), then `--reps` (default 20) reps in which the compiler order rotates; the table reports mean ± standard
 deviation, median and minimum wall time and mean peak RSS, plus whether each compiler's (file, line, column, code)
 error list equals 7.1-dev's. bun's file count is its own "checked N files" summary, which is not the program's file
 count (13 fewer on `Compiler`, 1,028 fewer on vscode).
