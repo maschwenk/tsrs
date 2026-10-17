@@ -53,7 +53,7 @@ An upgrade is a pull request of its own:
 2. Fix what the new compiler rejects (CI sets Cargo's `build.warnings=deny`).
 3. Run the full Clippy command above on macOS and Linux and fix every new finding.
 4. Measure the instruction and peak-memory change per project before and after the upgrade and put it in the pull
-   request. Benchmark automation is disabled (`bench/README.md`, "CI"); use the local tools or restore the saved
+   request. The published benchmark workflow is disabled (`bench/README.md`, "CI"); use the local tools or restore the saved
    workflow to collect the measurements (`bench/regressions.py` sees the rustc change and flags nothing).
 5. Release builds use the same version; run the `Release` workflow by hand (`dry_run` on) to check them.
 

@@ -1,7 +1,7 @@
 # CodSpeed (https://codspeed.io): full compilations against an in-memory filesystem, single-threaded under CPU
 # simulation. tsrs_bench captures the project's filesystem before measurement, then Criterion2 measures a fresh
 # compilation. Each project gets a separate process to reclaim compiler arenas and isolate process-wide settings.
-# The wall-time benchmark runs separately in .github/workflows/bench.yml.bak.
+# The disabled wall-time benchmark workflow is saved in .github/workflows/bench.yml.bak.
 # Security: read-only GITHUB_TOKEN plus an OIDC token for the CodSpeed upload, no secrets.
 
 name: CodSpeed

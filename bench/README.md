@@ -4,7 +4,7 @@
 ([microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), `cases/`) and eleven
 open-source applications and libraries (see "Application projects") with tsrs, with tsgo 7.0.2 (npm `typescript@7.0.2`) and, where a
 Bun binary is given, with `bun check`, and reports wall time, peak memory and the error count of each.
-Benchmark automation is disabled; its workflow is preserved as
+Wall-time benchmark automation is disabled; its workflow is preserved as
 [`.github/workflows/bench.yml.bak`](../.github/workflows/bench.yml.bak). The local commands below remain available.
 The outdated `bench/results/` archive has been removed from the working tree; historical runs remain in
 [Git history](https://github.com/oxc-project/tsrs/tree/94e7305f0f067e9f68570798c0498e03c7e423eb/bench/results).
@@ -247,17 +247,17 @@ the small projects move by a few hundred KiB), so peak memory is flagged when it
 
 ## CI
 
-Benchmark automation is disabled, including manual dispatch. The definitions are preserved under `.github/workflows/`
-as `bench.yml.bak`, `bench-compare.yml.bak`, `codspeed.yml.bak`, `pr-verify.yml.bak`, `perf-probe.yml.bak` and
+CodSpeed runs on pushes to main, pull requests, and manual dispatch. The other benchmark workflows are disabled,
+including manual dispatch. Their definitions are preserved under `.github/workflows/`
+as `bench.yml.bak`, `bench-compare.yml.bak`, `pr-verify.yml.bak`, `perf-probe.yml.bak` and
 `perf-layout-probe.yml.bak`. Local measurement tools remain available; recorded runs are archived in Git history.
 
-The workflow descriptions and dispatch commands in this section document the saved definitions. Restore the
-corresponding original `.yml` filename before using any `gh workflow run` command. No automated measurements,
-regression comments or result/chart updates run while the workflows are disabled.
+For those saved workflows, restore the original `.yml` filename before using their `gh workflow run` commands.
+They produce no automated measurements, regression comments or result/chart updates while disabled.
 
 ### CodSpeed simulation
 
-The saved `.github/workflows/codspeed.yml.bak` defines measurements for full, single-threaded compilations of Compiler-Unions, xstate-main,
+`.github/workflows/codspeed.yml` measures full, single-threaded compilations of Compiler-Unions, xstate-main,
 webpack, and drizzle-orm using Criterion2's built-in CodSpeed support. `tsrs_bench` first runs an unmeasured
 compilation that records filesystem responses: source and config text, package metadata, directory listings,
 negative probes, realpaths, and case sensitivity. Subsequent compilations read only that immutable snapshot;
