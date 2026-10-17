@@ -1,27 +1,25 @@
-use criterion::{BenchmarkId, Criterion, criterion_group};
+use criterion::Criterion;
 use tsrs_bench::PreparedProject;
 
 #[global_allocator]
 static ALLOCATOR: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
 
-fn compile_in_memory(criterion: &mut Criterion) {
+fn compiler(criterion: &mut Criterion) {
+    criterion.set_current_file(criterion::abs_file!());
+    criterion.set_macro_group("compiler");
     // Criterion2's CodSpeed adapter ignores CLI filters. Register just the requested project, so
     // separate cargo-codspeed invocations cannot accidentally run and retain all four programs.
     let name = std::env::var("TSRS_BENCH_PROJECT")
         .expect("set TSRS_BENCH_PROJECT to the project to benchmark");
     let project = PreparedProject::load(&name);
-    let mut group = criterion.benchmark_group("compile_in_memory");
-    group.bench_function(BenchmarkId::from_parameter(&name), |b| {
+    criterion.bench_function(&name, |b| {
         b.iter_with_setup_wrapper(|runner| {
             let (sys, args) = project.invocation();
             let result = runner.run(|| sys.compile(args));
             project.verify(&result);
         });
     });
-    group.finish();
 }
-
-criterion_group!(compiler, compile_in_memory);
 
 fn main() {
     // Compiler profiling switches can write files directly, bypassing the FS interface.

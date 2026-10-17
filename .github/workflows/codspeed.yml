@@ -1,6 +1,6 @@
 # CodSpeed (https://codspeed.io): full compilations against an in-memory filesystem, single-threaded under CPU
 # simulation. tsrs_bench captures the project's filesystem before measurement, then Criterion2 measures a fresh
-# compilation. Each project gets a separate process to reclaim compiler arenas and isolate process-wide settings.
+# compilation. Each project runs in a separate job to parallelize simulation and isolate compiler arenas and settings.
 # The disabled wall-time benchmark workflow is saved in .github/workflows/bench.yml.bak.
 # Security: read-only GITHUB_TOKEN plus an OIDC token for the CodSpeed upload, no secrets.
 
@@ -26,14 +26,18 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
-  # The projects of tsrs_bench, set up by bench/run.py.
-  PROJECTS: Compiler-Unions,xstate-main,webpack,drizzle-orm
 
 jobs:
   benchmarks:
-    name: Run benchmarks
+    name: Benchmark (${{ matrix.project }})
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [Compiler-Unions, xstate-main, webpack, drizzle-orm]
+    env:
+      TSRS_BENCH_PROJECT: ${{ matrix.project }}
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
@@ -41,21 +45,21 @@ jobs:
         with:
           registry-url: "" # Public benchmark installs use Yarn 1, which rejects an unset NODE_AUTH_TOKEN.
 
-      - name: Cache key for the bench projects
+      - name: Cache key for the bench project
         id: keys
-        run: echo "work=$(python3 bench/run.py --print-cache-keys --projects "$PROJECTS" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+        run: echo "work=$(python3 bench/run.py --print-cache-keys --projects "$TSRS_BENCH_PROJECT" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache the bench projects
+      - name: Cache the bench project
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             bench/.work/suite
             bench/.work/tsgo
-            bench/.work/solutions
-          key: codspeed-work-${{ runner.os }}-${{ steps.keys.outputs.work }}
+            bench/.work/solutions/${{ matrix.project }}
+          key: codspeed-work-${{ runner.os }}-${{ matrix.project }}-${{ steps.keys.outputs.work }}
 
-      - name: Set up the bench projects
-        run: python3 bench/run.py --setup-only --projects "$PROJECTS"
+      - name: Set up the bench project
+        run: python3 bench/run.py --setup-only --projects "$TSRS_BENCH_PROJECT"
 
       - name: Set up Rust
         uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
@@ -75,8 +79,4 @@ jobs:
           RAYON_NUM_THREADS: "1"
         with:
           mode: simulation
-          run: |
-            set -e
-            for project in $(printf '%s' "$PROJECTS" | tr ',' ' '); do
-              TSRS_BENCH_PROJECT="$project" cargo codspeed run -p tsrs_bench --bench compiler -m simulation
-            done
+          run: cargo codspeed run -p tsrs_bench --bench compiler -m simulation
