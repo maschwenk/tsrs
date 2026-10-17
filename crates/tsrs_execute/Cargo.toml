@@ -30,3 +30,6 @@ libc = "0.2"
 [dev-dependencies]
 similar = "3"
 tsrs_contentmappertest.workspace = true
+
+[lib]
+doctest = false

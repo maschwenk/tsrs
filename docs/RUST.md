@@ -13,12 +13,12 @@ and ty, Biome, Turborepo, and swc. Where a rule copies one of them, it says whic
 ## Clippy
 
 ```sh
-cargo clippy --workspace --locked --all-targets --config 'build.warnings="deny"' -- -D dead-code
+cargo clippy --all-targets --config 'build.warnings="deny"'
 ```
 
 `[workspace.lints.clippy]` in `Cargo.toml` and `clippy.toml` turn on the oxc baseline and the project-specific strict
-lints. The command promotes warnings to errors, and CI also denies ordinary compiler warnings. There is no findings
-baseline: the command above must be clean before a change lands (CI runs it in the `lint` job).
+lints, all at `deny`. The command also rejects ordinary compiler warnings. There is no findings baseline:
+the command above must be clean before a change lands (CI runs it in the `lint` job).
 
 When it fails:
 
@@ -31,15 +31,16 @@ When it fails:
 Details:
 
 - Findings depend on the Clippy version, so `rust-toolchain.toml` pins it everywhere.
-- The command covers all targets, including tests and examples, of every workspace crate. Fourslash findings are
-  fixed in `tsrs_fourslash_harness` or `tools/gen-fourslash`, then the fixtures are regenerated.
+- Run from the repository root, where Cargo selects every workspace crate by default. The command covers all
+  targets, including tests and examples. Fourslash findings are fixed in `tsrs_fourslash_harness` or
+  `tools/gen-fourslash`, then the fixtures are regenerated.
 - Also check `--all-features` when changing lint policy. It enables `plain-ptrs`, so check optional features with
   compressed pointers separately. These scopes include profiling tools and both pointer representations.
 - Workspace crates declare `publish = false`; missing crates.io metadata does not need a global exception.
 - Generated Rust is linted; fix its generator when Clippy finds something. When generated code intentionally needs
   an exception, emit the smallest reasoned `#[expect]` from the generator.
 - `dead_code`, `unused_imports`, `unused_variables`, `unused_mut` and `unsafe_op_in_unsafe_fn` are ordinary compiler
-  warnings, which `build.warnings=deny` rejects. The Clippy command also denies `dead_code` explicitly over its scope.
+  warnings, which `build.warnings=deny` rejects.
 
 ## Upgrading Rust
 
@@ -154,6 +155,7 @@ In place:
 | `#[cold]` slow-path splits | `notes/perf-parse.md` changes 6 to 8: parse instructions 16.66 G -> 15.07 G | oxc, Bun |
 | Instruction counts and peak memory, with regression reporting (automation disabled) | `bench/README.md` "Regression flag": single-threaded tsrs repeats to about 0.001% (instructions) and under 0.4% (peak RSS); the local tools remain available, but the saved `.yml.bak` workflows do not measure commits or comment on PRs | CodSpeed in oxc, Rolldown, Ruff, Biome, swc (simulated counts); Ruff's PR memory report |
 | Generated-code freshness check | `tools/gen-check.sh` (the `generated-code` job is disabled in `.github/workflows/ci.yml.bak`) re-runs the eight generators and fails on a diff; it found two hand edits the generators no longer reproduced | oxc, Ruff, rust-analyzer |
+| Unused-dependency checks in CI | `.github/workflows/autofix.yml` runs cargo-shear, updates the lock file after fixes, and rejects pending fixes in merge groups | oxc, Rolldown, Ruff, rust-analyzer |
 | Differential parser fuzzing | `tools/fuzz/parser.py` mutates conformance files and compares the AST hashes of the Go and Rust oracles (`tools/oracle/ast`); the nightly 200,000-mutant workflow is disabled as [fuzz.yml.bak](../.github/workflows/fuzz.yml.bak), while the local tool remains available. First 320,000 mutants: no divergence, no crash (inputs kept valid UTF-8; invalid UTF-8 is read lossily on purpose) | Ruff (`cargo fuzz` on its parser) |
 | Frame pointers for profiling | `docs/DEBUGGING.md` "Profiling": a `dist` build with `-C force-frame-pointers=yes` for samply / `perf` on Linux (Apple arm64 always keeps them) | Bun |
 | Transparent huge pages for the arena on Linux: large thread-arena chunks 2 MiB-aligned and advised with `MADV_HUGEPAGE`. The mimalloc heap is not advised (the CLI builds mimalloc with `no_thp`): with the advice every partly filled thread-local mimalloc page was resident as a whole 2 MiB page | `notes/linux-x86-round.md`: 2-6% less wall time, 21-48x fewer page faults; `notes/linux-perf.md`: THP off costs 11-12%; `notes/mem-no-thp.md`: no advice on the heap, -25 to -33% peak RSS at 4-64 checkers on 64 vCPUs for +4-9% wall time against `bun check` on the same runner (parse +30%, check +1-5%) | mimalloc (advises its own OS memory unless built with `no_thp`) |
@@ -192,7 +194,7 @@ Not tried. Each needs a measurement before it is adopted; none is applied yet:
 | Arena-backed temporaries | oxc (arena `Vec` and `HashMap`), Bun (hashbrown on its arenas through `allocator-api2`, the stable stand-in for the nightly `Allocator` API) | Scratch vectors and maps skip malloc and free. | A scratch allocator whose reset point is provable; scope regions were rejected (above), so per-call scratch is the experiment. |
 | Inline small vectors | `smallvec` in oxc, Rolldown, Ruff, Bun | No heap allocation for short temporaries. | An allocation profile showing which temporaries are short. |
 | Call-graph lints | mordant, used by Bun with a per-file baseline, advisory there | `forbidden_reach` ("nothing reachable from this function may allocate"), `generic_body_not_generic` (code compiled again per type for no reason). | A nightly with `rustc-dev` that compiles the workspace. |
-| Dependency checks in CI | cargo-deny (oxc, Ruff, Biome, swc), cargo-shear or machete (oxc, Rolldown, Ruff, rust-analyzer) | `deny.toml` exists but no job runs it; unused dependencies cost fat-LTO build time. | A CI step. |
+| Dependency policy checks in CI | cargo-deny (oxc, Ruff, Biome, swc) | `deny.toml` exists but no job runs it. | A CI step. |
 
 Not pursued: a binary-size check (Bun fails a pull request that grows the binary by more than 0.5 MB); size is not a
 goal here (owner decision, 2026-10-05).

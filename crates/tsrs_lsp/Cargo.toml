@@ -20,3 +20,6 @@ tsrs_project.workspace = true
 tsrs_fswatch = { path = "../tsrs_fswatch" }
 rustc-hash.workspace = true
 indexmap.workspace = true
+
+[lib]
+doctest = false

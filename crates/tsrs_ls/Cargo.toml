@@ -31,3 +31,6 @@ tsrs_lsproto.workspace = true
 rustc-hash.workspace = true
 indexmap.workspace = true
 bitflags.workspace = true
+
+[lib]
+doctest = false

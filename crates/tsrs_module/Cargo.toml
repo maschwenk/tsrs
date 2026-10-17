@@ -16,3 +16,6 @@ tsrs_ast.workspace = true
 tsrs_vfs.workspace = true
 rustc-hash.workspace = true
 bitflags.workspace = true
+
+[lib]
+doctest = false

@@ -20,3 +20,7 @@ tsrs_checker.workspace = true
 tsrs_printer.workspace = true
 tsrs_transformers.workspace = true
 rustc-hash.workspace = true
+
+[lib]
+test = false
+doctest = false

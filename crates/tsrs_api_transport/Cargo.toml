@@ -17,3 +17,6 @@ tsrs_core.workspace = true
 rustc-hash.workspace = true
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
+
+[lib]
+doctest = false

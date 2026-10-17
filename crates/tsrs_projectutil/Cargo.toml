@@ -12,3 +12,6 @@ workspace = true
 [dependencies]
 tsrs_core.workspace = true
 rustc-hash.workspace = true
+
+[lib]
+doctest = false

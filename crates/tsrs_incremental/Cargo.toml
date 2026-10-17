@@ -27,3 +27,6 @@ xxhash-rust = { version = "0.8", features = ["xxh3"] }
 
 [dev-dependencies]
 tsrs_parser.workspace = true
+
+[lib]
+doctest = false

@@ -1,57 +1,69 @@
 name: CI
 
-permissions:
-  contents: read
+permissions: {}
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  merge_group:
   workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize]
+  merge_group:
+  push:
+    branches:
+      - main
 
 concurrency:
-  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
-env:
-  CARGO_TERM_COLOR: always
+  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.ref_name != 'main' }}
 
 jobs:
   lint:
-    runs-on: ubuntu-24.04
+    name: Lint
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - name: Source checks
+        id: source-checks
+        run: python3 tools/lint/source.py --self-test && python3 tools/lint/source.py
+        background: true
+
       - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
         with:
-          save-cache: false
-          cache-key: warm
+          save-cache: ${{ github.ref_name == 'main' }}
+          cache-key: warm-lint
+
       - name: Clippy
-        run: cargo clippy --workspace --locked --all-targets --config 'build.warnings="deny"' -- -D dead-code
-      - name: Source checks
-        run: python3 tools/lint/source.py --self-test && python3 tools/lint/source.py
+        run: cargo clippy --locked --all-targets --config 'build.warnings="deny"'
+
+      - wait: source-checks
 
   test:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    name: Test Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
     env:
       TSRS_TEST: target/debug/tsrs-test
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
-      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
-      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
-        with:
-          save-cache: ${{ github.ref_name == 'main' }}
-          cache-key: warm
+
+      - parallel:
+          - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+
+          - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+            with:
+              save-cache: ${{ github.ref_name == 'main' }}
+              cache-key: warm-test
 
       - name: Read TypeScript reference commit
         id: ts
         run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
       # The conformance suite and tsoptions unit tests need the pinned upstream fixtures.
       - name: Check out TypeScript testdata
+        id: testdata
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        background: true
         with:
           repository: microsoft/TypeScript
           ref: ${{ steps.ts.outputs.commit }}
@@ -62,8 +74,12 @@ jobs:
 
       - name: cargo check
         run: cargo check --workspace --exclude tsrs_fourslash --locked --config 'build.warnings="deny"'
+
+      - wait: testdata
+
       - name: Request filesystem Go fixtures
         run: cargo test --locked -p tsrs_api --test requestfs_differential
+
       - name: cargo test (fast crates)
         run: >-
           cargo test --locked --no-fail-fast
@@ -71,13 +87,16 @@ jobs:
           -p tsrs_diagnostics -p tsrs_vfs -p tsrs_module
           -p tsrs_tsoptions -p tsrs_printer -p tsrs_modulespecifiers -p tsrs_compiler -p tsrs_incremental -p tsrs_execute
           -p tsrs_testrunner -p tsrs_cli
+
       - name: npm library paths (noembed)
         run: cargo test --locked -p tsrs_cli --features noembed --test npm_lib_path
+
       - name: Build correctness binaries
         run: cargo build --profile dev --locked -p tsrs_cli -p tsrs_testrunner
 
       - name: Conformance suite
         run: .github/scripts/conformance-gate.sh
+
       - name: Conformance suite (default checker mode)
         env:
           TS_TEST_PROGRAM_SINGLE_THREADED: "false"
@@ -86,6 +105,7 @@ jobs:
           MIN_SYMBOLS: "12778"
           TSRS_TEST_RESULTS: ${{ github.workspace }}/target/test-results-default
         run: .github/scripts/conformance-gate.sh
+
       - name: Regression cases
         run: tools/regressions.sh target/debug/tsrs
 

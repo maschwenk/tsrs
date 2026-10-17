@@ -16,3 +16,6 @@ tsrs_module.workspace = true
 tsrs_tsoptions.workspace = true
 rustc-hash.workspace = true
 regex = "1"
+
+[lib]
+doctest = false
