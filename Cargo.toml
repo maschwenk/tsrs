@@ -128,13 +128,12 @@ non_camel_case_types = "allow"
 raw_borrows_via_references = "warn"
 
 [workspace.lints.clippy]
-# Keep the baseline aligned with oxc-project/oxc. The documented Clippy command promotes these warnings to errors;
-# project-specific performance, memory, threading and unsafe lints below are denied directly.
-all = { level = "warn", priority = -2 }
-pedantic = { level = "warn", priority = -1 }
-complexity = { level = "warn", priority = -1 }
-nursery = { level = "warn", priority = -1 }
-cargo = { level = "warn", priority = -1 }
+# Keep the baseline aligned with oxc-project/oxc. Deny every enabled Clippy lint directly.
+all = { level = "deny", priority = -2 }
+pedantic = { level = "deny", priority = -1 }
+complexity = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+cargo = { level = "deny", priority = -1 }
 correctness = { level = "deny", priority = -1 }
 suspicious = { level = "deny", priority = -1 }
 perf = { level = "deny", priority = -1 }
@@ -173,27 +172,27 @@ struct_field_names = "allow"
 many_single_char_names = "allow"
 
 # Oxc restriction and nursery additions.
-empty_drop = "warn"
-empty_enum_variants_with_brackets = "warn"
-fn_to_numeric_cast_any = "warn"
-unnecessary_self_imports = "warn"
-try_err = "warn"
-error_impl_error = "warn"
-filetype_is_file = "warn"
-get_unwrap = "warn"
-rest_pat_in_fully_bound_structs = "warn"
-unnecessary_safety_comment = "warn"
-infinite_loop = "warn"
-map_with_unused_argument_over_ranges = "warn"
-unused_result_ok = "warn"
-pathbuf_init_then_push = "warn"
-pub_underscore_fields = "warn"
-non_zero_suggestions = "warn"
-precedence_bits = "warn"
-iter_on_single_items = "warn"
-unused_peekable = "warn"
-suspicious_operation_groupings = "warn"
-return_and_then = "warn"
+empty_drop = "deny"
+empty_enum_variants_with_brackets = "deny"
+fn_to_numeric_cast_any = "deny"
+unnecessary_self_imports = "deny"
+try_err = "deny"
+error_impl_error = "deny"
+filetype_is_file = "deny"
+get_unwrap = "deny"
+rest_pat_in_fully_bound_structs = "deny"
+unnecessary_safety_comment = "deny"
+infinite_loop = "deny"
+map_with_unused_argument_over_ranges = "deny"
+unused_result_ok = "deny"
+pathbuf_init_then_push = "deny"
+pub_underscore_fields = "deny"
+non_zero_suggestions = "deny"
+precedence_bits = "deny"
+iter_on_single_items = "deny"
+unused_peekable = "deny"
+suspicious_operation_groupings = "deny"
+return_and_then = "deny"
 
 # A `.clone()` that remains is a real copy.
 redundant_clone = "deny"

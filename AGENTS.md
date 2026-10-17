@@ -11,7 +11,7 @@ Use `--release` only for performance numbers.
 
 ## Lint
 
-Run `cargo clippy --workspace --locked --all-targets --config 'build.warnings="deny"' -- -D dead-code` and
+Run `cargo clippy --all-targets --config 'build.warnings="deny"'` and
 `tools/lint/source.py` before a change lands (`docs/RUST.md`).
 
 - Fix what they report in the code you wrote.
