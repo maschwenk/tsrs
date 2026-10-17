@@ -14,7 +14,7 @@ use tsrs_compiler::{self as compiler, CompilerHost};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::{CompilerOptions, ScriptKind, Tristate, P};
 use tsrs_tsoptions::{self as tsoptions, ParsedCommandLine};
-use tsrs_vfs::{bundled, vfstest, FS};
+use tsrs_vfs::{bundled::embed as bundled, vfstest, FS};
 
 use crate::compiler_runner::{self, Outcome, TestItem};
 use crate::diagnosticwriter::{Diag, FileLike};

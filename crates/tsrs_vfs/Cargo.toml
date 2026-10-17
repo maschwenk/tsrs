@@ -9,6 +9,10 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Read standard libraries beside the executable, as in upstream npm builds.
+noembed = []
+
 [dependencies]
 tsrs_core.workspace = true
 rustc-hash.workspace = true

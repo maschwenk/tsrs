@@ -9,7 +9,7 @@ use rustc_hash::FxHashSet;
 use tsrs_compiler::{get_diagnostics_of_any_program, new_cached_fs_compiler_host, new_program, Context, ProgramOptions};
 use tsrs_core::{tspath, Tristate, P};
 use tsrs_tsoptions::{self as tsoptions, ParseConfigHost};
-use tsrs_vfs::{bundled, osvfs, FS};
+use tsrs_vfs::{bundled::embed as bundled, osvfs, FS};
 
 use crate::type_symbol_baseline::{project_file_baseline, TypeWriterWalker};
 

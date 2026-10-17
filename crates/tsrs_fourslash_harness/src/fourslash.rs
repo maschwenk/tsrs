@@ -316,7 +316,7 @@ fn new_fourslash_impl(t: &T, content: &str, options: Option<FourslashOptions>, t
         })
         .collect();
     let fs_from_map = Arc::new(tsrs_vfs::vfstest::from_map(entries, harness_options.use_case_sensitive_file_names));
-    let fs: Arc<dyn FS> = Arc::new(tsrs_vfs::bundled::wrap_fs(Arc::clone(&fs_from_map)));
+    let fs: Arc<dyn FS> = Arc::new(tsrs_vfs::bundled::embed::wrap_fs(Arc::clone(&fs_from_map)));
 
     if options.content_mapper_spawner.is_some() {
         // serverOpts.Spawn = options.ContentMapperSpawner.Spawn: content mappers are out of scope (docs/LSP.md).
@@ -329,7 +329,7 @@ fn new_fourslash_impl(t: &T, content: &str, options: Option<FourslashOptions>, t
 
         cwd: "/".to_string(),
         fs: Some(Arc::clone(&fs)),
-        default_library_path: tsrs_vfs::bundled::lib_path(),
+        default_library_path: tsrs_vfs::bundled::embed::lib_path(),
         typings_location: String::new(),
 
         parse_cache: Some(PARSE_CACHE.clone()),

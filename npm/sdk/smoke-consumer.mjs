@@ -3,7 +3,7 @@
 // and exercises the published package: the CLI, the root version export, a nodenext typecheck of the unstable/*
 // declarations (with the packaged binary), and real sync + async compiles through the JS API.
 //
-//   node npm/sdk/smoke-consumer.mjs [--dist npm/dist] [--node <node binary>]... [--keep]
+//   node npm/sdk/smoke-consumer.mjs [--dist npm/dist] [--node <node binary>]... [--keep] [--noembed]
 //
 // --node (repeatable) runs the consumer under each given Node binary instead of the current one, e.g. to check the
 // package's `engines` minimum.
@@ -16,7 +16,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -46,6 +46,17 @@ try {
         const target = pkg.exports[sub].default;
         if (!fs.existsSync(path.join(dir, "node_modules/tsrs", target))) throw new Error(`export ${sub} -> ${target} is not in the tarball`);
         if (!fs.existsSync(path.join(dir, "node_modules/tsrs", target.replace(/\.js$/, ".d.ts")))) throw new Error(`export ${sub} has no declarations`);
+    }
+
+    if (args.includes("--noembed")) {
+        const { default: getExePath } = await import(pathToFileURL(path.join(dir, "node_modules/tsrs/lib/getExePath.js")));
+        const exe = getExePath();
+        const binary = fs.readFileSync(exe);
+        for (const name of ["lib.es5.d.ts", "lib.dom.d.ts"]) {
+            const typings = fs.readFileSync(path.join(path.dirname(exe), name));
+            if (binary.includes(typings)) throw new Error(`${name} is still embedded in the npm binary`);
+        }
+        console.log("noembed ok: standard libraries are on disk and absent from the binary");
     }
 
     const bin = path.join(dir, "node_modules", ".bin", process.platform === "win32" ? "tsrs.cmd" : "tsrs");

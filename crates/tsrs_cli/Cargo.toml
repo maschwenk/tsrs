@@ -24,6 +24,7 @@ tsrs_execute = { path = "../tsrs_execute" }
 libmimalloc-sys2 = { version = "0.1.63", features = ["v3", "no_thp"] }
 libc = "0.2"
 [features]
+noembed = ["tsrs_vfs/noembed"]
 # The system allocator instead of mimalloc, for sanitizer builds (AddressSanitizer and ThreadSanitizer track only its
 # blocks; mimalloc's memory looks like one long-lived region to them).
 system-alloc = []

@@ -188,7 +188,7 @@ impl FourslashTest {
             for path in get_accessible_file_paths(&*self.vfs, "/") {
                 add_file_entry(&path, &mut found_marker, &mut found_additional_location, &mut baseline_entries);
             }
-            for path in get_accessible_file_paths(&*self.vfs, &tsrs_vfs::bundled::lib_path()) {
+            for path in get_accessible_file_paths(&*self.vfs, &tsrs_vfs::bundled::embed::lib_path()) {
                 add_file_entry(&path, &mut found_marker, &mut found_additional_location, &mut baseline_entries);
             }
         }

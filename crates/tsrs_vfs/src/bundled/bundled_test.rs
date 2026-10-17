@@ -1,5 +1,6 @@
 use super::*;
 use crate::osvfs;
+#[cfg(not(feature = "noembed"))]
 use crate::FS;
 
 #[test]
@@ -23,6 +24,7 @@ fn test_embedded_libs() {
 }
 
 #[test]
+#[cfg(not(feature = "noembed"))]
 fn test_embedded_contents_match_source() {
     let fs = wrap_fs(osvfs::fs());
     let os = osvfs::fs();
@@ -56,4 +58,14 @@ fn test_default_lib_path() {
     assert_eq!(default_lib_path_from(None, None), lib_path());
     // TSRS_LIB_PATH wins over both.
     assert_eq!(default_lib_path_from(Some("/x/libs".to_string()), Some(with_libs)), "/x/libs");
+}
+
+#[test]
+#[cfg(feature = "noembed")]
+fn test_noembed() {
+    assert!(is_bundled("bundled:///libs/lib.d.ts"));
+    assert!(embedded_file("bundled:///libs/lib.d.ts").is_none());
+    let fs = wrap_fs(osvfs::fs());
+    assert!(fs.read_file(&format!("{}/lib.es5.d.ts", lib_path())).is_some());
+    assert!(fs.read_file("bundled:///libs/lib.es5.d.ts").is_none());
 }
