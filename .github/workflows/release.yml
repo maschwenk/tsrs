@@ -110,6 +110,9 @@ jobs:
     env:
       # TypeScript's version in the binary (Cargo.toml [workspace.metadata.typescript] nightly).
       TSRS_TS_VERSION: ${{ needs.version.outputs.ts_nightly }}
+      TSRS_CARGO_FEATURES: tsrs_cli/noembed
+      # PGO requires matching profile settings. BOLT needs symbols until its final strip.
+      CARGO_PROFILE_RELEASE_STRIP: ${{ contains(matrix.target, 'linux') && 'none' || 'symbols' }}
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
     timeout-minutes: 90
@@ -158,15 +161,14 @@ jobs:
           RUSTFLAGS: -Cprofile-generate=${{ runner.temp }}/pgo/raw -Clto=thin
           CFLAGS: ${{ runner.os == 'macOS' && '-fno-profile-generate' || '' }}
           CARGO_TARGET_DIR: ${{ runner.temp }}/pgo/target
-          # The same as the final build's: profile settings are part of every symbol name, and the profile only
-          # applies to functions whose names match (notes/perf-pgo.md, 2026-10-09).
-          CARGO_PROFILE_RELEASE_STRIP: ${{ runner.os == 'Linux' && 'none' || 'symbols' }}
         # The runners explicitly mount embedded libraries; the CLI uses disk libraries.
         # Build together so their compiler symbols match for PGO.
-        run: cargo build --release --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --features tsrs_cli/noembed --target ${{ matrix.target }}
+        run: cargo build --release --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --features "$TSRS_CARGO_FEATURES" --target ${{ matrix.target }}
       - name: Training run
         shell: bash
-        run: TSRS_LIB_PATH="$GITHUB_WORKSPACE/crates/tsrs_vfs/libs" .github/scripts/pgo-train.sh "$RUNNER_TEMP/pgo/target/${{ matrix.target }}/release" "$RUNNER_TEMP/pgo/raw" "$RUNNER_TEMP/pgo/bench"
+        env:
+          TSRS_LIB_PATH: ${{ github.workspace }}/crates/tsrs_vfs/libs
+        run: .github/scripts/pgo-train.sh "$RUNNER_TEMP/pgo/target/${{ matrix.target }}/release" "$RUNNER_TEMP/pgo/raw" "$RUNNER_TEMP/pgo/bench"
       - name: Merge profiles
         id: profile
         shell: bash
@@ -186,13 +188,10 @@ jobs:
         env:
           RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }}${{ runner.os == 'Linux' && ' -Clink-arg=-Wl,--emit-relocs' || '' }}
           CFLAGS: ${{ runner.os == 'macOS' && '-fno-profile-use' || '' }}
-          # BOLT needs the Linux binaries' symbols; bolt.sh strips the optimized tsrs after its correctness gates.
-          # The instrumented build sets the same value.
-          CARGO_PROFILE_RELEASE_STRIP: ${{ runner.os == 'Linux' && 'none' || 'symbols' }}
         run: |
           pkgs=(-p tsrs_cli)
           [ "$RUNNER_OS" = Linux ] && pkgs+=(-p tsrs_testrunner -p tsrs_fourslash)
-          cargo build --release --locked "${pkgs[@]}" --features tsrs_cli/noembed --target ${{ matrix.target }}
+          cargo build --release --locked "${pkgs[@]}" --features "$TSRS_CARGO_FEATURES" --target ${{ matrix.target }}
       # BOLT from the LLVM release that matches rustc's LLVM. The tarball's tools need glibc 2.34 (22.04 has 2.35).
       - name: Install BOLT
         if: runner.os == 'Linux'
@@ -209,9 +208,13 @@ jobs:
       - name: BOLT and gates on the BOLT-optimized binaries
         if: runner.os == 'Linux'
         shell: bash
-        run: TSRS_LIB_PATH="$GITHUB_WORKSPACE/crates/tsrs_vfs/libs" .github/scripts/bolt.sh "target/${{ matrix.target }}/release" "$RUNNER_TEMP/bolt" "$RUNNER_TEMP/pgo/bench"
+        env:
+          TSRS_LIB_PATH: ${{ github.workspace }}/crates/tsrs_vfs/libs
+        run: .github/scripts/bolt.sh "target/${{ matrix.target }}/release" "$RUNNER_TEMP/bolt" "$RUNNER_TEMP/pgo/bench"
       - name: Stage binary
         shell: bash
+        env:
+          TSRS_LIB_PATH: ${{ github.workspace }}/crates/tsrs_vfs/libs
         run: |
           exe=tsrs; [ "${{ matrix.target }}" = x86_64-pc-windows-msvc ] && exe=tsrs.exe
           mkdir -p "out/${{ matrix.target }}"
@@ -220,7 +223,7 @@ jobs:
             "out/${{ matrix.target }}/$exe" --version | tee version.txt
             grep -q "^Version $TSRS_TS_VERSION (" version.txt || { echo "::error::the binary is not stamped with TypeScript $TSRS_TS_VERSION"; exit 1; }
             printf 'const x: number = "no";\n' > bad.ts
-            set +e; TSRS_LIB_PATH="$GITHUB_WORKSPACE/crates/tsrs_vfs/libs" "out/${{ matrix.target }}/$exe" bad.ts; status=$?; set -e
+            set +e; "out/${{ matrix.target }}/$exe" bad.ts; status=$?; set -e
             [ "$status" = 2 ] || { echo "expected exit 2 for a type error, got $status"; exit 1; }
           fi
       - name: Installed-package smoke (CLI and Node API)
@@ -253,6 +256,7 @@ jobs:
     env:
       # TypeScript's version in the binary (Cargo.toml [workspace.metadata.typescript] nightly).
       TSRS_TS_VERSION: ${{ needs.version.outputs.ts_nightly }}
+      TSRS_CARGO_FEATURES: tsrs_cli/noembed
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -271,7 +275,7 @@ jobs:
       - name: Build and stage musl binary
         run: |
           rustup target add ${{ matrix.target }}
-          cargo zigbuild --release --locked -p tsrs_cli --features noembed --target ${{ matrix.target }}
+          cargo zigbuild --release --locked -p tsrs_cli --features "$TSRS_CARGO_FEATURES" --target ${{ matrix.target }}
           mkdir -p "out/${{ matrix.target }}"
           cp "target/${{ matrix.target }}/release/tsrs" "out/${{ matrix.target }}/tsrs"
           "out/${{ matrix.target }}/tsrs" --version | tee version.txt
