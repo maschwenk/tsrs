@@ -236,7 +236,6 @@ performance measurements). Features live on the crate that controls the instrume
 | --- | --- |
 | Creation-site counters | `-p tsrs_checker --features tsrs_checker/site-counts` |
 | Checker work census | `-p tsrs_checker --features tsrs_checker/work-census` |
-| AST sizing | `--features tsrs_ast/ast-sizing` |
 | Checker assignment statistics | `-p tsrs_checker --features tsrs_checker/assignment-stats` |
 | Shared checker graph | `--features tsrs_core/shared-graph` |
 

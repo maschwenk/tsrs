@@ -115,20 +115,6 @@ impl NodePayload for IdentifierWithText {
 
 const _: () = assert!(std::mem::size_of::<NodeAlloc<Identifier>>() == 32);
 
-/// TOOL (`--features tsrs_ast/ast-sizing` only): arena bytes of an identifier node with its text stored.
-#[cfg(feature = "ast-sizing")]
-pub(crate) const IDENTIFIER_WITH_TEXT_SIZE: usize = std::mem::size_of::<NodeAlloc<IdentifierWithText>>();
-
-/// TOOL (`--features tsrs_ast/ast-sizing` only): arena bytes of the identifier node `n`.
-#[cfg(feature = "ast-sizing")]
-pub(crate) fn identifier_alloc_size(n: &Node) -> usize {
-    if n.payload::<Identifier>().is_source_text() {
-        std::mem::size_of::<NodeAlloc<Identifier>>()
-    } else {
-        IDENTIFIER_WITH_TEXT_SIZE
-    }
-}
-
 #[inline]
 fn flow_slot(flow: Option<P<FlowNode>>) -> u64 {
     P::pack_opt(flow)

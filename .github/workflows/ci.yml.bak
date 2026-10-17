@@ -88,7 +88,7 @@ jobs:
           RUSTFLAGS: -D warnings
         run: |
           cargo check --workspace --exclude tsrs_fourslash --all-targets --all-features --locked
-          cargo check -p tsrs_cli -p tsrs_checker --all-features --features tsrs_ast/ast-sizing,tsrs_core/shared-graph,tsrs_core/checked-cells --locked
+          cargo check -p tsrs_cli -p tsrs_checker --all-features --features tsrs_core/shared-graph,tsrs_core/checked-cells --locked
 
       - name: Request filesystem Go fixtures
         run: cargo test --locked -p tsrs_api --test requestfs_differential

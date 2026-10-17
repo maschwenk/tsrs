@@ -2,8 +2,8 @@
 
 The table-generation and blast-radius scripts under `tools/sizing/` have been removed. Their last versions are
 available at commit `b620e8e5`; the benchmark result snapshots cited here are also archived in Git history.
-The `tsrs_ast/ast-sizing` feature and `TSRS_AST_SIZING` counting pass remain available. Script commands below
-describe how the original measurements were produced and require restoring those historical inputs.
+The `tsrs_ast/ast-sizing` feature and `TSRS_AST_SIZING` counting pass have also been removed. Commands below
+describe how the original measurements were produced and require restoring the historical code and inputs.
 
 Question from the owner: the scoreboard moved to the 16-vCPU runner with tsrs at its default 8 checkers, where the
 parsed program, shared by every checker, is a larger share of the peak than at 32. Would a more compact syntax tree
