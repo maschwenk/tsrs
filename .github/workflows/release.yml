@@ -273,6 +273,8 @@ jobs:
         with:
           version: 0.13.0
       - name: Build and stage musl binary
+        env:
+          TSRS_LIB_PATH: ${{ github.workspace }}/crates/tsrs_vfs/libs
         run: |
           rustup target add ${{ matrix.target }}
           cargo zigbuild --release --locked -p tsrs_cli --features "$TSRS_CARGO_FEATURES" --target ${{ matrix.target }}
