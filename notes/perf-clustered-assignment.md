@@ -1,5 +1,8 @@
 # perf-clustered-assignment: placing files on checkers by the modules they share
 
+The experiment's `tools/perf/clusterprobe.sh` build wrapper has been removed (last version: `b620e8e5`).
+`tools/perf/clusterprobe.py` still measures supplied binaries; the reproduction commands below use it directly.
+
 Question (2026-10-07): each checker builds its own types for the declarations its files use, so at 16-32 checkers the
 app projects repeat most of their checker work (notes/mem-per-checker-duplication.md: 63-78% of checker instructions at
 32 checkers). Can the assignment put files that use the same heavy modules on the same checkers, so fewer checkers
@@ -378,10 +381,11 @@ TSRS_ASSIGNMENT_DUMP=/tmp/<project> tsrs -p <tsconfig> --noEmit --incremental fa
 # static, branch against main's placement (instructions retired, peak):
 /usr/bin/time -l tsrs -p <tsconfig> ... --checkers 16 --checkerAssignment locality
 TSRS_MODULE_AFFINITY=off /usr/bin/time -l tsrs -p <tsconfig> ... --checkers 16 --checkerAssignment locality
-# the runner probe (main and the branch as `--profile dist` in one directory, interleaved, default mode):
-depot ci dispatch --repo oxc-project/tsrs --workflow perf-probe.yml --ref perf/clustered-assignment \
-  --input projects=vscode,next-packages-next,mui-docs,formbricks-web,cal-diy,supabase-studio,t3code-server \
-  --input script=tools/perf/clusterprobe.sh --input probe_args='--reps 12 --stats-reps 1 --checkers 16,32'
+# from the repository root, compare separately prepared baseline and candidate binaries on Linux:
+python3 tools/perf/clusterprobe.py --work bench/.work --out probe-out \
+  --projects vscode,next-packages-next,mui-docs,formbricks-web,cal-diy,supabase-studio,t3code-server \
+  --bin base=/absolute/path/to/base/tsrs --bin new=/absolute/path/to/new/tsrs \
+  --variant main:base --variant branch:new --reps 12 --stats-reps 1 --checkers 16,32
 ```
 
 The offline prototype (Python over the dump: the locality groups, the package charge, the module affinity, the

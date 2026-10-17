@@ -250,9 +250,14 @@ parsed again, 422 of them while their file was bound (merges and unusual states)
 
 ## Reproduce
 
+The experiment's `tools/perf/lazydtsprobe.sh` build wrapper has been removed (last version: `b620e8e5`).
+Use the retained measurement tool with separately prepared baseline and candidate binaries on Linux:
+
 ```sh
 TSRS_LAZY_DTS=stats tsrs -p <tsconfig> --noEmit ...      # lists made lazy / deferred / parsed again
 TSRS_LAZY_DTS=force tsrs-test run --suite all --baselines types,symbols   # every declaration file lazy; trees must equal main's
-depot ci dispatch --repo oxc-project/tsrs --workflow perf-probe.yml --ref <branch> --input script=tools/perf/lazydtsprobe.sh \
-  --input projects=drizzle-orm,formbricks-web,cal-diy --input probe_args='--reps 10 --checkers 32 --no-strace'
+# from the repository root:
+python3 tools/perf/leafprobe.py --tsrs /absolute/path/to/new/tsrs --work bench/.work --out probe-out \
+  --projects drizzle-orm,formbricks-web,cal-diy --variant main:BIN=/absolute/path/to/base/tsrs \
+  --variant on:TSRS_LAZY_DTS=1 --reps 10 --checkers 32 --no-strace
 ```

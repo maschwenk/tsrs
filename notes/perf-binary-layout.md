@@ -19,8 +19,13 @@ Answer: nothing beyond what release.yml already does is worth its build time.
 
 ## Method
 
-`.depot/workflows/perf-layout-probe.yml` (run with `depot ci run`) builds every variant in one job from one
-instrumented build (`tools/perf/layout-build.sh`), then measures them interleaved (`tools/perf/layout-measure.py`):
+The experiment's workflow and `tools/perf/layout-build.sh` have been removed; their last versions are available
+at commit `b620e8e5` (the workflow was saved as `.github/workflows/perf-layout-probe.yml.bak`).
+Use `.github/scripts/pgo-train.sh` and `.github/scripts/bolt.sh` for the current release build steps, and
+`tools/perf/layout-measure.py --bin base=<path> --bin new=<path>` to compare supplied binaries.
+
+The original `.depot/workflows/perf-layout-probe.yml` (run with `depot ci run`) built every variant in one job from one
+instrumented build (`tools/perf/layout-build.sh`), then measured them interleaved (`tools/perf/layout-measure.py`):
 every bench project (`bench/run.py` `project_path`), `-p <project> --noEmit --incremental false --pretty false
 --extendedDiagnostics`, default checker count (32 here) and `--checkers 4`, 7 rounds per run with the binary order
 rotating each round. Wall time and peak RSS come from `wait4`. Then the full stdout without `--extendedDiagnostics`

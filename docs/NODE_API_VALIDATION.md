@@ -325,8 +325,9 @@ Total: 159 + 2 + 1 + 3 + 7 = 172.
 All 9 real-capture controls are still detected. The 8 value drifts give `differs`. The handle drift gives
 `inconclusive` for `getNonMissingTypeOfSymbol`, because the generator test's oracle runs disagree on ids.
 
-VS Code URI roots (`probe-uri-filenames.ts`): 80 runs covering both binaries × sync/async × 4 input orders × 5
-repetitions.
+Historical VS Code URI roots probe: 80 runs covering both binaries × sync/async × 4 input orders × 5 repetitions.
+The standalone `tools/node-api/tests/probe-uri-filenames.ts` script was removed after the investigation; its last
+version is available at commit `b620e8e5`. The upstream URI coverage remains part of `run-upstream.mjs`.
 
 - Both servers report 5 `rootFiles`/`fileNames` for the 4 open documents, sorted by path, with one entry
   duplicated.

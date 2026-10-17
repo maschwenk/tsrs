@@ -1,5 +1,10 @@
 # mem-compact-ast-sizing: what a more compact syntax tree would save on the 8-checker scoreboard losses (2026-10-09)
 
+The table-generation and blast-radius scripts under `tools/sizing/` have been removed. Their last versions are
+available at commit `b620e8e5`; the benchmark result snapshots cited here are also archived in Git history.
+The `tsrs_ast/ast-sizing` feature and `TSRS_AST_SIZING` counting pass remain available. Script commands below
+describe how the original measurements were produced and require restoring those historical inputs.
+
 Question from the owner: the scoreboard moved to the 16-vCPU runner with tsrs at its default 8 checkers, where the
 parsed program, shared by every checker, is a larger share of the peak than at 32. Would a more compact syntax tree
 (identifier text as atoms, name-less property nodes, lists as inline ranges, anything else the counts show) put tsrs
@@ -338,7 +343,7 @@ node itself (A) saves nothing since identifiers are 32 B.
    another reason (the language server, single-threaded runs), start with B for property-access names, text from the
    parent's end and no interner (269 lines name the parent kind; 30.5 MiB on vscode, 2.0-5.5 MiB elsewhere).
 
-## 10. Reproduce
+## 10. Original reproduction commands
 
 ```sh
 # build the opt-in tool (default builds do not contain it)

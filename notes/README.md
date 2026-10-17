@@ -8,6 +8,11 @@ Allocation profiles and reachability-census results in older notes came from too
 Their measurements remain historical evidence. For supported memory reports and ownership checks, use the
 [current debugging guide](../docs/DEBUGGING.md#arena-recycling-checks).
 
+Completed experiments' build wrappers, AST sizing table scripts and Node API probes and audit logs have also been
+removed. Their last versions are available at commit `b620e8e5` (for example,
+`git show b620e8e5:tools/sizing/compact_ast.py`). References to them below are historical; reusable measurement
+tools, code generators and regression harnesses remain in `tools/`.
+
 ## Before changing performance or memory use
 
 Start with the [measurement and landing rules](../AGENTS.md#performance-and-memory-changes), then read the

@@ -249,8 +249,9 @@ the small projects move by a few hundred KiB), so peak memory is flagged when it
 
 CodSpeed runs on pushes to main, pull requests, and manual dispatch. The other benchmark workflows are disabled,
 including manual dispatch. Their definitions are preserved under `.github/workflows/`
-as `bench.yml.bak`, `bench-compare.yml.bak`, `pr-verify.yml.bak`, `perf-probe.yml.bak` and
-`perf-layout-probe.yml.bak`. Local measurement tools remain available; recorded runs are archived in Git history.
+as `bench.yml.bak`, `bench-compare.yml.bak`, `pr-verify.yml.bak` and `perf-probe.yml.bak`.
+The completed build-layout experiment's workflow and build script were removed; `tools/perf/layout-measure.py`
+still compares supplied binaries. Local measurement tools remain available; recorded runs are archived in Git history.
 
 For those saved workflows, restore the original `.yml` filename before using their `gh workflow run` commands.
 They produce no automated measurements, regression comments or result/chart updates while disabled.
