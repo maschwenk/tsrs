@@ -11,3 +11,6 @@ workspace = true
 
 [dependencies]
 rustc-hash.workspace = true
+
+[lib]
+doctest = false

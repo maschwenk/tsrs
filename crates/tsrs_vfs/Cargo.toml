@@ -17,3 +17,6 @@ bitflags.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 rustix = { version = "1.1.4", features = ["fs"] }
+
+[lib]
+doctest = false

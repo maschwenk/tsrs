@@ -25,3 +25,7 @@ rustc-hash.workspace = true
 [[test]]
 name = "mapper_test"
 harness = false
+
+[lib]
+test = false
+doctest = false

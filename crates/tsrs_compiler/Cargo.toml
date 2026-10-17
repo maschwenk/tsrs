@@ -29,3 +29,6 @@ tsrs_printer.workspace = true
 tsrs_transformers.workspace = true
 rustc-hash.workspace = true
 rayon.workspace = true
+
+[lib]
+doctest = false

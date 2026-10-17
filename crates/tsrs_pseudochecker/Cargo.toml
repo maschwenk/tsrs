@@ -12,3 +12,7 @@ workspace = true
 [dependencies]
 tsrs_core.workspace = true
 tsrs_ast.workspace = true
+
+[lib]
+test = false
+doctest = false

@@ -22,3 +22,6 @@ memchr.workspace = true
 # TOOL: TSRS_AST_SIZING=<file> counts the parsed program's syntax tree (src/sizing.rs, notes/mem-compact-ast-sizing.md).
 # Off by default; instrumentation is compiled out of normal builds.
 ast-sizing = []
+
+[lib]
+doctest = false

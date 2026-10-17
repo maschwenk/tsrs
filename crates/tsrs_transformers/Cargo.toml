@@ -24,3 +24,6 @@ bitflags.workspace = true
 tsrs_compiler.workspace = true
 tsrs_parser.workspace = true
 tsrs_vfs.workspace = true
+
+[lib]
+doctest = false

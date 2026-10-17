@@ -20,3 +20,6 @@ bitflags.workspace = true
 [dev-dependencies]
 tsrs_parser.workspace = true
 tsrs_vfs.workspace = true
+
+[lib]
+doctest = false

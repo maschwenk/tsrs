@@ -24,3 +24,7 @@ tsrs_contentmapper.workspace = true
 tsrs_contentmappertest.workspace = true
 rustc-hash.workspace = true
 regex = "1"
+
+[lib]
+test = false
+doctest = false

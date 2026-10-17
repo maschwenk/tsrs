@@ -23,3 +23,6 @@ tsrs_ipc.workspace = true
 rustc-hash.workspace = true
 # hostimpl.go combinedIdentity hashes with xxh3 (github.com/zeebo/xxh3), like Mapper::transform_identity.
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+[lib]
+doctest = false

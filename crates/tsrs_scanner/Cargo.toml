@@ -16,3 +16,6 @@ tsrs_ast.workspace = true
 rustc-hash.workspace = true
 bitflags.workspace = true
 memchr.workspace = true
+
+[lib]
+doctest = false
