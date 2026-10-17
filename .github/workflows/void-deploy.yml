@@ -9,13 +9,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: playground-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  group: playground-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
-env:
-  CARGO_TERM_COLOR: always
-  VOID_API_URL: https://api.void.cloud
-  VOID_PROJECT: tsrs-playground
 
 jobs:
   validate:
@@ -88,7 +83,7 @@ jobs:
 
   deploy:
     needs: validate
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'oxc-project/tsrs'
+    if: github.ref == 'refs/heads/main' && github.repository == 'oxc-project/tsrs'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -118,8 +113,8 @@ jobs:
 
       - name: Deploy to Void using OIDC
         run: |
-          pnpm exec void connect "$VOID_API_URL" --no-login
-          pnpm exec void deploy --platform void --project "$VOID_PROJECT" --dir playground/dist
+          pnpm exec void connect https://api.void.cloud --no-login
+          pnpm exec void deploy --platform void --project tsrs-playground --dir playground/dist
 
       - wait: chromium
 
