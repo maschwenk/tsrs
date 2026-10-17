@@ -71,6 +71,8 @@ jobs:
           -p tsrs_diagnostics -p tsrs_vfs -p tsrs_module
           -p tsrs_tsoptions -p tsrs_printer -p tsrs_modulespecifiers -p tsrs_compiler -p tsrs_incremental -p tsrs_execute
           -p tsrs_testrunner -p tsrs_cli
+      - name: npm library paths (noembed)
+        run: cargo test --locked -p tsrs_cli --features noembed --test npm_lib_path
       - name: Build correctness binaries
         run: cargo build --profile dev --locked -p tsrs_cli -p tsrs_testrunner
 
