@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Head-to-head type-check benchmark on one machine: tsgo 7.0.2, the TypeScript 7.1-dev nightly tsrs ports, tsrs and
+"""Head-to-head type-check benchmark on one machine: tsgo (the TypeScript nightly, npm `typescript@next`), the
+TypeScript 7.1-dev nightly built from the commit tsrs ports, tsrs and
 `bun check`, at the same thread counts.
 
 bench/run.py is the fixed-spec regression benchmark (tsgo vs tsrs). This script answers a different question:
@@ -28,7 +29,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import run as rb  # noqa: E402  (bench/run.py: project setup, compiler install, output parsing)
 
 COMPILERS = ("tsgo", "tsgo-dev", "tsrs", "bun")
-LABELS = {"tsgo": "tsgo 7.0.2", "tsgo-dev": "tsgo 7.1-dev", "tsrs": "tsrs", "bun": "bun check"}
+LABELS = {"tsgo": "tsgo nightly", "tsgo-dev": "tsgo 7.1-dev", "tsrs": "tsrs", "bun": "bun check"}
+
+
+def labels(result: dict) -> dict[str, str]:
+    """A result without a `tsgo` entry measured `typescript@7.0.2` as `tsgo`."""
+    return LABELS if result.get("tsgo") else {**LABELS, "tsgo": "tsgo 7.0.2"}
 # bun's summary line: "checked N files" with errors, "No type errors in N files" without.
 BUN_FILES_RE = re.compile(r"(?:checked|No type errors in) ([\d,]+) files?")
 
@@ -128,13 +134,15 @@ def gib(b: float | None) -> str:
 def markdown(result: dict) -> str:
     m = result["machine"]
     v = result["versions"]
+    names = labels(result)
     lines = [
-        f"## Head-to-head on {m['cpus']} threads: tsgo, tsgo 7.1-dev, tsrs, bun check",
+        f"## Head-to-head on {m['cpus']} threads: {', '.join(names[c] for c in result['compilers'])}",
         "",
         f"Machine: {m['label']}. Date: {result['date']}. Mean of {result['reps']} interleaved runs per cell (the "
         f"compiler order rotates every rep), after one untimed warm-up per compiler and project.",
         "",
-        "Compilers: " + "; ".join(f"{LABELS[c]} = `{v[c]}`" for c in result["compilers"]) + ".",
+        "Compilers: " + "; ".join(f"{names[c]} = `{v[c]}`" for c in result["compilers"]) + "."
+        + (f" tsgo nightly: {rb.tsgo_text(result['tsgo'])}." if result.get("tsgo") else ""),
         "",
         "Threads: `default` passes no flag (tsgo then uses 4 checker threads, tsrs every core up to 16, then half the cores, at most 32, bun "
         "one thread per core). N passes `--checkers N` to tsgo/tsrs (checker threads; parsing still uses every core) "
@@ -144,8 +152,8 @@ def markdown(result: dict) -> str:
     base = "tsgo"
     for name, pr in result["projects"].items():
         lines += [f"### {name}", "",
-                  "| threads | compiler | wall mean ± sd (s) | median | min | peak RSS (mean) | vs tsgo 7.0.2 default | "
-                  "vs tsgo 7.0.2 same threads | errors | = 7.1-dev errors |",
+                  f"| threads | compiler | wall mean ± sd (s) | median | min | peak RSS (mean) | vs {names[base]} default | "
+                  f"vs {names[base]} same threads | errors | = 7.1-dev errors |",
                   "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"]
         base_default = pr.get("default", {}).get(base, {}).get("wall_s", {}).get("mean")
         for threads in result["threads"]:
@@ -154,19 +162,19 @@ def markdown(result: dict) -> str:
             for c in result["compilers"]:
                 s = cell.get(c)
                 if not s or not s["ok_runs"]:
-                    lines.append(f"| {threads} | {LABELS[c]} | **FAILED** | | | | | | | |")
+                    lines.append(f"| {threads} | {names[c]} | **FAILED** | | | | | | | |")
                     continue
                 w, rss = s["wall_s"], s["peak_rss_bytes"]
                 vs_d = f"{base_default / w['mean']:.2f}x" if base_default else "n/a"
                 vs_s = f"{same / w['mean']:.2f}x" if same else "n/a"
                 eq = {True: "yes", False: "**no**", None: "n/a"}[s.get("errors_equal_ref")]
-                lines.append(f"| {threads} | {LABELS[c]} | {w['mean']:.2f} ± {w['stdev']:.2f} | {w['median']:.2f} | "
+                lines.append(f"| {threads} | {names[c]} | {w['mean']:.2f} ± {w['stdev']:.2f} | {w['median']:.2f} | "
                              f"{w['min']:.2f} | {gib(rss['mean'])} | {vs_d} | {vs_s} | "
                              f"{'/'.join(map(str, s['error_counts']))} | {eq} |")
         files = {c: pr.get("default", {}).get(c, {}).get("files") for c in result["compilers"]}
-        lines += ["", "Files: " + ", ".join(f"{LABELS[c]} {'/'.join(map(str, f))}" for c, f in files.items() if f)
+        lines += ["", "Files: " + ", ".join(f"{names[c]} {'/'.join(map(str, f))}" for c, f in files.items() if f)
                   + " (tsgo/tsrs: files in the program; bun: its own \"checked N files\" count, not comparable).", ""]
-    lines += ["vs tsgo 7.0.2: tsgo 7.0.2's mean wall divided by this row's (above 1 = faster). = 7.1-dev errors: the "
+    lines += [f"vs {names[base]}: {names[base]}'s mean wall divided by this row's (above 1 = faster). = 7.1-dev errors: the "
               "(file, line, column, code) list equals tsgo 7.1-dev's at default threads, the TypeScript commit tsrs "
               "ports. Peak RSS: `ru_maxrss` from `wait4`. Wall: process wall clock including startup."]
     return "\n".join(lines) + "\n"
@@ -180,6 +188,9 @@ def main() -> None:
     ap.add_argument("--projects", default="vscode", help="comma-separated subset of bench/projects.json")
     ap.add_argument("--threads", default="default,4,8,16,all",
                     help="comma-separated: default, a number, or all (= os.cpu_count())")
+    ap.add_argument("--tsgo-version", default=os.environ.get(rb.TSGO_VERSION_ENV) or None,
+                    help=f"measure this exact npm version as tsgo instead of resolving bench/projects.json's tag "
+                         f"(`next`; default: ${rb.TSGO_VERSION_ENV})")
     ap.add_argument("--reps", type=int, default=20)
     ap.add_argument("--timeout", type=float, default=900)
     ap.add_argument("--work-dir", type=Path, default=rb.BENCH / ".work")
@@ -210,9 +221,11 @@ def main() -> None:
     work = args.work_dir.resolve()
     exes: dict[str, Path] = {}
     versions: dict[str, str] = {}
+    tsgo_cfg = rb.resolve_tsgo(cfg["tsgo"], args.tsgo_version) if "tsgo" in compilers else None
     for c in compilers:
         if c == "tsgo":
-            exes[c] = rb.ensure_tsgo(cfg["tsgo"], work).resolve()
+            exes[c] = rb.ensure_tsgo(tsgo_cfg, work).resolve()
+            rb.log(f"tsgo: {rb.tsgo_text(tsgo_cfg)}")
         elif c == "tsgo-dev":
             exes[c] = rb.ensure_tsgo(cfg["reference"], work).resolve()
         else:
@@ -228,7 +241,7 @@ def main() -> None:
     now = dt.datetime.now(dt.timezone.utc)
     machine = rb.machine_info(False, args.label)
     result: dict = {"date": now.strftime("%Y-%m-%d %H:%M UTC"), "machine": machine, "tsrs_commit": commit,
-                    "versions": versions, "compilers": compilers, "threads": threads, "reps": args.reps,
+                    "versions": versions, "tsgo": tsgo_cfg, "compilers": compilers, "threads": threads, "reps": args.reps,
                     "projects": {}, "raw": []}
     logs = work / "logs" / f"compare-{now.strftime('%Y%m%d-%H%M%S')}"
     t_start = time.perf_counter()

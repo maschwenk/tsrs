@@ -2,8 +2,9 @@
 
 `bench/run.py` type-checks the projects the TypeScript team benchmarks the Go compiler on
 ([microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), `cases/`) and eleven
-open-source applications and libraries (see "Application projects") with tsrs, with tsgo 7.0.2 (npm `typescript@7.0.2`) and, where a
-Bun binary is given, with `bun check`, and reports wall time, peak memory and the error count of each.
+open-source applications and libraries (see "Application projects") with tsrs, with tsgo (the TypeScript nightly, npm
+`typescript@next`; see "Which tsgo") and, where a Bun binary is given, with `bun check`, and reports wall time, peak
+memory and the error count of each.
 Benchmark automation is disabled; its workflow is preserved as
 [`.github/workflows/bench.yml.bak`](../.github/workflows/bench.yml.bak). The local commands below remain available.
 The saved workflow measures every project on GitHub-hosted `ubuntu-24.04` runners in four modes and in four more
@@ -43,6 +44,50 @@ python3 bench/chart.py bench/results/<date>-<commit>.json --output /tmp/benchmar
 ```
 
 Publishing preserves a newer commit's tables and chart when an older backfill finishes later.
+
+## Which tsgo
+
+tsgo is the TypeScript nightly: `bench/projects.json` names the npm dist-tag `next` (`"tsgo": {"package":
+"typescript", "tag": "next"}`), not a version. Each run resolves the tag once, before measuring anything
+(`resolve_tsgo` in `run.py`: `npm view --json typescript@next`), and measures that one exact version for the whole
+run. The nightly moves every day, so the compiler tsrs is compared against is always the newest TypeScript.
+
+Every result records the nightly it measured, under `tsgo` in the JSON:
+
+| field | example | from |
+| --- | --- | --- |
+| `version` | `7.1.0-dev.20261016.1` | the version `next` pointed at |
+| `tag` | `next` | `bench/projects.json`; `null` when a version was given explicitly |
+| `commit` | `abcbb2e69d2a86d9ffee66582a0dd0339b674733` | the package's `gitHead`: the microsoft/TypeScript commit it was published from |
+| `published` | `2026-10-16T08:21:23.515Z` | the npm publish time of that version |
+| `binary` | `.../typescript-linux-x64/lib/tsc` | the native compiler that ran |
+
+The reports name it in the title and the tsgo line, for example:
+
+> ## Benchmark: tsrs vs tsgo 7.1.0-dev.20261016.1
+>
+> - **tsgo**: npm `typescript@7.1.0-dev.20261016.1` (the `next` nightly, published 2026-10-16, from
+>   microsoft/TypeScript `abcbb2e6`), the official Go compiler. tsrs ports TypeScript commit `b85298b6`.
+
+`bench/RESULTS.md`, `bench/results/<date>-<commit>.md` and the `compare.py` report carry that line; the charts carry
+it in their SVG description. To find which nightly a published number came from, read the tsgo line of the report or
+`tsgo.version` / `tsgo.commit` in the result's JSON. Results record the tsgo they measured, so `bench/results/` holds
+results against several TypeScript releases; `history.py` and `regressions.py` compare tsrs's own counts, which do not
+depend on tsgo.
+
+To measure a specific version instead of today's nightly (to reproduce a result, or to compare two nightlies), pass
+`--tsgo-version <version>` to `run.py`, `watch.py` or `compare.py`, or set `TSRS_BENCH_TSGO_VERSION`; the option wins
+over the variable. `python3 bench/run.py --print-tsgo` prints the version a run would measure. `--tsgo <binary>`
+measures a local build: the result then records only what its `--version` prints.
+
+```sh
+python3 bench/run.py --print-tsgo                                          # tsgo-version=7.1.0-dev.20261016.1
+python3 bench/run.py --local --projects webpack --tsgo-version 7.1.0-dev.20261016.1
+```
+
+The saved bench workflow resolves the nightly once in its `build` job (`--print-tsgo`) and hands it to every measuring
+job as `TSRS_BENCH_TSGO_VERSION`, so all the partials of one run measure the same nightly even if a new one is
+published while the run is going; `run.py --merge` refuses partials that measured different tsgo versions.
 
 Results go to `bench/results/<date>-<tsrs commit>[-local].{json,md}`; per-run compiler output to
 `<work-dir>/logs/<timestamp>/`. The first run clones and installs the projects into `<work-dir>/solutions`
@@ -156,9 +201,10 @@ tsrs's errors (the table's errors paragraph names such projects).
   follows TypeScript 7.0 (on vscode its errors equal tsgo 7.0.2's line for line), tsrs the 7.1-dev commit it ports.
   `--noEmit` instead of the suite's `--outdir` keeps the measurement to type checking; `--pretty
   false` makes the error lines parseable.
-- tsgo: `pnpm add typescript@7.0.2 @typescript/typescript-<os>-<arch>@7.0.2`. Its `bin/tsc` is a Node launcher (`lib/tsc.js` -> `getExePath.js`) that
+- tsgo: `pnpm add typescript@<nightly> @typescript/typescript-<os>-<arch>@<nightly>`, with `<nightly>` the exact
+  version `next` resolved to ("Which tsgo"). Its `bin/tsc` is a Node launcher (`lib/tsc.js` -> `getExePath.js`) that
   `execve`s the Go binary `@typescript/typescript-<os>-<arch>/lib/tsc`; the harness runs that binary directly (checked
-  to be a native executable printing `Version 7.0.2`), so Node startup is not part of the measurement.
+  to be a native executable printing `Version <nightly>`), so Node startup is not part of the measurement.
 - tsrs: by default the release build of the checked-out commit (`target/release/tsrs`). CI measures what the npm
   package ships instead: the PGO build of the `release` profile (fat LTO, one codegen unit), built with the commands of
   the release workflow and trained with `.github/scripts/pgo-train.sh` (conformance suite + fourslash suite + xstate-main + webpack),
@@ -183,16 +229,17 @@ tsrs's errors (the table's errors paragraph names such projects).
   tables, an errors paragraph names only the projects where tsgo and tsrs disagree: a differing count is a
   **Mismatch** and a differing location set "Same count, different locations", both bold. This is a correctness
   signal, not a performance one.
-- tsrs ports a TypeScript 7.1-dev commit (`b85298b6`, `Cargo.toml`), not 7.0.2, so some differences are TypeScript
-  version differences. When the two disagree, the harness also runs `typescript@7.1.0-dev.20260930.4` (the nightly
-  built from `b85298b6` plus one CI-only commit; `reference` in `projects.json`) once: if it reports exactly tsrs's
-  errors the project is listed as a TypeScript version difference and not flagged. On 2026-10-01 that explains both
+- tsrs ports one TypeScript commit (`b85298b6`, `Cargo.toml`), and the nightly is usually newer, so some differences
+  are TypeScript changes made after that commit. When the two disagree, the harness also runs
+  `typescript@7.1.0-dev.20260930.4` (the nightly built from `b85298b6` plus one CI-only commit; `reference` in
+  `projects.json`) once: if it reports exactly tsrs's errors the project is listed as a TypeScript version difference
+  and not flagged. On 2026-10-01 that explains both
   differences (vscode 359 vs 371, webpack 848 vs 840: tsrs's lists equal the nightly's line for line). When the port moves to a
   newer TypeScript commit, update `reference` to the nightly built from it (the harness warns when they differ).
 
 ## Watch mode
 
-`bench/watch.py` measures `--watch` on vscode: tsrs against tsgo 7.0.2, both started as
+`bench/watch.py` measures `--watch` on vscode: tsrs against the tsgo nightly ("Which tsgo"), both started as
 `--watch -p src --noEmit --preserveWatchOutput --pretty false` with no thread flags. bun check has no watch mode (Bun
 1.4.4 canary: `bun check` has no `--watch` flag, and `bun --watch check` checks once and ignores later edits), so it has
 no column. Each session:
@@ -326,7 +373,8 @@ Caching uses GitHub's `actions/cache` service and the Rust setup action for
 `~/.cargo` and the dependency part of `target/`, which holds the PGO-instrumented build (workspace crates are
 rebuilt: they are what is being measured). The final PGO build is not cached: its RUSTFLAGS contain the profile's
 hash, which changes every run, so cargo rebuilds all of it anyway (as in the release workflow); one
-cache for the suite checkout plus the pnpm-installed compilers (`typescript@7.0.2` and the reference nightly); one cache
+cache for the suite checkout plus the pnpm-installed compilers (the measured nightly and the reference nightly; the
+key has the measured nightly's version, so each new nightly starts a new shared cache); one cache
 per cloned project (checkout + `node_modules`) keyed on its pinned commit and install command
 (`bench/run.py --print-cache-keys`), so changing one pin re-installs only that project. Each measuring job restores
 the shared cache and its own project's; the build job restores the two training projects (xstate-main, webpack) and
@@ -434,7 +482,8 @@ with the `verify` label, run `8hc5870p99`): 8 min 42 s, of which cache restores 
 compare on one wide machine, the way Bun's `bun check` announcement measured them (vscode, Linux x64, 64 threads,
 mean of 20 runs). It runs four compilers on the same checkouts:
 
-- `tsgo`: `typescript@7.0.2` (as in `run.py`);
+- `tsgo`, labelled "tsgo nightly": `typescript@next` resolved to one exact version (as in `run.py`, "Which tsgo"; the
+  report names it);
 - `tsgo-dev`: `typescript@7.1.0-dev.20260930.4` (`reference` in `projects.json`), built from the TypeScript commit
   tsrs ports, so it is both the like-for-like Go baseline and the error oracle;
 - `tsrs`: the binary given with `--tsrs`;

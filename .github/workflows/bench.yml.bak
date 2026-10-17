@@ -57,6 +57,7 @@ jobs:
     timeout-minutes: 180
     outputs:
       projects: ${{ steps.plan.outputs.projects }}
+      tsgo-version: ${{ steps.tsgo.outputs.tsgo-version }}
     steps:
       - name: Free disk space for builds and benchmark checkouts
         run: |
@@ -120,6 +121,15 @@ jobs:
 
       - name: Install x86_64-unknown-linux-gnu target
         run: rustup target add x86_64-unknown-linux-gnu
+
+      # tsgo is the TypeScript nightly (npm `typescript@next`, bench/projects.json). Resolve it once: every job of
+      # the run measures this exact version, even when a new nightly is published while the run is going.
+      - name: Resolve the tsgo nightly
+        id: tsgo
+        run: |
+          line=$(python3 bench/run.py --print-tsgo)
+          echo "$line" | tee -a "$GITHUB_OUTPUT"
+          echo "TSRS_BENCH_TSGO_VERSION=${line#tsgo-version=}" >> "$GITHUB_ENV"
 
       # Caches ~/.cargo and the dependency part of target/, which holds only the instrumented build below: its
       # RUSTFLAGS are the same in every run, so its dependencies are reused. The final build's RUSTFLAGS contain the
@@ -267,6 +277,7 @@ jobs:
     env:
       BENCH_RUNNER: GitHub Actions `ubuntu-24.04`
       PROJECT: ${{ matrix.project }}
+      TSRS_BENCH_TSGO_VERSION: ${{ needs.build.outputs.tsgo-version }}
     steps:
       - name: Free disk space for builds and benchmark checkouts
         run: |
@@ -377,6 +388,7 @@ jobs:
       ALL_PROJECTS: ${{ needs.build.outputs.projects }}
       SHARD: ${{ matrix.shard }}
       BUN_VERSION: canary
+      TSRS_BENCH_TSGO_VERSION: ${{ needs.build.outputs.tsgo-version }}
     steps:
       - name: Free disk space for builds and benchmark checkouts
         run: |
@@ -588,6 +600,7 @@ jobs:
     timeout-minutes: 180
     env:
       BENCH_RUNNER: GitHub Actions `ubuntu-24.04`
+      TSRS_BENCH_TSGO_VERSION: ${{ needs.build.outputs.tsgo-version }}
     steps:
       - name: Free disk space for builds and benchmark checkouts
         run: |

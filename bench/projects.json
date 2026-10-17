@@ -5,7 +5,8 @@
   },
   "tsgo": {
     "package": "typescript",
-    "version": "7.0.2"
+    "tag": "next",
+    "note": "the TypeScript nightly: each run resolves the npm dist-tag to one exact version (bench/run.py resolve_tsgo, or --tsgo-version) and records the version, the TypeScript commit it was published from and its publish time in the result"
   },
   "reference": {
     "package": "typescript",

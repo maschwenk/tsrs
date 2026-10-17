@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Benchmarks tsrs against tsgo (typescript@7.0.2) on the typescript-benchmarking projects.
+"""Benchmarks tsrs against tsgo (the TypeScript nightly, npm `typescript@next`) on the typescript-benchmarking projects.
 
 See bench/README.md. Typical use:
 
@@ -75,6 +75,10 @@ TSRS_BUILDS = {
     "release": "`cargo build --release`",
     "pgo-dist": "PGO-optimized `dist` build, built like the npm release binaries",
 }
+
+# The exact tsgo version to measure instead of resolving bench/projects.json's dist-tag (--tsgo-version's default):
+# the bench workflow's build job resolves `next` once and every measuring job of the run measures that nightly.
+TSGO_VERSION_ENV = "TSRS_BENCH_TSGO_VERSION"
 
 COUNTER_RE = re.compile(r"^(Files|Lines|Identifiers|Symbols|Types|Instantiations):\s+(\d+)\s*$")
 TIME_RE = re.compile(r"^(Config|Parse|Bind|Check|Total) time:\s+([\d.]+)s\s*$")
@@ -190,6 +194,43 @@ def setup_project(cfg: dict, p: dict, work: Path) -> None:
 def native_platform() -> str:
     arch = {"x86_64": "x64", "amd64": "x64", "arm64": "arm64", "aarch64": "arm64"}[platform.machine().lower()]
     return f"{sys.platform}-{arch}"
+
+
+def resolve_tsgo(pkgcfg: dict, version: str | None = None) -> dict:
+    """The exact npm release a run measures: `version` when given (--tsgo-version), else `pkgcfg`'s pinned
+    `version`, else whatever its dist-tag (`next`, the nightly) points at now. Returns the package, the tag, the
+    version, the TypeScript commit it was published from (`gitHead`) and its publish time, as recorded in results."""
+    pkg = pkgcfg["package"]
+    spec = version or pkgcfg.get("version") or pkgcfg["tag"]
+    out: list[str] = []
+    retry(f"npm view {pkg}@{spec}", lambda: out.append(subprocess.run(
+        ["npm", "view", "--json", f"{pkg}@{spec}"], capture_output=True, text=True, check=True).stdout))
+    meta = json.loads(out[-1])
+    if isinstance(meta, list):  # a range matching several versions
+        meta = meta[-1]
+    resolved = meta["version"]
+    if version is None and pkgcfg.get("version") and resolved != pkgcfg["version"]:
+        sys.exit(f"npm resolved {pkg}@{spec} to {resolved}")
+    return {"package": pkg, "tag": None if version or pkgcfg.get("version") else pkgcfg["tag"], "version": resolved,
+            "commit": meta.get("gitHead"), "published": (meta.get("time") or {}).get(resolved)}
+
+
+def tsgo_binary_info(exe: Path) -> dict:
+    """What a --tsgo binary is: only its `--version` is known."""
+    out = subprocess.run([str(exe), "--version"], capture_output=True, text=True, check=True).stdout.strip()
+    return {"package": None, "tag": None, "version": out.removeprefix("Version "), "commit": None, "published": None}
+
+
+def tsgo_text(tsgo: dict) -> str:
+    """`typescript@<version>` with the dist-tag, the TypeScript commit and the publish date when the result has them
+    (some results record only the version)."""
+    text = f"npm `{tsgo.get('package') or 'typescript'}@{tsgo['version']}`"
+    extra = [f"the `{tsgo['tag']}` nightly" if tsgo.get("tag") == "next" else
+             f"the `{tsgo['tag']}` tag" if tsgo.get("tag") else None,
+             f"published {tsgo['published'][:10]}" if tsgo.get("published") else None,
+             f"from microsoft/TypeScript `{tsgo['commit'][:8]}`" if tsgo.get("commit") else None]
+    extra = [e for e in extra if e]
+    return text + (f" ({', '.join(extra)})" if extra else "")
 
 
 def ensure_tsgo(pkgcfg: dict, work: Path) -> Path:
@@ -443,7 +484,8 @@ def counts_text(s: dict) -> str:
 
 def errors_summary(result: dict, mode: str, with_bun: bool) -> list[str]:
     """The errors paragraph of a mode. tsgo and tsrs must report the same errors; only the projects where they do not
-    are named, with the reason: a TypeScript 7.0 vs 7.1-dev difference the reference compiler confirms, or a tsrs bug."""
+    are named, with the reason: a difference between the measured TypeScript release and the commit tsrs ports, which
+    the reference compiler confirms, or a tsrs bug."""
     same, drift, mismatch, locations, bun_differs = [], [], [], [], []
     for name, pr in result["projects"].items():
         cell = pr.get(mode)
@@ -470,14 +512,14 @@ def errors_summary(result: dict, mode: str, with_bun: bool) -> list[str]:
         ref = result["reference"]
         rest = f"The other {len(drift)}" if len(same) + len(drift) == total else f"{len(drift)} others"
         text += (f" {rest} differ only because TypeScript changed between {result['tsgo']['version']} and the "
-                 f"7.1-dev commit tsrs ports: `typescript@{ref['version']}`, built from that commit, reports exactly "
+                 f"commit tsrs ports: `typescript@{ref['version']}`, built from that commit, reports exactly "
                  f"tsrs's errors (tsgo / tsrs): {', '.join(drift)}.")
     if mismatch:
         text += f" **Mismatch (a tsrs bug):** {'; '.join(mismatch)}."
     if locations:
         text += f" **Same count, different locations (a tsrs bug):** {', '.join(locations)}."
     if bun_differs:
-        text += f" bun check, which follows TypeScript 7.0 like tsgo, differs from tsgo on {', '.join(bun_differs)}."
+        text += f" bun check, which follows TypeScript 7.0, differs from tsgo on {', '.join(bun_differs)}."
     return [text, ""]
 
 
@@ -518,8 +560,8 @@ def markdown(result: dict, modes: list[str] | None = None) -> str:
         f"{reps[0].upper()}{reps[1:]}.",
         "",
         f"- **tsrs**: commit `{commit}`, {TSRS_BUILDS[result['tsrs'].get('build', 'release')]}.",
-        f"- **tsgo**: npm `typescript@{tv}`, the official Go compiler"
-        + (f". tsrs ports a later 7.1-dev commit (`{result['reference']['commit'][:8]}`)." if result.get("reference") else "."),
+        f"- **tsgo**: {tsgo_text(result['tsgo'])}, the official Go compiler"
+        + (f". tsrs ports TypeScript commit `{result['reference']['commit'][:8]}`." if result.get("reference") else "."),
     ]
     if any_bun:
         lines.append(f"- **bun check**: Bun {bun['version']}.")
@@ -769,7 +811,11 @@ def main() -> None:
     ap.add_argument("--tsrs", type=Path, default=REPO / "target" / "release" / "tsrs")
     ap.add_argument("--tsrs-build", choices=sorted(TSRS_BUILDS), default="release",
                     help="how --tsrs was built (named in the table header; CI: pgo-dist, see .github/workflows/bench.yml)")
-    ap.add_argument("--tsgo", type=Path, help="native tsgo binary (default: install typescript@<version> from npm)")
+    ap.add_argument("--tsgo", type=Path, help="native tsgo binary (default: install the npm release bench/projects.json "
+                                              "names, the `next` nightly)")
+    ap.add_argument("--tsgo-version", default=os.environ.get(TSGO_VERSION_ENV) or None,
+                    help="measure this exact npm version instead of resolving bench/projects.json's tag (default: "
+                         f"${TSGO_VERSION_ENV}; the jobs of one CI run share the nightly its build job resolved)")
     ap.add_argument("--bun", type=Path, help="bun executable with `bun check` (Bun 1.4.3 canary or later): adds a bun "
                                              "check column to every mode measured")
     ap.add_argument("--projects", help="comma-separated subset of bench/projects.json")
@@ -784,6 +830,8 @@ def main() -> None:
     ap.add_argument("--setup-only", action="store_true", help="clone and install everything, including the reference compiler")
     ap.add_argument("--print-cache-keys", action="store_true",
                     help="print `<name>=<key>` lines (GITHUB_OUTPUT format) for the CI caches of bench/.work")
+    ap.add_argument("--print-tsgo", action="store_true",
+                    help="print the tsgo release a run would measure (`tsgo-version=<version>`, GITHUB_OUTPUT format)")
     ap.add_argument("--print-projects", action="store_true",
                     help="print the project names as a JSON list (the CI matrix: one measuring job per project)")
     ap.add_argument("--rustc", help="`rustc -V` of the toolchain that built --tsrs (default: this machine's; the CI "
@@ -822,10 +870,15 @@ def main() -> None:
     if unknown_modes := set(modes) - set(MODE_FLAGS):
         sys.exit(f"unknown modes: {', '.join(sorted(unknown_modes))}")
     work = args.work_dir.resolve()
+    tsgo_cfg = tsgo_binary_info(args.tsgo) if args.tsgo else resolve_tsgo(cfg["tsgo"], args.tsgo_version)
+    if args.print_tsgo:
+        print(f"tsgo-version={tsgo_cfg['version']}")
+        return
     if args.print_cache_keys:
         digest = lambda x: hashlib.sha256(json.dumps(x, sort_keys=True).encode()).hexdigest()[:16]
         # bench/.work/{suite,tsgo}: the suite checkout (Compiler, Compiler-Unions) and the npm compilers.
-        print(f"shared={digest([cfg['suite'], cfg['tsgo'], cfg.get('reference'), native_platform()])}")
+        tsgo_key = {"package": tsgo_cfg["package"], "version": tsgo_cfg["version"]}
+        print(f"shared={digest([cfg['suite'], tsgo_key, cfg.get('reference'), native_platform()])}")
         # bench/.work/solutions/<name>: one cache per cloned project, keyed on its commit and install command.
         for p in projects:
             if "repo" in p:
@@ -833,7 +886,8 @@ def main() -> None:
                 print(f"{p['name']}={p['commit'][:12]}-{digest(key)}")
         return
 
-    tsgo = (args.tsgo or ensure_tsgo(cfg["tsgo"], work)).resolve()
+    tsgo = (args.tsgo or ensure_tsgo(tsgo_cfg, work)).resolve()
+    log(f"tsgo: {tsgo_text(tsgo_cfg)}")
     ref_cfg = cfg.get("reference")
     if ref_cfg:
         port_commit = re.search(r'^commit = "([0-9a-f]+)"', (REPO / "Cargo.toml").read_text(), re.M)
@@ -861,7 +915,7 @@ def main() -> None:
         "machine": machine_info(args.local, args.label),
         "tsrs": {"commit": commit, "dirty": dirty, "version": tsrs_version, "build": args.tsrs_build,
                  "rustc": args.rustc or rustc_version()},
-        "tsgo": {"version": cfg["tsgo"]["version"], "binary": str(tsgo).replace(str(Path.home()), "~")},
+        "tsgo": {**tsgo_cfg, "binary": str(tsgo).replace(str(Path.home()), "~")},
         "bun": {"version": bun_version, "binary": str(bun).replace(str(Path.home()), "~")} if bun else None,
         "suite": cfg["suite"],
         "reference": ref_cfg,
@@ -917,7 +971,7 @@ def main() -> None:
                         "error_locations_match": (gk == tk) if gk and tk else None}
             if bun:
                 # Recorded, not compared: bun check follows TypeScript 7.0 (its errors equal tsgo 7.0.2's on vscode),
-                # tsrs the 7.1-dev commit it ports.
+                # tsrs the TypeScript commit it ports.
                 pr[mode]["bun"] = summarize(runs[mode]["bun"])
             if gk and tk and gk != tk:
                 only_g = sorted(set().union(*gk) - set().union(*tk))[:20]
