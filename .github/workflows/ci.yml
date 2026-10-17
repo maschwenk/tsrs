@@ -53,7 +53,7 @@ jobs:
           persist-credentials: false
 
       - name: Clippy
-        run: cargo clippy --all-targets --config 'build.warnings="deny"'
+        run: cargo clippy --locked --all-targets --config 'build.warnings="deny"'
 
       - name: cargo check
         run: cargo check --workspace --exclude tsrs_fourslash --locked --config 'build.warnings="deny"'
